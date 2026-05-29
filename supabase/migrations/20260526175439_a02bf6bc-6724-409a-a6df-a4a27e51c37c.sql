@@ -1,0 +1,2 @@
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS recurrence_type text;
+ALTER TABLE public.tasks ADD CONSTRAINT tasks_recurrence_type_check CHECK (recurrence_type IS NULL OR recurrence_type IN ('daily','weekly','biweekly','monthly'));

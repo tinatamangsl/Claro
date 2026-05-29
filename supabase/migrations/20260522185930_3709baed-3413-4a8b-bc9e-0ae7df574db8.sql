@@ -1,0 +1,1 @@
+ALTER TABLE public.household_members ADD COLUMN IF NOT EXISTS chat_last_read_at timestamptz NOT NULL DEFAULT now();
