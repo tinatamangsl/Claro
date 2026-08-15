@@ -47,6 +47,11 @@ That's the whole setup. `/` redirects to `/today`.
 | `npm run build` | Production build (`dist/client` + `dist/server`) |
 | `npm run preview` | Serve the production build |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Run the unit tests once (Vitest) |
+| `npm run test:watch` | Vitest in watch mode |
+
+Run a single file with `npx vitest run src/lib/dates.test.ts`, or filter by name with
+`npx vitest run -t "quarterOfWeek"`.
 
 If port 8080 is already taken, Vite falls forward to the next free port and prints it.
 
