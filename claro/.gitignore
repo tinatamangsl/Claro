@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+.output
+.nitro
+.tanstack
+.vite
+.wrangler
+*.local
+*.log
+.env
+.env.*
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json

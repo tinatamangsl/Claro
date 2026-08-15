@@ -1,0 +1,181 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital,wght@0,400;1,400&family=Inter:wght@300;400;500;600;700&display=swap");
+@import "tailwindcss" source(none);
+@source "../src";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle: var(--subtle);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-gold: var(--gold);
+  --color-positive: var(--positive);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+}
+
+:root {
+  --radius: 0.5rem;
+
+  /* Paper, ink, one accent. */
+  --background: oklch(0.984 0.0035 85); /* warm paper */
+  --foreground: oklch(0.185 0.006 60); /* near-black ink */
+  --card: oklch(1 0 0); /* white, lifted off the paper */
+  --card-foreground: oklch(0.185 0.006 60);
+  --muted: oklch(0.962 0.004 80);
+  --muted-foreground: oklch(0.505 0.008 65);
+  --subtle: oklch(0.93 0.005 75); /* dividers inside surfaces */
+  --primary: oklch(0.45 0.105 255); /* deep ink-indigo — the single accent */
+  --primary-foreground: oklch(0.99 0.002 85);
+  --gold: oklch(0.74 0.1 76); /* Main Quest + Priority 1 marks only */
+  --positive: oklch(0.56 0.085 155); /* completion only */
+  --destructive: oklch(0.55 0.15 27);
+  --border: oklch(0.905 0.004 75);
+  --ring: oklch(0.45 0.105 255);
+}
+
+.dark {
+  --background: oklch(0.19 0.005 65);
+  --foreground: oklch(0.955 0.004 85);
+  --card: oklch(0.235 0.006 65);
+  --card-foreground: oklch(0.955 0.004 85);
+  --muted: oklch(0.27 0.006 65);
+  --muted-foreground: oklch(0.68 0.008 70);
+  --subtle: oklch(1 0 0 / 10%);
+  --primary: oklch(0.72 0.11 255);
+  --primary-foreground: oklch(0.19 0.005 65);
+  --gold: oklch(0.78 0.1 76);
+  --positive: oklch(0.68 0.09 155);
+  --destructive: oklch(0.68 0.15 27);
+  --border: oklch(1 0 0 / 12%);
+  --ring: oklch(0.72 0.11 255);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+    min-width: 0;
+  }
+
+  html,
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    font-feature-settings: "cv05" 1;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.012em;
+    line-height: 1.08;
+  }
+
+  /* Numbers should never shift width as they change. */
+  input[type="number"],
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+
+  input,
+  textarea,
+  button,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::placeholder {
+    color: var(--color-muted-foreground);
+    opacity: 0.62;
+  }
+}
+
+@layer utilities {
+  /* The calm default surface: white, hairline, no shadow. */
+  .surface {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+  }
+
+  /* Reserved for the things that must dominate: Main Quests, Priority 1. */
+  .surface-raised {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    box-shadow:
+      0 1px 2px color-mix(in oklab, var(--foreground) 4%, transparent),
+      0 12px 32px -20px color-mix(in oklab, var(--foreground) 22%, transparent);
+  }
+
+  .eyebrow {
+    /* Explicit sans: these are often <h2>, which the base layer sets to the display serif. */
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--color-muted-foreground);
+  }
+
+  /* A field that looks like plain text until you touch it. */
+  .field-plain {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    outline: none;
+    resize: none;
+  }
+
+  .field-plain:hover:not(:focus) {
+    background: color-mix(in oklab, var(--foreground) 3%, transparent);
+  }
+
+  .field-plain:focus {
+    background: color-mix(in oklab, var(--primary) 5%, transparent);
+  }
+
+  .strike-done {
+    text-decoration-line: line-through;
+    text-decoration-thickness: 1px;
+    text-decoration-color: color-mix(in oklab, var(--foreground) 35%, transparent);
+  }
+}
