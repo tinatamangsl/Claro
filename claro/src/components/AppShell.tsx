@@ -12,14 +12,20 @@ const NAV = [
   { to: "/quarter", label: "Quarter" },
 ] as const;
 
-export function AppShell({ children }: { children: ReactNode }) {
+/**
+ * `wide` opens the page out to the two-page spread's rhythm. Header, main and
+ * footer all take it together, so the shell never looks misaligned with the
+ * content it frames.
+ */
+export function AppShell({ children, wide }: { children: ReactNode; wide?: boolean }) {
   const { ready, saveStatus, today } = useClaro();
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const page = cn("page", wide && "page-wide");
 
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur-md">
-        <div className="page flex flex-wrap items-center gap-x-6 gap-y-1 py-2.5 sm:h-16 sm:flex-nowrap sm:py-0">
+        <div className={cn(page, "flex flex-wrap items-center gap-x-6 gap-y-1 py-2.5 sm:h-16 sm:flex-nowrap sm:py-0")}>
           <Link to="/today" className="flex items-center gap-2.5" aria-label="Claro home">
             <span className="roundel" aria-hidden>
               C
@@ -66,9 +72,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="page flex-1 pb-14 pt-8 sm:pt-12">{ready ? children : <BootSkeleton />}</main>
+      <main className={cn(page, "flex-1 pb-14 pt-8 sm:pt-12")}>
+        {ready ? children : <BootSkeleton />}
+      </main>
 
-      <AppFooter ready={ready} today={today} />
+      <AppFooter ready={ready} today={today} page={page} />
     </div>
   );
 }
@@ -90,10 +98,10 @@ function SaveIndicator({ ready, status }: { ready: boolean; status: string }) {
  * Quiet, and useful rather than promotional: it says where you are in the
  * hierarchy and where the data actually lives.
  */
-function AppFooter({ ready, today }: { ready: boolean; today: string }) {
+function AppFooter({ ready, today, page }: { ready: boolean; today: string; page: string }) {
   return (
     <footer className="mt-auto border-t border-border/70">
-      <div className="page flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-5">
+      <div className={cn(page, "flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-5")}>
         <span className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
           <span className="eyebrow">Claro</span>
           <span aria-hidden className="text-muted-foreground/40">

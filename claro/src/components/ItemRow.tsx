@@ -17,6 +17,8 @@ type Props = {
   trailing?: ReactNode;
   className?: string;
   autoFocus?: boolean;
+  /** Tighter type and padding, for the columns on Today's spread. */
+  dense?: boolean;
 };
 
 /** One editable, completable, deletable line. Used by every list in Claro. */
@@ -31,9 +33,12 @@ export function ItemRow({
   trailing,
   className,
   autoFocus,
+  dense,
 }: Props) {
   return (
-    <div className={cn("group flex items-center gap-2.5 py-1", className)}>
+    <div
+      className={cn("group flex items-center gap-2.5", dense ? "py-0.5" : "py-1", className)}
+    >
       <CheckToggle checked={done} onChange={onToggle} label={`Complete ${label}`} size="sm" />
       <EditableText
         value={text}
@@ -42,7 +47,8 @@ export function ItemRow({
         ariaLabel={label}
         autoFocus={autoFocus}
         className={cn(
-          "flex-1 text-[0.9rem] leading-snug",
+          "flex-1 leading-snug",
+          dense ? "text-[0.82rem]" : "text-[0.9rem]",
           done && "strike-done text-muted-foreground",
         )}
       />

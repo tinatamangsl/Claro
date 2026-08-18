@@ -23,13 +23,19 @@ import {
   scheduleSave,
   type SaveResult,
 } from "./storage";
+import { removeHabitCompletions, toggleCompletion } from "./habits";
+import { applyRollover, queueCarried, takeCarried } from "./rollover";
 import type {
   ClaroState,
+  CycleEntry,
+  CycleState,
   Day,
+  Habit,
   FocusSession,
   ISODate,
   Interruption,
   Quarter,
+  SoundPrefs,
   QuarterId,
   Week,
   WeekId,
@@ -66,6 +72,30 @@ type ClaroContextValue = {
   logInterruption: (interruption: Interruption) => void;
   updateInterruption: (id: string, patch: Partial<Interruption>) => void;
 
+  /**
+   * Schedule a carried item onto another day. It waits in that day's review
+   * area rather than filling a slot, because the user deferred the decision —
+   * not just the work.
+   */
+  moveCarried: (fromDayId: ISODate, toDayId: ISODate, itemId: string) => void;
+
+  /** Habits. Completions are one row per habit per day. */
+  addHabit: (habit: Habit) => void;
+  patchHabit: (id: string, patch: Partial<Habit>) => void;
+  /** Deletes the habit and its history together — no orphaned completions. */
+  deleteHabit: (id: string) => void;
+  toggleHabitDone: (habitId: string, dayId: ISODate, now: Date) => void;
+
+  /** Private cycle awareness, kept apart from planning and focus records. */
+  cycle: CycleState;
+  setCycleEnabled: (enabled: boolean, now: Date) => void;
+  logCycleStart: (entry: CycleEntry) => void;
+  deleteCycleEntry: (id: string) => void;
+  deleteAllCycleData: () => void;
+
+  sound: SoundPrefs;
+  setSound: (patch: Partial<SoundPrefs>) => void;
+
   resetAll: () => void;
 };
 
@@ -89,15 +119,36 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   useEffect(() => {
-    setSnap({ state: loadState(), today: formatDayId(new Date()) });
+    // Carry-forward is applied at load, not on a schedule: the browser is
+    // usually shut at 10 PM, so "next time Claro is opened" is the only moment
+    // that can be relied on.
+    const now = new Date();
+    const loaded = loadState();
+    const rolled = applyRollover(loaded, now);
+    setSnap({ state: rolled, today: formatDayId(now) });
+
+    // The save effect below deliberately skips the first populated snapshot,
+    // since that is only what we read off disk. A carry-forward is the
+    // exception: it is a real change, and leaving it unwritten would mean the
+    // source day is never marked as carried — so letting something go in the
+    // review area would be undone by the very next load.
+    if (rolled !== loaded) saveNow(rolled);
   }, []);
 
-  // A tab left open past midnight should roll over to the new day on its own.
+  // A tab left open past midnight — or past 10 PM — should catch up on its own.
   useEffect(() => {
     if (!snap) return;
     const tick = setInterval(() => {
-      const now = formatDayId(new Date());
-      setSnap((prev) => (prev && prev.today !== now ? { ...prev, today: now } : prev));
+      setSnap((prev) => {
+        if (!prev) return prev;
+        const now = new Date();
+        const today = formatDayId(now);
+        const state = applyRollover(prev.state, now);
+        // `applyRollover` returns the same object when nothing moved, so an
+        // idle tab neither re-renders nor writes to disk.
+        if (state === prev.state && today === prev.today) return prev;
+        return { state, today };
+      });
     }, 60_000);
     return () => clearInterval(tick);
   }, [snap !== null]);
@@ -235,6 +286,142 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const moveCarried = useCallback(
+    (fromDayId: ISODate, toDayId: ISODate, itemId: string) => {
+      if (fromDayId === toDayId) return;
+      setSnap((prev) => {
+        if (!prev) return prev;
+        const taken = takeCarried(readDay(prev.state, fromDayId), itemId);
+        if (!taken.item) return prev;
+
+        const destination = queueCarried(readDay(prev.state, toDayId), taken.item);
+        return {
+          ...prev,
+          state: {
+            ...prev.state,
+            days: { ...prev.state.days, [fromDayId]: taken.day, [toDayId]: destination },
+          },
+        };
+      });
+    },
+    [],
+  );
+
+  const addHabit = useCallback((habit: Habit) => {
+    setSnap((prev) =>
+      prev ? { ...prev, state: { ...prev.state, habits: { ...prev.state.habits, [habit.id]: habit } } } : prev,
+    );
+  }, []);
+
+  const patchHabit = useCallback((id: string, patch: Partial<Habit>) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      const current = prev.state.habits[id];
+      if (!current) return prev;
+      return {
+        ...prev,
+        state: { ...prev.state, habits: { ...prev.state.habits, [id]: { ...current, ...patch } } },
+      };
+    });
+  }, []);
+
+  const deleteHabit = useCallback((id: string) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      const habits = { ...prev.state.habits };
+      delete habits[id];
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          habits,
+          habitCompletions: removeHabitCompletions(prev.state.habitCompletions, id),
+        },
+      };
+    });
+  }, []);
+
+  const toggleHabitDone = useCallback((habitId: string, dayId: ISODate, now: Date) => {
+    setSnap((prev) =>
+      prev
+        ? {
+            ...prev,
+            state: {
+              ...prev.state,
+              habitCompletions: toggleCompletion(prev.state.habitCompletions, habitId, dayId, now),
+            },
+          }
+        : prev,
+    );
+  }, []);
+
+  const setCycleEnabled = useCallback((enabled: boolean, now: Date) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          cycle: {
+            ...prev.state.cycle,
+            settings: {
+              enabled,
+              // Opting out keeps the entries; only the explicit delete removes them.
+              optedInAt: enabled ? (prev.state.cycle.settings.optedInAt ?? now.toISOString()) : prev.state.cycle.settings.optedInAt,
+            },
+          },
+        },
+      };
+    });
+  }, []);
+
+  const logCycleStart = useCallback((entry: CycleEntry) => {
+    setSnap((prev) =>
+      prev
+        ? {
+            ...prev,
+            state: {
+              ...prev.state,
+              cycle: {
+                ...prev.state.cycle,
+                entries: { ...prev.state.cycle.entries, [entry.id]: entry },
+              },
+            },
+          }
+        : prev,
+    );
+  }, []);
+
+  const deleteCycleEntry = useCallback((id: string) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      const entries = { ...prev.state.cycle.entries };
+      delete entries[id];
+      return { ...prev, state: { ...prev.state, cycle: { ...prev.state.cycle, entries } } };
+    });
+  }, []);
+
+  /** Removes every cycle record and the opt-in itself. */
+  const deleteAllCycleData = useCallback(() => {
+    setSnap((prev) =>
+      prev
+        ? {
+            ...prev,
+            state: {
+              ...prev.state,
+              cycle: { settings: { enabled: false, optedInAt: null }, entries: {} },
+            },
+          }
+        : prev,
+    );
+  }, []);
+
+  const setSound = useCallback((patch: Partial<SoundPrefs>) => {
+    setSnap((prev) =>
+      prev ? { ...prev, state: { ...prev.state, sound: { ...prev.state.sound, ...patch } } } : prev,
+    );
+  }, []);
+
   const resetAll = useCallback(() => {
     clearState();
     const fresh = emptyState();
@@ -261,6 +448,18 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       clearActiveSession,
       logInterruption,
       updateInterruption,
+      moveCarried,
+      addHabit,
+      patchHabit,
+      deleteHabit,
+      toggleHabitDone,
+      cycle: state.cycle,
+      setCycleEnabled,
+      logCycleStart,
+      deleteCycleEntry,
+      deleteAllCycleData,
+      sound: state.sound,
+      setSound,
       resetAll,
     }),
     [
@@ -279,6 +478,16 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       clearActiveSession,
       logInterruption,
       updateInterruption,
+      moveCarried,
+      addHabit,
+      patchHabit,
+      deleteHabit,
+      toggleHabitDone,
+      setCycleEnabled,
+      logCycleStart,
+      deleteCycleEntry,
+      deleteAllCycleData,
+      setSound,
       resetAll,
     ],
   );

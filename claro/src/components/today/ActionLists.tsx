@@ -2,107 +2,86 @@ import { AddItem } from "@/components/AddItem";
 import { ItemRow } from "@/components/ItemRow";
 import { newId } from "@/lib/id";
 import { removeById, toggleById, updateById } from "@/lib/mutations";
-import { BUCKETS, BUCKET_META, type ActionItem, type Bucket, type Day } from "@/lib/types";
+import { BUCKET_META, type ActionItem, type Bucket } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 type Props = {
-  day: Day;
+  bucket: Bucket;
+  /** The whole day's actions — one array holds all three buckets. */
+  actions: ActionItem[];
   onChange: (actions: ActionItem[]) => void;
+  className?: string;
 };
 
 /**
- * Quick Ticks / Tasks / Projects. All three live in one array discriminated by
- * `bucket`, so moving an item between them is a single field change.
+ * One effort bucket as its own column, so Quick Ticks, Tasks and Projects can
+ * sit side by side across the spread rather than stacking into a long page.
+ *
+ * All three read from the same array, discriminated by `bucket`, which is what
+ * makes recategorising an item a single field change.
  */
-export function ActionLists({ day, onChange }: Props) {
-  return (
-    <section>
-      <div className="flex items-baseline gap-2.5">
-        <h2 className="eyebrow">Actions</h2>
-        <span className="text-[11px] text-muted-foreground">grouped by effort</span>
-      </div>
-
-      <div className="paper-panel mt-3 space-y-7 p-4 sm:p-5">
-      {BUCKETS.map((bucket) => (
-        <BucketList
-          key={bucket}
-          bucket={bucket}
-          items={day.actions.filter((a) => a.bucket === bucket)}
-          allActions={day.actions}
-          onChange={onChange}
-        />
-      ))}
-      </div>
-    </section>
-  );
-}
-
-function BucketList({
-  bucket,
-  items,
-  allActions,
-  onChange,
-}: {
-  bucket: Bucket;
-  items: ActionItem[];
-  allActions: ActionItem[];
-  onChange: (actions: ActionItem[]) => void;
-}) {
+export function BucketColumn({ bucket, actions, onChange, className }: Props) {
   const meta = BUCKET_META[bucket];
+  const items = actions.filter((a) => a.bucket === bucket);
   const doneCount = items.filter((i) => i.done).length;
 
   return (
-    <div>
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="flex items-baseline gap-2.5">
-          <h3 className="text-[0.95rem] font-medium tracking-tight">{meta.label}</h3>
-          <span className="text-[11px] text-muted-foreground">{meta.hint}</span>
+    <section className={cn("flex min-h-0 flex-col", className)}>
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 className="eyebrow truncate">{meta.column}</h2>
+          <span className="shrink-0 text-[10px] text-muted-foreground">{meta.hint}</span>
         </div>
         {items.length > 0 && (
-          <span className="tnum text-[11px] text-muted-foreground">
+          <span className="tnum shrink-0 text-[10px] text-muted-foreground">
             {doneCount}/{items.length}
           </span>
         )}
       </div>
 
-      <div className="mt-2 divide-y divide-subtle">
-        {items.map((item) => (
-          <ItemRow
-            key={item.id}
-            text={item.text}
-            done={item.done}
-            label={meta.short}
-            onToggle={() => onChange(toggleById(allActions, item.id))}
-            onCommit={(text) => onChange(updateById(allActions, item.id, { text }))}
-            onDelete={() => onChange(removeById(allActions, item.id))}
-            trailing={
-              <BucketSwitcher
-                value={item.bucket}
-                onChange={(next) => onChange(updateById(allActions, item.id, { bucket: next }))}
-                itemLabel={item.text || meta.short}
-              />
-            }
-          />
-        ))}
-      </div>
+      <div className="paper-panel scroll-pane mt-2 flex min-h-0 flex-1 flex-col px-3 py-1">
+        <div className="min-h-0 flex-1 divide-y divide-subtle">
+          {items.map((item) => (
+            <ItemRow
+              key={item.id}
+              dense
+              text={item.text}
+              done={item.done}
+              label={meta.short}
+              onToggle={() => onChange(toggleById(actions, item.id))}
+              onCommit={(text) => onChange(updateById(actions, item.id, { text }))}
+              onDelete={() => onChange(removeById(actions, item.id))}
+              trailing={
+                <BucketSwitcher
+                  value={item.bucket}
+                  onChange={(next) => onChange(updateById(actions, item.id, { bucket: next }))}
+                  itemLabel={item.text || meta.short}
+                />
+              }
+            />
+          ))}
+        </div>
 
-      <div className="mt-1">
         <AddItem
           label={`Add to ${meta.label.toLowerCase()}`}
+          className="shrink-0 text-[0.8rem]"
           onAdd={(text) =>
             onChange([
-              ...allActions,
+              ...actions,
               {
                 id: newId(),
                 text,
                 bucket,
                 done: false,
                 createdAt: new Date().toISOString(),
+                originDayId: null,
+                carriedTo: null,
               },
             ])
           }
         />
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -121,9 +100,9 @@ function BucketSwitcher({
       aria-label={`Move "${itemLabel}" to another list`}
       value={value}
       onChange={(e) => onChange(e.target.value as Bucket)}
-      className="field-select shrink-0 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+      className="field-select w-0 shrink-0 overflow-hidden p-0 opacity-0 transition-opacity focus-visible:w-auto focus-visible:p-[0.125rem_0.375rem] focus-visible:opacity-100 group-hover:w-auto group-hover:p-[0.125rem_0.375rem] group-hover:opacity-100"
     >
-      {BUCKETS.map((b) => (
+      {(["quickTick", "task", "project"] as Bucket[]).map((b) => (
         <option key={b} value={b}>
           {BUCKET_META[b].short}
         </option>

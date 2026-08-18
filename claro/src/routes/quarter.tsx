@@ -45,7 +45,7 @@ function QuarterView() {
   return (
     <div className="space-y-12">
       <PeriodHeader
-        eyebrow="Direction"
+        eyebrow="My direction for this quarter"
         title={formatQuarterShort(quarterId)}
         subtitle={formatQuarterMonths(quarterId)}
         onPrev={() => go(shiftQuarterId(quarterId, -1))}
@@ -137,7 +137,7 @@ function QuarterColumn({
         <div className="flex items-baseline justify-between gap-3">
           <div className="flex items-baseline gap-2.5">
             <h3 className="eyebrow">Side Quests</h3>
-            <span className="text-[11px] text-muted-foreground">supporting goals</span>
+            <span className="text-[11px] text-muted-foreground">independent goals</span>
           </div>
           <span className="eyebrow tnum">
             {side.sideQuests.length}/{MAX_SIDE_QUESTS}

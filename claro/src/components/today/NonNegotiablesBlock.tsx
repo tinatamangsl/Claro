@@ -1,84 +1,79 @@
-import { AddItem } from "@/components/AddItem";
-import { CheckToggle } from "@/components/CheckToggle";
 import { EditableText } from "@/components/EditableText";
+import { CheckToggle } from "@/components/CheckToggle";
 import { newId } from "@/lib/id";
-import { addCapped, removeById, toggleById, updateById } from "@/lib/mutations";
+import { removeById, toggleById, updateById } from "@/lib/mutations";
 import { MAX_NON_NEGOTIABLES, type Day, type NonNegotiable } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { X } from "lucide-react";
 
 type Props = {
   day: Day;
   onChange: (items: NonNegotiable[]) => void;
+  className?: string;
 };
 
+/** Always three numbered lines, so the shape of the promise is visible even when empty. */
+const SLOTS = Array.from({ length: MAX_NON_NEGOTIABLES }, (_, i) => i);
+
 /**
- * Deliberately not styled like the task lists — these aren't productivity items,
- * they're the things that happen regardless of how the day goes.
+ * Deliberately not styled like the task lists — these aren't productivity
+ * items, they're the things that happen regardless of how the day goes. Three
+ * ruled lines in a tinted box, as on the paper page.
  */
-export function NonNegotiablesBlock({ day, onChange }: Props) {
+export function NonNegotiablesBlock({ day, onChange, className }: Props) {
   const items = day.nonNegotiables;
-  const atCap = items.length >= MAX_NON_NEGOTIABLES;
+
+  const write = (index: number, text: string) => {
+    const existing = items[index];
+    const trimmed = text.trim();
+
+    if (existing) {
+      onChange(trimmed ? updateById(items, existing.id, { text: trimmed }) : removeById(items, existing.id));
+      return;
+    }
+    if (!trimmed) return;
+    onChange([...items, { id: newId(), text: trimmed, done: false }]);
+  };
 
   return (
-    <section>
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="flex items-baseline gap-2.5">
-          <h2 className="eyebrow">Non-Negotiables</h2>
-          <span className="text-[11px] text-muted-foreground">whatever else happens</span>
+    <section className={cn("shrink-0", className)}>
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="flex items-baseline gap-2">
+          <h2 className="eyebrow">My three anchors</h2>
+          <span className="hidden text-[10px] text-muted-foreground xl:inline">promises, not tasks</span>
         </div>
         <span className="eyebrow tnum">
-          {items.filter((i) => i.done).length}/{items.length || MAX_NON_NEGOTIABLES}
+          {items.filter((i) => i.done).length}/{MAX_NON_NEGOTIABLES}
         </span>
       </div>
 
-      <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className={cn(
-              "surface group flex items-center gap-2.5 px-3 py-3 transition-colors",
-              item.done && "border-positive/40 bg-positive/8",
-            )}
-          >
-            <CheckToggle
-              checked={item.done}
-              onChange={() => onChange(toggleById(items, item.id))}
-              label={`Complete ${item.text || "non-negotiable"}`}
-            />
-            <EditableText
-              value={item.text}
-              onCommit={(text) => onChange(updateById(items, item.id, { text }))}
-              ariaLabel="Non-negotiable"
-              className={cn(
-                "flex-1 text-[0.88rem]",
-                item.done && "strike-done text-muted-foreground",
-              )}
-            />
-            <button
-              type="button"
-              onClick={() => onChange(removeById(items, item.id))}
-              aria-label={`Delete ${item.text || "non-negotiable"}`}
-              className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ))}
-
-        {!atCap && (
-          <div className="card-dashed">
-            <AddItem
-              label="Add a non-negotiable"
-              className="px-3 py-3"
-              onAdd={(text) =>
-                onChange(
-                  addCapped(items, { id: newId(), text, done: false }, MAX_NON_NEGOTIABLES),
-                )
-              }
-            />
-          </div>
-        )}
+      <div className="anchor-box mt-2 divide-y divide-subtle px-3">
+        {SLOTS.map((index) => {
+          const item = items[index];
+          return (
+            <div key={index} className="flex items-center gap-2">
+              <span aria-hidden className="tnum w-3 shrink-0 text-[11px] text-muted-foreground">
+                {index + 1}
+              </span>
+              <CheckToggle
+                checked={item?.done ?? false}
+                onChange={() => item && onChange(toggleById(items, item.id))}
+                label={item ? `Complete ${item.text}` : `Anchor ${index + 1}`}
+                size="sm"
+                className={cn(!item && "invisible")}
+              />
+              <EditableText
+                value={item?.text ?? ""}
+                onCommit={(text) => write(index, text)}
+                ariaLabel={`Anchor ${index + 1}`}
+                placeholder="…"
+                className={cn(
+                  "flex-1 py-1 text-[0.82rem]",
+                  item?.done && "strike-done text-muted-foreground",
+                )}
+              />
+            </div>
+          );
+        })}
       </div>
     </section>
   );

@@ -1,12 +1,13 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { EditableText } from "@/components/EditableText";
-import { PeriodHeader } from "@/components/PeriodHeader";
-import { ActionLists } from "@/components/today/ActionLists";
+import { BucketColumn } from "@/components/today/ActionLists";
+import { CarriedForwardBlock } from "@/components/today/CarriedForwardBlock";
 import { FocusView } from "@/components/today/FocusView";
+import { HabitsBlock } from "@/components/today/HabitsBlock";
 import { NonNegotiablesBlock } from "@/components/today/NonNegotiablesBlock";
 import { PrioritiesBlock } from "@/components/today/PrioritiesBlock";
 import { ScheduleBlock } from "@/components/today/ScheduleBlock";
@@ -19,9 +20,17 @@ import {
   formatWeekNumber,
   quarterOfDay,
   shiftDayId,
+  weekDayIds,
   weekOfDay,
 } from "@/lib/dates";
 import { parkDistraction, selectFocus } from "@/lib/focus";
+import { createHabit } from "@/lib/habits";
+import { writePriority } from "@/lib/priorities";
+import {
+  keepCarriedAsAction,
+  letGoCarried,
+  promoteCarried,
+} from "@/lib/rollover";
 import {
   beginReturnBlock,
   closeSession,
@@ -39,7 +48,9 @@ import {
   startFocusSession,
 } from "@/lib/focus-session";
 import { useNow } from "@/hooks/use-now";
-import type { Day, FocusSession, ISODate, Priority } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { priorityKey } from "@/lib/types";
+import type { Day, FocusSession, ISODate, Priority, PriorityKey } from "@/lib/types";
 
 /** `?focus`, `?focus=1` and `?focus=true` all mean the same thing. */
 const FOCUS_VALUES = new Set<unknown>([true, "", "1", "true"]);
@@ -56,7 +67,7 @@ export const Route = createFileRoute("/today")({
     return next;
   },
   component: () => (
-    <AppShell>
+    <AppShell wide>
       <TodayView />
     </AppShell>
   ),
@@ -77,6 +88,11 @@ function TodayView() {
     clearActiveSession,
     logInterruption,
     updateInterruption,
+    moveCarried,
+    addHabit,
+    patchHabit,
+    deleteHabit,
+    toggleHabitDone,
   } = useClaro();
   const { d, focus } = Route.useSearch();
   const navigate = useNavigate();
@@ -87,6 +103,7 @@ function TodayView() {
   const weekId = weekOfDay(dayId);
   const quarterId = quarterOfDay(dayId);
   const parentWeek = week(weekId);
+  const parentQuarter = quarter(quarterId);
 
   // The app's only timer. It ticks solely while something is actually counting.
   const now = useNow(activeSession && isCounting(activeSession) ? 1000 : null);
@@ -128,8 +145,14 @@ function TodayView() {
 
   const go = (id: ISODate) => navigate({ to: "/today", search: { d: id } });
   const patch = (p: Partial<Day>) => updateDay(dayId, (current) => ({ ...current, ...p }));
-  const patchPriority = (key: "priority1" | "priority2", p: Partial<Priority>) =>
-    updateDay(dayId, (current) => ({ ...current, [key]: { ...current[key], ...p } }));
+
+  /** Writing into a blank slot is what creates a priority — see `writePriority`. */
+  const patchPriority = (key: PriorityKey, p: Partial<Priority>) =>
+    updateDay(dayId, (current) => ({
+      ...current,
+      [key]: writePriority(current[key], p, dayId, new Date()),
+    }));
+
   const enterFocus = () => navigate({ to: "/today", search: { focus: true } });
   const leaveFocus = () => navigate({ to: "/today", search: {} });
 
@@ -180,7 +203,7 @@ function TodayView() {
 
   /** The only path to a completed priority is this explicit choice. */
   const completePriority = () => {
-    if (session?.priority) patchPriority(`priority${session.priority.rank}`, { done: true });
+    if (session?.priority) patchPriority(priorityKey(session.priority.rank), { done: true });
     updateSession((s) => closeSession(s, "completed", new Date()));
     clearActiveSession();
   };
@@ -228,93 +251,217 @@ function TodayView() {
     );
   }
 
+  const live = isSessionOpen(session) ? session : null;
+  const actions = (next: typeof record.actions) => patch({ actions: next });
+
   return (
-    <div className="space-y-12">
-      <PeriodHeader
-        eyebrow={dayId === today ? "Execution · Today" : "Execution"}
-        title={formatDayWeekday(dayId)}
-        subtitle={formatDayDate(dayId)}
-        onPrev={() => go(shiftDayId(dayId, -1))}
-        onNext={() => go(shiftDayId(dayId, 1))}
-        prevLabel="Previous day"
-        nextLabel="Next day"
-        onToday={dayId !== today ? () => go(today) : undefined}
-        todayLabel="Today"
-        parent={
-          <span className="flex items-center gap-2">
-            <Link
-              to="/quarter"
-              search={{ q: quarterId }}
-              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {formatQuarterShort(quarterId)}
-              <ArrowUpRight className="h-3 w-3" />
-            </Link>
-            <span aria-hidden className="text-[11px] text-muted-foreground/40">
-              ·
-            </span>
-            <Link
-              to="/week"
-              search={{ w: weekId }}
-              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {formatWeekNumber(weekId)}
-              <ArrowUpRight className="h-3 w-3" />
-            </Link>
-          </span>
-        }
-      />
+    /*
+      On a laptop the whole day is one screen: the outer column is pinned to the
+      viewport, and the four inner columns take what is left. Below `lg` the
+      height cap is dropped entirely and everything simply stacks and flows.
+    */
+    <div className="flex flex-col gap-4 lg:h-[calc(100vh-14.5rem)] lg:min-h-[36rem]">
+      {live && dayId === today && (
+        <FocusStrip session={live} now={now} onOpen={enterFocus} />
+      )}
 
       {/*
-        The hero: one bound page carrying the day's intent and the session that
-        serves it, rather than two cards that happen to sit near each other.
+        One notebook opened flat: two pages, two columns each. A phone gets the
+        same content in the same order, stacked.
       */}
-      <section className="paper-page paper-bound tape relative p-6 pt-8 sm:p-9 sm:pt-10">
-        <span aria-hidden className="binding-holes" />
+      <div className="spread lg:min-h-0 lg:flex-1">
+        <div className="spread-page flex min-h-0 flex-col gap-4">
+          <DayHeading
+            dayId={dayId}
+            today={today}
+            weekId={weekId}
+            quarterId={quarterId}
+            onPrev={() => go(shiftDayId(dayId, -1))}
+            onNext={() => go(shiftDayId(dayId, 1))}
+            onToday={dayId !== today ? () => go(today) : undefined}
+          />
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="eyebrow">Today's focus</h2>
-          <span className="annot hidden sm:block">one day, two things.</span>
+          <div className="grid min-h-0 flex-1 gap-5 sm:grid-cols-[1.05fr_1fr]">
+            <ScheduleBlock
+              day={record}
+              onChange={(scheduleItems) => patch({ scheduleItems })}
+              className="min-h-0"
+            />
+
+            <div className="flex min-h-0 flex-col gap-4">
+              <BucketColumn
+                bucket="quickTick"
+                actions={record.actions}
+                onChange={actions}
+                className="min-h-0 flex-1"
+              />
+              <NonNegotiablesBlock
+                day={record}
+                onChange={(nonNegotiables) => patch({ nonNegotiables })}
+              />
+            </div>
+          </div>
+
+          <WellbeingBlock day={record} onPatch={patch} />
         </div>
 
-        <PrioritiesBlock day={record} week={parentWeek} onPatch={patchPriority} />
+        <div className="spread-page spread-seam flex min-h-0 flex-col gap-3">
+          <section className="shrink-0">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <h2 className="eyebrow">One day, three clear priorities</h2>
+              {dayId === today && !live && (
+                <button
+                  type="button"
+                  onClick={enterFocus}
+                  className="btn btn-sm btn-primary shrink-0"
+                >
+                  Start focus
+                </button>
+              )}
+            </div>
 
-        {dayId === today && (
-          <FocusControl session={session} now={now} onOpen={enterFocus} />
-        )}
-      </section>
+            <PrioritiesBlock day={record} quarter={parentQuarter} onPatch={patchPriority} />
+          </section>
 
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)]">
-        <ScheduleBlock day={record} onChange={(scheduleItems) => patch({ scheduleItems })} />
-        <ActionLists day={record} onChange={(actions) => patch({ actions })} />
+          <CarriedForwardBlock
+            day={record}
+            onPromote={(itemId) => updateDay(dayId, (current) => promoteCarried(current, itemId))}
+            onKeepAsAction={(itemId) =>
+              updateDay(dayId, (current) => keepCarriedAsAction(current, itemId, new Date()))
+            }
+            onSchedule={(itemId, toDayId) => moveCarried(dayId, toDayId, itemId)}
+            onLetGo={(itemId) => updateDay(dayId, (current) => letGoCarried(current, itemId))}
+          />
+
+          <div className="grid min-h-0 flex-1 gap-5 sm:grid-cols-2 lg:min-h-[8.5rem]">
+            <BucketColumn bucket="task" actions={record.actions} onChange={actions} />
+            <BucketColumn bucket="project" actions={record.actions} onChange={actions} />
+          </div>
+
+          <HabitsBlock
+            habits={state.habits}
+            completions={state.habitCompletions}
+            dayId={dayId}
+            weekDayIds={weekDayIds(weekId)}
+            todayId={today}
+            onAdd={(name) => {
+              const habit = createHabit(name, new Date());
+              if (habit) addHabit(habit);
+            }}
+            onToggle={(habitId, on) => toggleHabitDone(habitId, on, new Date())}
+            onArchive={(habitId) =>
+              patchHabit(habitId, { archivedAt: new Date().toISOString() })
+            }
+            onRestore={(habitId) => patchHabit(habitId, { archivedAt: null })}
+            onDelete={deleteHabit}
+          />
+
+          <section className="shrink-0">
+            <div className="flex items-baseline gap-2">
+              <h2 className="eyebrow">Notes</h2>
+              <span className="text-[10px] text-muted-foreground">anything worth keeping</span>
+            </div>
+            {/* A writing surface, so the page's rules earn their place here. */}
+            <div className="paper-panel rule-lines mt-2 px-3 py-1.5">
+              <EditableText
+                value={record.notes}
+                onCommit={(notes) => patch({ notes })}
+                multiline
+                rows={2}
+                ariaLabel="Notes for today"
+                placeholder="How did today actually go?"
+                className="-ml-2 py-0.5 text-[0.82rem] leading-[22px]"
+              />
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The date, at the top of the left page — where it sits in a paper journal,
+ * rather than in a separate band above the spread.
+ */
+function DayHeading({
+  dayId,
+  today,
+  weekId,
+  quarterId,
+  onPrev,
+  onNext,
+  onToday,
+}: {
+  dayId: ISODate;
+  today: ISODate;
+  weekId: string;
+  quarterId: string;
+  onPrev: () => void;
+  onNext: () => void;
+  onToday?: () => void;
+}) {
+  return (
+    <header className="shrink-0 border-b border-border/70 pb-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span className="eyebrow">
+          {dayId === today ? "I will execute today" : "Execution"}
+        </span>
+        <Link
+          to="/quarter"
+          search={{ q: quarterId }}
+          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {formatQuarterShort(quarterId)}
+          <ArrowUpRight aria-hidden className="h-3 w-3" />
+        </Link>
+        <span aria-hidden className="text-[11px] text-muted-foreground/40">
+          ·
+        </span>
+        <Link
+          to="/week"
+          search={{ w: weekId }}
+          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {formatWeekNumber(weekId)}
+          <ArrowUpRight aria-hidden className="h-3 w-3" />
+        </Link>
       </div>
 
-      <NonNegotiablesBlock
-        day={record}
-        onChange={(nonNegotiables) => patch({ nonNegotiables })}
-      />
-
-      <WellbeingBlock day={record} onPatch={patch} />
-
-      <section>
-        <div className="flex items-baseline gap-2.5">
-          <h2 className="eyebrow">Notes</h2>
-          <span className="text-[11px] text-muted-foreground">anything worth keeping</span>
+      <div className="mt-1.5 flex flex-wrap items-end justify-between gap-x-5 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3">
+          <h1 className="display text-[2rem] sm:text-[2.3rem]">{formatDayWeekday(dayId)}</h1>
+          <p className="tnum text-[0.88rem] text-muted-foreground">{formatDayDate(dayId)}</p>
         </div>
-        <div className="paper-page tape tape-tr relative mt-4 p-5 pt-7 sm:p-6 sm:pt-8">
-          {/* A writing surface, so the page's rules earn their place here. */}
-          <EditableText
-            value={record.notes}
-            onCommit={(notes) => patch({ notes })}
-            multiline
-            rows={5}
-            ariaLabel="Notes for today"
-            placeholder="How did today actually go?"
-            className="-ml-2 text-[0.95rem] leading-[28px]"
-          />
+
+        <div className="flex items-center gap-2">
+          {onToday && (
+            <button type="button" onClick={onToday} className="btn btn-sm btn-quiet">
+              Today
+            </button>
+          )}
+          <div className="flex items-center rounded-full border border-border bg-card">
+            <button
+              type="button"
+              onClick={onPrev}
+              aria-label="Previous day"
+              className="btn btn-icon btn-ghost"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span aria-hidden className="h-4 w-px bg-border" />
+            <button
+              type="button"
+              onClick={onNext}
+              aria-label="Next day"
+              className="btn btn-icon btn-ghost"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-      </section>
-    </div>
+      </div>
+    </header>
   );
 }
 
@@ -328,49 +475,54 @@ const STATUS_COPY: Record<FocusSession["phase"], string> = {
 };
 
 /**
- * The single focus control on Today. One line, one button: it starts a block
- * when there is nothing running and returns you to the live one when there is.
- * Deliberately not a dashboard — no counts, no history, no second timer.
+ * The live session, across the top of the spread. One line, one button: it
+ * takes you back to the block that is already running. Deliberately not a
+ * dashboard — no counts, no history, and never a second timer.
  */
-function FocusControl({
+function FocusStrip({
   session,
   now,
   onOpen,
 }: {
-  session: FocusSession | null;
+  session: FocusSession;
   now: Date | null;
   onOpen: () => void;
 }) {
-  const live = isSessionOpen(session) ? session : null;
-  const elapsed = live ? (now ? mainElapsedMs(live, now) : live.elapsedBeforeMs) : 0;
-  const left = live ? Math.max(0, live.plannedMs - elapsed) : 0;
+  const elapsed = now ? mainElapsedMs(session, now) : session.elapsedBeforeMs;
+  const left = Math.max(0, session.plannedMs - elapsed);
+  const ratio =
+    session.plannedMs > 0 ? Math.min(1, Math.max(0, elapsed / session.plannedMs)) : 0;
 
   return (
-    <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-5">
-      <div className="flex min-w-0 flex-wrap items-baseline gap-2.5">
-        <span className="eyebrow">{live ? STATUS_COPY[live.phase] : "Focus session"}</span>
-        {live ? (
-          <>
-            {live.phase !== "ended" && (
-              <span className="tnum text-[0.9rem] text-foreground">
-                {formatRemaining(left)} left
-              </span>
-            )}
-            {live.intention && (
-              <span className="truncate text-[0.85rem] text-muted-foreground">
-                · {live.intention}
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="text-[0.85rem] text-muted-foreground">
-            Give one of these a quiet block.
-          </span>
-        )}
+    <section className="surface-raised relative overflow-hidden px-5 py-4 sm:px-7">
+      <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-gold" />
+
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="eyebrow">{STATUS_COPY[session.phase]}</span>
+          {session.phase !== "ended" && (
+            <span className="tnum display text-[1.5rem] leading-none">
+              {formatRemaining(left)}
+            </span>
+          )}
+          {session.intention && (
+            <span className="truncate text-[0.88rem] text-muted-foreground">
+              {session.intention}
+            </span>
+          )}
+        </div>
+
+        <button type="button" onClick={onOpen} className="btn btn-sm btn-primary shrink-0">
+          Resume focus
+        </button>
       </div>
-      <button type="button" onClick={onOpen} className="btn btn-sm btn-primary shrink-0">
-        {live ? "Resume focus" : "Start focus"}
-      </button>
-    </div>
+
+      <div aria-hidden className="mt-3 h-[3px] overflow-hidden rounded-full bg-border">
+        <div
+          className={cn("h-full rounded-full bg-gold transition-[width] duration-1000")}
+          style={{ width: `${Math.round(ratio * 100)}%` }}
+        />
+      </div>
+    </section>
   );
 }

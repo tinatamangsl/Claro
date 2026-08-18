@@ -492,3 +492,66 @@ describe("the private interruption log", () => {
     expect(api.current?.activeSession).toBeNull();
   });
 });
+
+describe("carry-forward at load", () => {
+  /** Yesterday relative to the machine's real today, so the test never drifts. */
+  const yesterdayId = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return formatDayId(d);
+  };
+
+  const unfinishedYesterday = () => {
+    const id = yesterdayId();
+    return {
+      ...emptyState(),
+      days: {
+        [id]: {
+          ...blankDay(id),
+          priority1: {
+            id: "p-1",
+            text: "Ship the store",
+            done: false,
+            goal: null,
+            createdAt: "2026-01-01T09:00:00.000Z",
+            originDayId: id,
+            carriedTo: null,
+          },
+        },
+      },
+    };
+  };
+
+  it("carries unfinished work forward the moment Claro is opened", async () => {
+    saveNow(unfinishedYesterday());
+    const api = harness();
+
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    const carriedInto = api.current!.state.days[yesterdayId()].priority1.carriedTo;
+    expect(carriedInto).not.toBeNull();
+    expect(api.current!.day(carriedInto!).priority1.text).toBe("Ship the store");
+  });
+
+  it("writes the carry to disk, so a decision about it cannot be undone by a reload", async () => {
+    saveNow(unfinishedYesterday());
+    harness();
+
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
+
+    // Read straight off localStorage rather than from the live context: the
+    // point of the test is that the change survives the tab being closed.
+    expect(loadState().days[yesterdayId()].priority1.carriedTo).not.toBeNull();
+  });
+
+  it("writes nothing when there was nothing to carry", async () => {
+    const untouched = emptyState();
+    saveNow(untouched);
+    const spy = vi.spyOn(Storage.prototype, "setItem");
+
+    harness();
+    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
+
+    expect(spy).not.toHaveBeenCalled();
+  });
+});

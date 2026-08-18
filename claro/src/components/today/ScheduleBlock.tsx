@@ -1,18 +1,21 @@
 import { EditableText } from "@/components/EditableText";
 import { SCHEDULE_HOURS, formatHourLabel } from "@/lib/dates";
 import { newId } from "@/lib/id";
+import { cn } from "@/lib/utils";
 import type { Day, ScheduleItem } from "@/lib/types";
 
 type Props = {
   day: Day;
   onChange: (items: ScheduleItem[]) => void;
+  className?: string;
 };
 
 /**
  * A deliberately lightweight 5 AM – 10 PM grid — one line per hour. This is a
- * place to block time, not a calendar product.
+ * place to block time, not a calendar product. Rows are tight on purpose: all
+ * eighteen have to be visible at once for the spread to hold together.
  */
-export function ScheduleBlock({ day, onChange }: Props) {
+export function ScheduleBlock({ day, onChange, className }: Props) {
   const byTime = new Map(day.scheduleItems.map((item) => [item.time, item]));
 
   const setAt = (time: string, text: string) => {
@@ -32,25 +35,25 @@ export function ScheduleBlock({ day, onChange }: Props) {
   };
 
   return (
-    <section>
-      <div className="flex items-baseline gap-2.5">
+    <section className={cn("flex min-h-0 flex-col", className)}>
+      <div className="flex items-baseline gap-2">
         <h2 className="eyebrow">Schedule</h2>
-        <span className="text-[11px] text-muted-foreground">5 AM – 10 PM</span>
+        <span className="text-[10px] text-muted-foreground">5 AM – 10 PM</span>
       </div>
 
-      <div className="paper-panel mt-3 divide-y divide-subtle py-1">
+      <div className="paper-panel scroll-pane mt-2 min-h-0 flex-1 divide-y divide-subtle">
         {SCHEDULE_HOURS.map((time) => {
           const item = byTime.get(time);
           return (
             <div key={time} className="flex items-stretch">
-              <span className="tnum flex w-16 shrink-0 items-center justify-end border-r border-gold/25 py-1.5 pr-3 text-[11px] text-muted-foreground">
+              <span className="tnum flex w-[3.25rem] shrink-0 items-center justify-end border-r border-gold/25 pr-2 text-[10px] text-muted-foreground">
                 {formatHourLabel(time)}
               </span>
               <EditableText
                 value={item?.text ?? ""}
                 onCommit={(text) => setAt(time, text)}
                 ariaLabel={`Schedule at ${formatHourLabel(time)}`}
-                className="flex-1 pl-3 text-[0.88rem]"
+                className="flex-1 py-0 pl-2 text-[0.78rem]"
               />
             </div>
           );

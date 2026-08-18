@@ -6,64 +6,55 @@ import { cn } from "@/lib/utils";
 type Props = {
   day: Day;
   onPatch: (patch: Partial<Day>) => void;
+  className?: string;
 };
 
 const MOODS: Mood[] = [1, 2, 3, 4, 5];
-const MAX_WATER = 10;
+const MAX_WATER = 8;
 
 /**
- * Four small readings, not a health tracker. The point is to eventually see how
- * energy and execution relate — so it stays lightweight and optional.
+ * Four small readings on one line, not a health tracker. It sits as a strip
+ * across the spread the way the paper page carries sleep, water and steps in a
+ * single row — present, but never the loudest thing on the page.
  */
-export function WellbeingBlock({ day, onPatch }: Props) {
+export function WellbeingBlock({ day, onPatch, className }: Props) {
   return (
-    <section>
-      <div className="flex items-baseline gap-2.5">
+    <section className={cn("shrink-0", className)}>
+      <div className="flex items-baseline gap-2">
         <h2 className="eyebrow">Check-in</h2>
-        <span className="text-[11px] text-muted-foreground">how the body's doing</span>
+        <span className="text-[10px] text-muted-foreground">how the body's doing</span>
       </div>
 
-      <div className="mt-3 grid gap-px overflow-hidden rounded-lg border border-border bg-subtle sm:grid-cols-2 lg:grid-cols-4">
-        <Cell label="Sleep" hint="hours">
+      <div className="paper-panel mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 px-3 py-2">
+        <Field label="Sleep">
           <Stepper
             value={day.sleepHours ?? 0}
             onChange={(v) => onPatch({ sleepHours: v === 0 ? null : v })}
-            step={0.5}
-            min={0}
-            max={16}
-            format={(v) => (day.sleepHours === null ? "—" : `${v}`)}
+            display={day.sleepHours === null ? "—" : `${day.sleepHours}`}
             label="hours of sleep"
           />
-        </Cell>
+        </Field>
 
-        <Cell label="Water" hint="glasses">
-          <div className="space-y-2.5">
-            <div className="tnum text-[1.6rem] leading-none">{day.waterGlasses}</div>
-            <div className="flex gap-1">
-              {Array.from({ length: MAX_WATER }, (_, i) => {
-                const filled = i < day.waterGlasses;
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    aria-label={`Set water to ${i + 1} glasses`}
-                    onClick={() =>
-                      onPatch({ waterGlasses: day.waterGlasses === i + 1 ? i : i + 1 })
-                    }
-                    className={cn(
-                      "h-3 w-3 shrink-0 rounded-full border transition-colors",
-                      filled
-                        ? "border-primary bg-primary"
-                        : "border-border bg-transparent hover:border-foreground/40",
-                    )}
-                  />
-                );
-              })}
-            </div>
+        <Field label="Water">
+          <div className="flex gap-1">
+            {Array.from({ length: MAX_WATER }, (_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={`Set water to ${i + 1} glasses`}
+                onClick={() => onPatch({ waterGlasses: day.waterGlasses === i + 1 ? i : i + 1 })}
+                className={cn(
+                  "h-3 w-3 shrink-0 rounded-full border transition-colors",
+                  i < day.waterGlasses
+                    ? "border-primary bg-primary"
+                    : "border-border bg-transparent hover:border-foreground/40",
+                )}
+              />
+            ))}
           </div>
-        </Cell>
+        </Field>
 
-        <Cell label="Steps" hint="today">
+        <Field label="Steps">
           <input
             type="number"
             inputMode="numeric"
@@ -76,55 +67,41 @@ export function WellbeingBlock({ day, onPatch }: Props) {
               const raw = e.target.value;
               onPatch({ steps: raw === "" ? null : Math.max(0, Number(raw)) });
             }}
-            className="tnum w-full bg-transparent text-[1.6rem] leading-none outline-none placeholder:text-foreground"
+            className="tnum w-16 bg-transparent text-[0.85rem] outline-none placeholder:text-foreground"
           />
-        </Cell>
+        </Field>
 
-        <Cell label="Mood" hint={day.mood ? MOOD_LABELS[day.mood] : "1 – 5"}>
-          <div className="flex gap-1.5 pt-1.5">
-            {MOODS.map((m) => {
-              const active = day.mood !== null && m <= day.mood;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  aria-label={`Mood ${m} — ${MOOD_LABELS[m]}`}
-                  aria-pressed={day.mood === m}
-                  onClick={() => onPatch({ mood: day.mood === m ? null : m })}
-                  className={cn(
-                    "h-6 w-6 rounded-full border text-[11px] transition-colors",
-                    active
-                      ? "border-gold bg-gold text-foreground"
-                      : "border-border text-muted-foreground hover:border-foreground/40",
-                  )}
-                >
-                  {m}
-                </button>
-              );
-            })}
+        <Field label={day.mood ? MOOD_LABELS[day.mood] : "Mood"}>
+          <div className="flex gap-1">
+            {MOODS.map((m) => (
+              <button
+                key={m}
+                type="button"
+                aria-label={`Mood ${m} — ${MOOD_LABELS[m]}`}
+                aria-pressed={day.mood === m}
+                onClick={() => onPatch({ mood: day.mood === m ? null : m })}
+                className={cn(
+                  "h-5 w-5 rounded-full border text-[10px] transition-colors",
+                  day.mood !== null && m <= day.mood
+                    ? "border-gold bg-gold text-foreground"
+                    : "border-border text-muted-foreground hover:border-foreground/40",
+                )}
+              >
+                {m}
+              </button>
+            ))}
           </div>
-        </Cell>
+        </Field>
       </div>
     </section>
   );
 }
 
-function Cell({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="bg-card p-4">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[11px] font-medium">{label}</span>
-        <span className="text-[11px] text-muted-foreground">{hint}</span>
-      </div>
-      <div className="mt-2.5">{children}</div>
+    <div className="flex items-center gap-2">
+      <span className="shrink-0 text-[10px] text-muted-foreground">{label}</span>
+      {children}
     </div>
   );
 }
@@ -132,32 +109,24 @@ function Cell({
 function Stepper({
   value,
   onChange,
-  step,
-  min,
-  max,
-  format,
+  display,
   label,
 }: {
   value: number;
   onChange: (value: number) => void;
-  step: number;
-  min: number;
-  max: number;
-  format: (value: number) => string;
+  display: string;
   label: string;
 }) {
-  const clamp = (v: number) => Math.min(max, Math.max(min, Number(v.toFixed(1))));
+  const clamp = (v: number) => Math.min(16, Math.max(0, Number(v.toFixed(1))));
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="tnum text-[1.6rem] leading-none">{format(value)}</span>
-      <div className="flex gap-1">
-        <StepButton onClick={() => onChange(clamp(value - step))} label={`Decrease ${label}`}>
-          <Minus className="h-3 w-3" />
-        </StepButton>
-        <StepButton onClick={() => onChange(clamp(value + step))} label={`Increase ${label}`}>
-          <Plus className="h-3 w-3" />
-        </StepButton>
-      </div>
+    <div className="flex items-center gap-1.5">
+      <span className="tnum w-6 text-[0.85rem]">{display}</span>
+      <StepButton onClick={() => onChange(clamp(value - 0.5))} label={`Decrease ${label}`}>
+        <Minus className="h-2.5 w-2.5" />
+      </StepButton>
+      <StepButton onClick={() => onChange(clamp(value + 0.5))} label={`Increase ${label}`}>
+        <Plus className="h-2.5 w-2.5" />
+      </StepButton>
     </div>
   );
 }
@@ -176,7 +145,7 @@ function StepButton({
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="grid h-6 w-6 place-items-center rounded border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      className="grid h-5 w-5 place-items-center rounded border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
     >
       {children}
     </button>

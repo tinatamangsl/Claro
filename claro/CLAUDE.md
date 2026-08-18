@@ -34,6 +34,10 @@ workspace; `ExampleRepo/` next door is a separate, unrelated app.
 ## What Claro is
 
 A clarity operating system for one person juggling several lives at once. Not a task manager.
+The day's copy is fixed: **"One day, three clear priorities"**, **"My three anchors"**, and
+**Habits** (never "rituals" in user-facing text; the data keys stay `habits`/`nonNegotiables`
+because renaming them would be migration risk for nothing).
+
 Everything hangs off a single three-level hierarchy:
 
 ```
@@ -58,6 +62,10 @@ src/lib/dates.ts        quarter/ISO-week/day ids, hierarchy resolution, navigati
 src/lib/storage.ts      the ONLY module that touches localStorage
 src/lib/focus.ts        Return to Focus: what to return to, and where a distraction goes
 src/lib/focus-session.ts the focus session state machine — pure, now-injected, no timers
+src/lib/rollover.ts     the 10 PM carry-forward rule and the review-area decisions
+src/lib/priorities.ts   where a blank priority slot acquires its identity
+src/lib/goals.ts        the one goal vocabulary — resolve and label a GoalRef
+src/lib/habits.ts       habits and their consistency counts (never streaks)
 src/hooks/use-now.ts    the app's ONLY tick source
 src/lib/claro-store.tsx ClaroProvider + useClaro() — also owns the hydration contract
 src/routes/             __root, index (→ /today), today, week, quarter
@@ -279,6 +287,39 @@ load-bearing is ever set in the hand font.
 | `.surface` / `.surface-raised` | **Today** | Warm paper, hairline border, one soft shadow. `-raised` is Main Quest, Priority 1, and the running block. |
 | `.paper-panel` | **Dense content** | Warm paper *without* rules — the schedule, action lists, the check-in grid. |
 | `.surface-quiet` | **Week and Quarter** | Flat card, no shadow — scanning matters more than texture up the hierarchy. |
+| `.spread` / `.spread-page` | **Today** | One notebook opened flat: a single sheet carrying two pages either side of a central gutter, from `lg` up. Below that it is one stacked page and the gutter simply isn't drawn. |
+
+Today is a **double-page spread** from `lg` up, and it is sized to **one screen**: the outer
+column is `h-[calc(100vh-14.5rem)]`, which is the header, main padding and footer measured rather
+than guessed. Four columns, as on the paper planner it is modelled on:
+
+| | left column | right column |
+| --- | --- | --- |
+| **Left page** | date, then Schedule | Quick Ticks, then My three anchors, then Check-in |
+| **Right page** | the three priorities across the top, then the carried-forward review | Tasks and Projects side by side, then Habits, then Notes |
+
+A live focus session gets a calm full-width strip *above* the spread. `AppShell` takes a `wide`
+prop that opens header, main and footer to `.page-wide` together.
+
+**Density is the whole design here, and it is fragile.** Some notes for anyone changing it:
+
+- `EditableText` bakes in `py-1.5`. Across eighteen schedule rows that alone is ~100px, so the
+  spread's fields override it (`py-0`, `py-0.5`). Check the total, not the row.
+- A priority's goal link sits *inline* with its text, wrapping only when the text is long.
+  Giving it a row of its own cost three rows of page height for no information.
+- Don't set `min-h-[...]` on the outer column above what the height cap allows — a floor taller
+  than the cap silently wins and pushes the whole document into a scroll.
+- The action columns carry `lg:min-h-[8.5rem]`. Without a floor, a day carrying a review queue
+  collapses them to zero and their headings overlap what follows.
+- `.spread-page` scrolls internally from `lg` up. Flex children shrink to their min-content long
+  before that engages, so an ordinary day never scrolls anywhere; it exists to keep an unusually
+  full day inside the notebook rather than pushing the document down.
+- `.scroll-pane` bounds a list that can grow without limit, and **only from `lg` up** — a phone
+  must never nest a scroll region inside a scroll region. Never put it on the schedule: that grid
+  is a fixed 18 rows, so a cap there only produces a half-row cut that reads as broken.
+
+Measure before tuning. `document.querySelector(".spread-page").scrollHeight` against its
+`clientHeight` tells you immediately whether a page overflows, and by how much.
 
 **Ruled lines are opt-in and deliberate.** `.rule-lines` (and the rules baked into
 `.paper-page`) belong only on roomy *writing* surfaces — the focus card and Today's notes, where
@@ -332,25 +373,44 @@ gitignored**, two of its migration pairs are duplicated without `IF NOT EXISTS` 
 ## Out of scope for the MVP
 
 AI/LLM features, voice, audio briefings, music, analytics and insight dashboards, calendar
-integration, notifications, social, teams, accountability partners, leaderboards, streaks,
-subscriptions, payments, gamification, habit tracking, affirmation cards, cycle tracking, and food
-guidance. The MVP is about getting one loop right: **Quarter → Week → Day → Complete → Reflect.**
+integration, notifications, social, teams, accountability partners, leaderboards, **streaks**,
+subscriptions, payments, gamification, affirmation cards, cycle tracking, and food guidance. The
+MVP is about getting one loop right: **Quarter → Week → Day → Complete → Reflect.**
+
+Habits *are* in, but only as a Monday–Sunday grid with plain counts ("4 days this week"). There is
+no streak, no "best run", and nothing a missed day can take away. The single celebration is a
+confetti burst when every habit for the day is ticked — fired on the transition only, never on
+arriving at an already-complete day, and silent under `prefers-reduced-motion`.
 
 Focus deliberately stops short of the obvious additions: no session history UI, no interruption
 counts, no "focus time today". The data is recorded; the scoring is not.
 
-## Planned next slice: carry-forward review (not built)
+## Carry-forward: the rollover rule
 
-Unfinished work is **never** copied forward automatically. When a new day starts, yesterday's
-unfinished priorities and actions should be offered for an explicit review, one at a time, with
-four choices:
+**This reverses an earlier decision.** Claro used to state that unfinished work is *never* copied
+forward automatically. It now is — but under rules chosen so it still cannot become a guilt
+ledger. `src/lib/rollover.ts` holds all of it, pure and `now`-injected.
 
-- **Carry forward** — move it to today.
-- **Schedule later** — move it to a chosen future day.
-- **Complete** — it actually got done.
-- **Let go** — it is not happening, and that is a legitimate answer.
+- **A day becomes eligible at 22:00 in the user's own local time.** `rolloverAt` builds that
+  moment from local date parts rather than adding 22 hours to midnight, so it is still 10 PM on a
+  daylight-saving day.
+- **It is applied when Claro is next opened, not on a schedule.** The browser is usually shut at
+  10 PM, so "next open" is the only moment that can be relied on. `ClaroProvider` runs it in the
+  load effect and again on the minute tick, for a tab left open overnight.
+- **Work lands on the first day that has not passed its own 10 PM** — today before 10 PM,
+  tomorrow after it. Working late must never clear the page still being worked on.
+- **Nothing is carried twice.** The source item records `carriedTo`, and the destination refuses
+  any id it already holds. `applyRollover` is idempotent by object identity: a second run returns
+  the very same state object, which is what makes it safe on every open and every tick.
+- **Nothing is overwritten.** A carried priority fills a slot only if that slot is still blank.
+  Anything else — an overflow priority, any unfinished action — waits in the day's
+  `carriedForward` queue with four choices: promote it into a priority, keep it as an action,
+  schedule it for another day, or let it go.
+- **The source day keeps its own record.** Carrying copies the work forward and notes where it
+  went; it does not rewrite what yesterday looked like.
+- **`ROLLOVER_LOOKBACK_DAYS` is 7.** Coming back after a fortnight away must not empty a fortnight
+  onto today. Older days keep their record, they just stop chasing you.
 
-The review is opt-in and skippable; a day with no review still starts clean. Automatic rollover is
-what turns a planner into a guilt ledger, which is the opposite of what Claro is for. Nothing in
-the current model needs to change to build it: days already hold their own records, and a moved
-item is a single write to the target day.
+The load-time carry is written to disk immediately, bypassing the save effect's
+"skip the first populated snapshot" rule. Without that, the source is never marked as carried and
+a decision made in the review area is undone by the next reload.

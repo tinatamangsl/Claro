@@ -9,13 +9,14 @@ import {
   settleSession,
   startFocusSession,
 } from "@/lib/focus-session";
-import { blankDay, blankQuarter, blankWeek } from "@/lib/storage";
+import { blankDay, blankPriority, blankQuarter, blankWeek } from "@/lib/storage";
 import {
   FOCUS_BLOCK_MS,
   JUST_BEGIN_BLOCK_MS,
   type Day,
   type FocusSession,
   type Interruption,
+  type Priority,
   type Quarter,
   type Week,
 } from "@/lib/types";
@@ -26,8 +27,10 @@ const MINUTE = 60_000;
 
 const dayWith = (patch: Partial<Day>): Day => ({ ...blankDay("2026-08-18"), ...patch });
 
+const p = (patch: Partial<Priority>): Priority => ({ ...blankPriority(), ...patch });
+
 const withPriority = dayWith({
-  priority1: { text: "Ship the store", done: false, link: null },
+  priority1: p({ text: "Ship the store", done: false, goal: null }),
 });
 
 const runningSession = (plannedMs = FOCUS_BLOCK_MS): FocusSession =>
@@ -113,7 +116,7 @@ describe("starting a block", () => {
   it("offers a block against the next project once the priorities are done", () => {
     renderFocus({
       day: dayWith({
-        priority1: { text: "One", done: true, link: null },
+        priority1: p({ text: "One", done: true, goal: null }),
         actions: [
           { id: "p1", text: "Rewrite the pricing page", bucket: "project", done: false, createdAt: "" },
         ],

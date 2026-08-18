@@ -391,6 +391,16 @@
     background-position: 0 27px;
   }
 
+  /*
+   * The anchors' tinted panel — the one block on Today that is filled rather
+   * than outlined, exactly as the paper page treats its non-negotiables.
+   */
+  .anchor-box {
+    background: color-mix(in oklab, var(--primary) 9%, var(--color-card));
+    border: 1px solid color-mix(in oklab, var(--primary) 20%, transparent);
+    border-radius: var(--radius-lg);
+  }
+
   /* A dashed slot inviting the next entry. */
   .card-dashed {
     border: 1px dashed var(--color-border);
@@ -514,5 +524,184 @@
   .btn-ghost:hover {
     color: var(--color-foreground);
     background: var(--color-muted);
+  }
+
+  /* ------------------------------------------------ the open journal spread */
+
+  /*
+   * Today, on a laptop, is one bound notebook opened flat: a single sheet of
+   * warm paper carrying two pages either side of a central gutter. Below the
+   * lg breakpoint it is simply one page, stacked, with no gutter to fake.
+   */
+  .spread {
+    position: relative;
+    border: 1px solid hsl(30 18% 86%);
+    border-radius: var(--radius-xl);
+    background: linear-gradient(180deg, hsl(0 0% 100% / 0.94), hsl(30 35% 97% / 0.94));
+    box-shadow:
+      0 1px 0 hsl(0 0% 100%) inset,
+      0 1px 2px hsl(30 22% 8% / 0.04),
+      0 24px 60px -32px hsl(30 22% 8% / 0.22),
+      0 60px 110px -60px hsl(22 73% 50% / 0.14);
+  }
+
+  .spread-page {
+    position: relative;
+    min-width: 0;
+    padding: 1.5rem 1.25rem;
+  }
+
+  @media (min-width: 640px) {
+    .spread-page {
+      padding: 2rem 1.75rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .spread {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      /* Grid children default to `stretch`, but they also need a floor of zero
+         before an inner `flex-1` pane is allowed to scroll instead of grow. */
+      min-height: 0;
+    }
+
+    .spread-page {
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: hsl(30 18% 78%) transparent;
+    }
+
+    /* The gutter: where the two pages meet the binding. */
+    .spread::before {
+      content: "";
+      position: absolute;
+      top: 0.75rem;
+      bottom: 0.75rem;
+      left: 50%;
+      width: 38px;
+      margin-left: -19px;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        hsl(30 22% 8% / 0.06) 40%,
+        hsl(30 22% 8% / 0.11) 50%,
+        hsl(30 22% 8% / 0.06) 60%,
+        transparent
+      );
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .spread-page {
+      padding: 2.25rem 2.25rem;
+    }
+
+    /* Each page keeps the notebook's margin rule, as on the focus card. */
+    .spread-page::before {
+      content: "";
+      position: absolute;
+      top: 1.5rem;
+      bottom: 1.5rem;
+      left: 1.25rem;
+      width: 1px;
+      background: hsl(22 73% 60% / 0.3);
+      pointer-events: none;
+    }
+  }
+
+  /* Between stacked pages on narrow screens, in place of the gutter. */
+  .spread-seam {
+    border-top: 1px solid var(--color-border);
+  }
+
+  @media (min-width: 1024px) {
+    .spread-seam {
+      border-top: 0;
+    }
+  }
+
+  /* A wider rhythm, for the two-page spread only. */
+  .page-wide {
+    max-width: 84rem;
+  }
+
+  /*
+   * Contained scrolling for a section that can grow without bound — the
+   * schedule, a long action list. The section keeps its own height so the page
+   * stays one spread, and nothing is hidden: it is all still reachable.
+   */
+  @media (min-width: 1024px) {
+    .scroll-pane {
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: hsl(30 18% 78%) transparent;
+    }
+
+    /* For a queue that sits between fixed blocks rather than filling a column. */
+    .scroll-pane-short {
+      max-height: 7rem;
+    }
+  }
+
+  .scroll-pane::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .scroll-pane::-webkit-scrollbar-thumb {
+    background: hsl(30 18% 80%);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  /* -------------------------------------------------------------- confetti */
+
+  .confetti {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .confetti-piece {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 7px;
+    height: 10px;
+    border-radius: 1px;
+    opacity: 0;
+    animation: confetti-pop 1200ms cubic-bezier(0.16, 0.84, 0.44, 1) forwards;
+  }
+
+  /* A celebration nobody asked for is just motion. */
+  @media (prefers-reduced-motion: reduce) {
+    .confetti-piece {
+      animation: none;
+      opacity: 0;
+    }
+  }
+}
+
+@keyframes confetti-pop {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) scale(0.5);
+    opacity: 0;
+  }
+
+  18% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 54px))
+      rotate(var(--rot)) scale(1);
+    opacity: 0;
   }
 }

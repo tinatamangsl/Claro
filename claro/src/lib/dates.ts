@@ -120,6 +120,25 @@ export function formatDayDate(id: ISODate): string {
   return format(parseDayId(id), "d MMMM yyyy");
 }
 
+/** "17 Aug" — for inline references to another day. */
+export function formatDayShort(id: ISODate): string {
+  return format(parseDayId(id), "d MMM");
+}
+
+/** "Monday 17" — the weekly habit view's column heading. */
+export function formatWeekdayShort(id: ISODate): string {
+  return format(parseDayId(id), "EEEEE");
+}
+
+export function formatDayOfMonth(id: ISODate): string {
+  return format(parseDayId(id), "d");
+}
+
+/** "Monday 17 August" — the accessible name behind a day column. */
+export function formatDayLong(id: ISODate): string {
+  return format(parseDayId(id), "EEEE d MMMM");
+}
+
 /** "Week 33" */
 export function formatWeekNumber(id: WeekId): string {
   return `Week ${Number(id.split("-W")[1])}`;

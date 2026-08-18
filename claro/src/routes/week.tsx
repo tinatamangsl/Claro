@@ -54,7 +54,7 @@ function WeekView() {
   return (
     <div className="space-y-10">
       <PeriodHeader
-        eyebrow="Commitment"
+        eyebrow="I will commit this week"
         title={formatWeekNumber(weekId)}
         subtitle={formatWeekRange(weekId)}
         onPrev={() => go(shiftWeekId(weekId, -1))}

@@ -7,13 +7,14 @@ import { FocusEnd } from "@/components/today/FocusEnd";
 import { FocusInterruption } from "@/components/today/FocusInterruption";
 import { FocusTimer } from "@/components/today/FocusTimer";
 import { focusLadder, selectFocus } from "@/lib/focus";
-import { FOCUS_BLOCK_MS, JUST_BEGIN_BLOCK_MS } from "@/lib/types";
+import { FOCUS_BLOCK_MS, JUST_BEGIN_BLOCK_MS, priorityKey } from "@/lib/types";
 import type {
   Day,
   FocusSession,
   Interruption,
   InterruptionReason,
   Priority,
+  PriorityKey,
   Quarter,
   Week,
 } from "@/lib/types";
@@ -28,7 +29,7 @@ type Props = {
   /** The interruption currently being logged, if any. */
   openInterruption: Interruption | null;
   now: Date | null;
-  onPatchPriority: (key: "priority1" | "priority2", patch: Partial<Priority>) => void;
+  onPatchPriority: (key: PriorityKey, patch: Partial<Priority>) => void;
   onStart: (plannedMs: number) => void;
   onDistracted: () => void;
   onPause: () => void;
@@ -68,14 +69,11 @@ export function FocusView(props: Props) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onExit]);
 
-  const priority =
-    session?.priority?.rank === 2
-      ? day.priority2
-      : session?.priority?.rank === 1
-        ? day.priority1
-        : target.kind === "priority"
-          ? target.priority
-          : null;
+  const priority = session?.priority
+    ? day[priorityKey(session.priority.rank)]
+    : target.kind === "priority"
+      ? target.priority
+      : null;
   const ladder = priority ? focusLadder(priority, week, quarter) : null;
 
   return (
@@ -219,7 +217,7 @@ function StartPanel({ day, week, quarter, onPatchPriority, onStart }: Props) {
           <CheckToggle
             checked={target.priority.done}
             onChange={() =>
-              onPatchPriority(`priority${target.rank}`, { done: !target.priority.done })
+              onPatchPriority(priorityKey(target.rank), { done: !target.priority.done })
             }
             label={`Complete priority ${target.rank}`}
             size="lg"

@@ -6,11 +6,15 @@
  */
 
 import { newId } from "./id";
+import { resolveGoal, weekGoalFor } from "./goals";
 import {
-  DOMAIN_META,
+  GOAL_CATEGORY_META,
+  PRIORITY_RANKS,
+  priorityKey,
   type ActionItem,
   type Day,
   type Priority,
+  type PriorityRank,
   type Quarter,
   type Week,
 } from "./types";
@@ -23,19 +27,24 @@ const isSet = (text: string) => text.trim() !== "";
  * remember what they were doing.
  */
 export type FocusTarget =
-  | { kind: "priority"; rank: 1 | 2; priority: Priority }
-  /** Both priorities complete. `next` is the top unfinished project, if any. */
+  | { kind: "priority"; rank: PriorityRank; priority: Priority }
+  /** Every written priority is complete. `next` is the top unfinished project. */
   | { kind: "done"; next: ActionItem | null }
-  /** Neither priority has been written yet — the screen offers to set one. */
+  /** No priority has been written yet — the screen offers to set one. */
   | { kind: "empty" };
 
+/**
+ * Walks the three slots in order, so priority 1 is always offered before
+ * priority 2, and a blank slot is simply skipped rather than blocking the ones
+ * below it.
+ */
 export function selectFocus(day: Day): FocusTarget {
-  const set1 = isSet(day.priority1.text);
-  const set2 = isSet(day.priority2.text);
+  const written = PRIORITY_RANKS.filter((rank) => isSet(day[priorityKey(rank)].text));
 
-  if (!set1 && !set2) return { kind: "empty" };
-  if (set1 && !day.priority1.done) return { kind: "priority", rank: 1, priority: day.priority1 };
-  if (set2 && !day.priority2.done) return { kind: "priority", rank: 2, priority: day.priority2 };
+  if (written.length === 0) return { kind: "empty" };
+
+  const next = written.find((rank) => !day[priorityKey(rank)].done);
+  if (next) return { kind: "priority", rank: next, priority: day[priorityKey(next)] };
 
   return { kind: "done", next: nextProject(day) };
 }
@@ -78,19 +87,24 @@ export function parkDistraction(
 export type FocusLadder = { domainLabel: string; goal: string; mainQuest: string };
 
 /**
- * Null when the priority isn't linked to a domain, or when the linked domain is
- * still empty — the screen stays quiet rather than showing hollow labels.
+ * Null when the priority isn't linked to a goal, or when the linked goal is
+ * gone — the screen stays quiet rather than showing hollow labels.
  */
 export function focusLadder(
   priority: Priority,
   week: Week,
   quarter: Quarter,
 ): FocusLadder | null {
-  if (!priority.link) return null;
+  if (!priority.goal) return null;
 
-  const goal = week[priority.link].goal.trim();
-  const mainQuest = quarter[priority.link].mainQuest.trim();
+  const linked = resolveGoal(priority.goal, quarter);
+  const goal = weekGoalFor(priority.goal, week);
+  const mainQuest = linked?.title ?? "";
   if (!goal && !mainQuest) return null;
 
-  return { domainLabel: DOMAIN_META[priority.link].label, goal, mainQuest };
+  return {
+    domainLabel: GOAL_CATEGORY_META[priority.goal.category].label,
+    goal,
+    mainQuest,
+  };
 }

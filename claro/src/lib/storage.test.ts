@@ -38,6 +38,10 @@ describe("blank records", () => {
       focusSessions: {},
       activeFocusSessionId: null,
       interruptions: {},
+      habits: {},
+      habitCompletions: {},
+      cycle: { settings: { enabled: false, optedInAt: null }, entries: {} },
+      sound: { volume: 0.4, muted: false },
     });
   });
 
@@ -61,7 +65,17 @@ describe("blank records", () => {
     expect(d.steps).toBeNull();
     expect(d.mood).toBeNull();
     expect(d.waterGlasses).toBe(0); // count, so 0 is meaningful
-    expect(d.priority1).toEqual({ text: "", done: false, link: null });
+    expect(d.priority1).toEqual({
+      id: null,
+      text: "",
+      done: false,
+      goal: null,
+      createdAt: null,
+      originDayId: null,
+      carriedTo: null,
+    });
+    expect(d.priority3.text).toBe("");
+    expect(d.carriedForward).toEqual([]);
     expect(d.actions).toEqual([]);
   });
 });
@@ -264,5 +278,206 @@ describe("focus state defaults", () => {
 
     const withDangling = { ...emptyState(), activeFocusSessionId: "gone" };
     expect(readActiveFocusSession(withDangling)).toBeNull();
+  });
+});
+
+describe("v1 → v2 migration", () => {
+  const v1Day = (link: "work" | "life" | null) => ({
+    id: "2026-08-18",
+    priority1: { text: "Ship the store", done: false, link },
+    priority2: { text: "", done: false, link: null },
+    scheduleItems: [],
+    actions: [],
+    nonNegotiables: [],
+    sleepHours: null,
+    waterGlasses: 0,
+    steps: null,
+    mood: null,
+    notes: "kept",
+  });
+
+  const v1Store = (link: "work" | "life" | null) => ({
+    version: 1,
+    quarters: {},
+    weeks: {},
+    days: { "2026-08-18": v1Day(link) },
+  });
+
+  it("turns a work link into the Work Main Quest reference", () => {
+    const day = migrate(v1Store("work")).days["2026-08-18"];
+
+    expect(day.priority1.goal).toEqual({ category: "workMain" });
+  });
+
+  it("turns a life link into the Life Main Quest reference", () => {
+    expect(migrate(v1Store("life")).days["2026-08-18"].priority1.goal).toEqual({
+      category: "lifeMain",
+    });
+  });
+
+  it("leaves an unlinked priority unlinked", () => {
+    expect(migrate(v1Store(null)).days["2026-08-18"].priority1.goal).toBeNull();
+  });
+
+  it("loses nothing else on the day", () => {
+    const day = migrate(v1Store("work")).days["2026-08-18"];
+
+    expect(day.priority1.text).toBe("Ship the store");
+    expect(day.priority1.done).toBe(false);
+    expect(day.notes).toBe("kept");
+  });
+
+  it("drops the dead link field rather than carrying two sources of truth", () => {
+    const day = migrate(v1Store("work")).days["2026-08-18"];
+
+    expect("link" in day.priority1).toBe(false);
+  });
+
+  it("does not re-derive a goal that a later version already resolved", () => {
+    const v2 = {
+      ...emptyState(),
+      version: 2,
+      days: {
+        "2026-08-18": {
+          ...blankDay("2026-08-18"),
+          priority1: { text: "Already v2", done: false, goal: { category: "lifeSide", sideQuestId: "s1" } },
+        },
+      },
+    };
+
+    expect(migrate(v2).days["2026-08-18"].priority1.goal).toEqual({
+      category: "lifeSide",
+      sideQuestId: "s1",
+    });
+  });
+
+  it("gives a v1 store the new collections", () => {
+    const migrated = migrate(v1Store(null));
+
+    expect(migrated.habits).toEqual({});
+    expect(migrated.habitCompletions).toEqual({});
+    expect(migrated.cycle.settings.enabled).toBe(false);
+    expect(migrated.sound.volume).toBe(0.4);
+  });
+});
+
+describe("v2 → v3 migration", () => {
+  const v2Day = () => ({
+    id: "2026-08-18",
+    priority1: { text: "Ship the store", done: false, goal: { category: "workMain" } },
+    priority2: { text: "", done: false, goal: null },
+    scheduleItems: [{ id: "s1", time: "09:00", text: "Standup" }],
+    actions: [
+      { id: "a1", text: "Email", bucket: "quickTick", done: false, createdAt: "x" },
+    ],
+    nonNegotiables: [{ id: "n1", text: "Walk", done: false }],
+    sleepHours: 7,
+    waterGlasses: 3,
+    steps: 4000,
+    mood: 4,
+    notes: "kept",
+  });
+
+  const v2Store = () => ({
+    ...emptyState(),
+    version: 2,
+    days: { "2026-08-18": v2Day() },
+  });
+
+  it("gives the day a third priority slot", () => {
+    const day = migrate(v2Store()).days["2026-08-18"];
+
+    expect(day.priority3).toEqual({
+      id: null,
+      text: "",
+      done: false,
+      goal: null,
+      createdAt: null,
+      originDayId: null,
+      carriedTo: null,
+    });
+  });
+
+  it("gives written work a stable identity, and blank slots none", () => {
+    const day = migrate(v2Store()).days["2026-08-18"];
+
+    expect(day.priority1.id).toEqual(expect.any(String));
+    expect(day.priority2.id).toBeNull();
+  });
+
+  it("treats existing work as having started on the day it sits on", () => {
+    const day = migrate(v2Store()).days["2026-08-18"];
+
+    expect(day.priority1.originDayId).toBe("2026-08-18");
+    expect(day.actions[0].originDayId).toBe("2026-08-18");
+  });
+
+  it("marks nothing as already carried, because nothing could have been", () => {
+    const day = migrate(v2Store()).days["2026-08-18"];
+
+    expect(day.priority1.carriedTo).toBeNull();
+    expect(day.actions[0].carriedTo).toBeNull();
+    expect(day.carriedForward).toEqual([]);
+  });
+
+  it("invents no creation timestamp it cannot know", () => {
+    expect(migrate(v2Store()).days["2026-08-18"].priority1.createdAt).toBeNull();
+  });
+
+  it("loses nothing else on the day", () => {
+    const day = migrate(v2Store()).days["2026-08-18"];
+
+    expect(day.priority1.text).toBe("Ship the store");
+    expect(day.priority1.goal).toEqual({ category: "workMain" });
+    expect(day.scheduleItems).toHaveLength(1);
+    expect(day.nonNegotiables).toHaveLength(1);
+    expect(day.notes).toBe("kept");
+    expect(day.sleepHours).toBe(7);
+  });
+
+  it("carries a v1 store all the way through both steps", () => {
+    const v1 = {
+      version: 1,
+      quarters: {},
+      weeks: {},
+      days: {
+        "2026-08-18": {
+          id: "2026-08-18",
+          priority1: { text: "Old work", done: false, link: "life" },
+          actions: [],
+        },
+      },
+    };
+
+    const day = migrate(v1).days["2026-08-18"];
+
+    expect(day.priority1.goal).toEqual({ category: "lifeMain" });
+    expect(day.priority1.id).toEqual(expect.any(String));
+    expect(day.priority1.originDayId).toBe("2026-08-18");
+    expect(day.priority3.text).toBe("");
+  });
+
+  it("does not re-stamp a store already at v3", () => {
+    const v3 = {
+      ...emptyState(),
+      days: {
+        "2026-08-18": {
+          ...blankDay("2026-08-18"),
+          priority1: {
+            id: "kept-id",
+            text: "Carried from before",
+            done: false,
+            goal: null,
+            createdAt: "2026-08-14T09:00:00.000Z",
+            originDayId: "2026-08-14",
+            carriedTo: null,
+          },
+        },
+      },
+    };
+
+    const day = migrate(v3).days["2026-08-18"];
+    expect(day.priority1.id).toBe("kept-id");
+    expect(day.priority1.originDayId).toBe("2026-08-14");
   });
 });
