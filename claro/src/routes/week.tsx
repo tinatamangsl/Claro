@@ -6,7 +6,6 @@ import { AppShell } from "@/components/AppShell";
 import { EditableText } from "@/components/EditableText";
 import { ItemRow } from "@/components/ItemRow";
 import { PeriodHeader } from "@/components/PeriodHeader";
-import { Section } from "@/components/Section";
 import { useClaro } from "@/lib/claro-store";
 import {
   formatQuarterShort,
@@ -77,9 +76,10 @@ function WeekView() {
       />
 
       {/* The hierarchy made visible: this week answers to that quarter. */}
-      <div className="surface-quiet p-5 sm:p-6">
+      <div className="surface-quiet relative overflow-hidden py-4 pl-6 pr-5 sm:pl-7">
+        <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-gold/70" />
         <div className="flex items-baseline justify-between gap-3">
-          <span className="eyebrow">Your quarter</span>
+          <span className="eyebrow">This week answers to</span>
           <Link
             to="/quarter"
             search={{ q: quarterId }}
@@ -88,13 +88,11 @@ function WeekView() {
             Edit direction →
           </Link>
         </div>
-        <div className="mt-4 grid gap-5 sm:grid-cols-2">
+        <div className="mt-3 grid gap-4 sm:grid-cols-2 sm:gap-6">
           {DOMAINS.map((domain) => (
             <div key={domain}>
-              <div className="text-[11px] font-medium text-muted-foreground">
-                {DOMAIN_META[domain].label} Main Quest
-              </div>
-              <p className="mt-1 display text-[1.15rem] leading-snug">
+              <div className="eyebrow">{DOMAIN_META[domain].label}</div>
+              <p className="mt-1.5 display text-[1.1rem] leading-snug">
                 {parentQuarter[domain].mainQuest || (
                   <span className="text-muted-foreground">Not set yet</span>
                 )}
@@ -104,7 +102,7 @@ function WeekView() {
         </div>
       </div>
 
-      <div className="grid gap-10 md:grid-cols-2 md:gap-8">
+      <div className="grid items-stretch gap-8 md:grid-cols-2">
         {DOMAINS.map((domain) => (
           <WeekColumn
             key={domain}
@@ -138,21 +136,22 @@ function WeekColumn({
 
   const atCap = side.actions.length >= MAX_WEEK_ACTIONS;
 
+  const doneActions = side.actions.filter((a) => a.done).length;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2.5">
-        <span
-          aria-hidden
-          className={
-            domain === "work"
-              ? "h-1.5 w-1.5 rounded-full bg-primary"
-              : "h-1.5 w-1.5 rounded-full bg-gold"
-          }
-        />
-        <h2 className="text-[1.15rem] font-medium tracking-tight">{label}</h2>
+    <div className="paper-page paper-bound tape relative flex h-full flex-col p-6 pt-8 sm:p-8 sm:pt-9">
+      <span aria-hidden className="binding-holes" />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="badge">{label}</span>
+        {side.actions.length > 0 && (
+          <span className="tnum text-[11px] text-muted-foreground">
+            {doneActions} of {side.actions.length} done
+          </span>
+        )}
       </div>
 
-      <div className="surface p-6">
+      <div className="mt-6">
         <div className="eyebrow">
           My main {domain === "work" ? "work" : "personal"} goal this week
         </div>
@@ -167,11 +166,14 @@ function WeekColumn({
         />
       </div>
 
-      <Section
-        title="3 things I'll do to achieve this"
-        counter={`${side.actions.length}/${MAX_WEEK_ACTIONS}`}
-      >
-        <div className="divide-y divide-subtle">
+      <div className="mt-7 border-t border-border/70 pt-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="eyebrow">3 things I'll do to achieve this</h3>
+          <span className="eyebrow tnum">
+            {side.actions.length}/{MAX_WEEK_ACTIONS}
+          </span>
+        </div>
+        <div className="mt-3 divide-y divide-subtle">
           {side.actions.map((action) => (
             <ItemRow
               key={action.id}
@@ -203,7 +205,7 @@ function WeekColumn({
             }
           />
         </div>
-      </Section>
+      </div>
     </div>
   );
 }

@@ -9,30 +9,32 @@ type Props = {
   onPatch: (key: "priority1" | "priority2", patch: Partial<Priority>) => void;
 };
 
-/** Today's Focus. Priority 1 must visually dominate everything else on the screen. */
+/**
+ * The day's two priorities, written as entries on the page that contains them —
+ * not as cards. Priority 1 must dominate everything else on the screen, which
+ * it does by size and by the gold mark, never by a heavier box.
+ */
 export function PrioritiesBlock({ day, week, onPatch }: Props) {
   return (
-    <section>
-      <h2 className="eyebrow">Today's Focus</h2>
-      <div className="mt-3 space-y-3">
-        <PriorityCard
-          rank={1}
-          priority={day.priority1}
-          week={week}
-          onPatch={(patch) => onPatch("priority1", patch)}
-        />
-        <PriorityCard
-          rank={2}
-          priority={day.priority2}
-          week={week}
-          onPatch={(patch) => onPatch("priority2", patch)}
-        />
-      </div>
-    </section>
+    <div className="mt-5 space-y-5">
+      <PriorityEntry
+        rank={1}
+        priority={day.priority1}
+        week={week}
+        onPatch={(patch) => onPatch("priority1", patch)}
+      />
+      <div aria-hidden className="h-px bg-border/70" />
+      <PriorityEntry
+        rank={2}
+        priority={day.priority2}
+        week={week}
+        onPatch={(patch) => onPatch("priority2", patch)}
+      />
+    </div>
   );
 }
 
-function PriorityCard({
+function PriorityEntry({
   rank,
   priority,
   week,
@@ -46,48 +48,40 @@ function PriorityCard({
   const primary = rank === 1;
 
   return (
-    <div
-      className={cn(
-        "relative overflow-hidden",
-        primary ? "surface-raised p-5 sm:p-6" : "surface p-4 sm:p-5",
-      )}
-    >
-      {primary && <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-gold" />}
+    <div className="flex items-start gap-3.5">
+      <div className="flex items-center gap-3 pt-1">
+        <span
+          aria-hidden
+          className={cn(
+            "tnum display select-none leading-none",
+            primary ? "text-2xl text-gold" : "text-lg text-muted-foreground/60",
+          )}
+        >
+          {rank}
+        </span>
+        <CheckToggle
+          checked={priority.done}
+          onChange={() => onPatch({ done: !priority.done })}
+          label={`Complete priority ${rank}`}
+          size={primary ? "lg" : "md"}
+        />
+      </div>
 
-      <div className="flex items-start gap-3.5">
-        <div className="flex items-center gap-3 pt-1">
-          <span
-            className={cn(
-              "tnum select-none display leading-none text-muted-foreground/50",
-              primary ? "text-2xl" : "text-lg",
-            )}
-          >
-            {rank}
-          </span>
-          <CheckToggle
-            checked={priority.done}
-            onChange={() => onPatch({ done: !priority.done })}
-            label={`Complete priority ${rank}`}
-            size={primary ? "lg" : "md"}
-          />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <EditableText
-            value={priority.text}
-            onCommit={(text) => onPatch({ text })}
-            ariaLabel={`Priority ${rank}`}
-            placeholder={
-              primary ? "The most important thing today…" : "A second priority (optional)"
-            }
-            className={cn(
-              "-ml-2 display leading-tight tracking-tight",
-              primary ? "text-[1.6rem] sm:text-[1.85rem]" : "text-[1.2rem]",
-              priority.done && "strike-done text-muted-foreground",
-            )}
-          />
-          <LinkPicker priority={priority} week={week} onPatch={onPatch} rank={rank} />
-        </div>
+      <div className="min-w-0 flex-1">
+        <EditableText
+          value={priority.text}
+          onCommit={(text) => onPatch({ text })}
+          ariaLabel={`Priority ${rank}`}
+          placeholder={
+            primary ? "The most important thing today…" : "A second priority (optional)"
+          }
+          className={cn(
+            "-ml-2 display",
+            primary ? "text-[1.75rem] sm:text-[2.1rem]" : "text-[1.25rem]",
+            priority.done && "strike-done text-muted-foreground",
+          )}
+        />
+        <LinkPicker priority={priority} week={week} onPatch={onPatch} rank={rank} />
       </div>
     </div>
   );

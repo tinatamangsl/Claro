@@ -265,11 +265,26 @@ function TodayView() {
         }
       />
 
-      {dayId === today && <FocusControl session={session} now={now} onOpen={enterFocus} />}
+      {/*
+        The hero: one bound page carrying the day's intent and the session that
+        serves it, rather than two cards that happen to sit near each other.
+      */}
+      <section className="paper-page paper-bound tape relative p-6 pt-8 sm:p-9 sm:pt-10">
+        <span aria-hidden className="binding-holes" />
 
-      <PrioritiesBlock day={record} week={parentWeek} onPatch={patchPriority} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="eyebrow">Today's focus</h2>
+          <span className="annot hidden sm:block">one day, two things.</span>
+        </div>
 
-      <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] lg:gap-10">
+        <PrioritiesBlock day={record} week={parentWeek} onPatch={patchPriority} />
+
+        {dayId === today && (
+          <FocusControl session={session} now={now} onOpen={enterFocus} />
+        )}
+      </section>
+
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)]">
         <ScheduleBlock day={record} onChange={(scheduleItems) => patch({ scheduleItems })} />
         <ActionLists day={record} onChange={(actions) => patch({ actions })} />
       </div>
@@ -286,19 +301,17 @@ function TodayView() {
           <h2 className="eyebrow">Notes</h2>
           <span className="text-[11px] text-muted-foreground">anything worth keeping</span>
         </div>
-        <div className="paper-panel mt-3 p-4 sm:p-5">
-          {/* A writing surface, so the rules earn their place here. */}
-          <div className="rule-lines">
-            <EditableText
-              value={record.notes}
-              onCommit={(notes) => patch({ notes })}
-              multiline
-              rows={5}
-              ariaLabel="Notes for today"
-              placeholder="How did today actually go?"
-              className="-ml-2 text-[0.92rem] leading-[28px]"
-            />
-          </div>
+        <div className="paper-page tape tape-tr relative mt-4 p-5 pt-7 sm:p-6 sm:pt-8">
+          {/* A writing surface, so the page's rules earn their place here. */}
+          <EditableText
+            value={record.notes}
+            onCommit={(notes) => patch({ notes })}
+            multiline
+            rows={5}
+            ariaLabel="Notes for today"
+            placeholder="How did today actually go?"
+            className="-ml-2 text-[0.95rem] leading-[28px]"
+          />
         </div>
       </section>
     </div>
@@ -333,13 +346,13 @@ function FocusControl({
   const left = live ? Math.max(0, live.plannedMs - elapsed) : 0;
 
   return (
-    <div className="surface flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-5">
       <div className="flex min-w-0 flex-wrap items-baseline gap-2.5">
-        <span className="eyebrow">{live ? STATUS_COPY[live.phase] : "Focus"}</span>
+        <span className="eyebrow">{live ? STATUS_COPY[live.phase] : "Focus session"}</span>
         {live ? (
           <>
             {live.phase !== "ended" && (
-              <span className="tnum text-[0.85rem] text-muted-foreground">
+              <span className="tnum text-[0.9rem] text-foreground">
                 {formatRemaining(left)} left
               </span>
             )}
@@ -350,14 +363,12 @@ function FocusControl({
             )}
           </>
         ) : (
-          <span className="text-[11px] text-muted-foreground">one block, one thing</span>
+          <span className="text-[0.85rem] text-muted-foreground">
+            Give one of these a quiet block.
+          </span>
         )}
       </div>
-      <button
-        type="button"
-        onClick={onOpen}
-        className="btn btn-sm btn-quiet shrink-0"
-      >
+      <button type="button" onClick={onOpen} className="btn btn-sm btn-primary shrink-0">
         {live ? "Resume focus" : "Start focus"}
       </button>
     </div>

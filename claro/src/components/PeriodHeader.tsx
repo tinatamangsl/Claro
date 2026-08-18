@@ -19,6 +19,11 @@ type Props = {
   className?: string;
 };
 
+/**
+ * The page header band. The prev/next control sits inside the band and on its
+ * baseline rule, so navigation reads as attached to the period it moves —
+ * rather than floating in the top-right corner of the page.
+ */
 export function PeriodHeader({
   eyebrow,
   title,
@@ -33,34 +38,33 @@ export function PeriodHeader({
   className,
 }: Props) {
   return (
-    <header className={cn("flex flex-wrap items-end justify-between gap-4", className)}>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="eyebrow">{eyebrow}</span>
-          {parent}
+    <header className={cn("border-b border-border pb-5", className)}>
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="eyebrow">{eyebrow}</span>
+            {parent}
+          </div>
+          <h1 className="display mt-3 text-[2.6rem] sm:text-[3.2rem]">{title}</h1>
+          {subtitle && <p className="tnum mt-1.5 text-[0.92rem] text-muted-foreground">{subtitle}</p>}
         </div>
-        <h1 className="mt-2.5 text-[2.6rem] leading-[1.05] sm:text-[3.1rem]">{title}</h1>
-        {subtitle && (
-          <p className="mt-1.5 text-[0.9rem] text-muted-foreground tnum">{subtitle}</p>
-        )}
-      </div>
 
-      <div className="flex items-center gap-1.5">
-        {onToday && (
-          <button
-            type="button"
-            onClick={onToday}
-            className="btn btn-sm btn-quiet mr-1"
-          >
-            {todayLabel}
-          </button>
-        )}
-        <NavButton onClick={onPrev} label={prevLabel}>
-          <ChevronLeft className="h-4 w-4" />
-        </NavButton>
-        <NavButton onClick={onNext} label={nextLabel}>
-          <ChevronRight className="h-4 w-4" />
-        </NavButton>
+        <div className="flex items-center gap-2">
+          {onToday && (
+            <button type="button" onClick={onToday} className="btn btn-sm btn-quiet">
+              {todayLabel}
+            </button>
+          )}
+          <div className="flex items-center rounded-full border border-border bg-card">
+            <NavButton onClick={onPrev} label={prevLabel}>
+              <ChevronLeft className="h-4 w-4" />
+            </NavButton>
+            <span aria-hidden className="h-4 w-px bg-border" />
+            <NavButton onClick={onNext} label={nextLabel}>
+              <ChevronRight className="h-4 w-4" />
+            </NavButton>
+          </div>
+        </div>
       </div>
     </header>
   );
@@ -76,12 +80,7 @@ function NavButton({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      className="btn btn-quiet btn-icon"
-    >
+    <button type="button" onClick={onClick} aria-label={label} className="btn btn-icon btn-ghost">
       {children}
     </button>
   );

@@ -38,19 +38,19 @@ export function ScheduleBlock({ day, onChange }: Props) {
         <span className="text-[11px] text-muted-foreground">5 AM – 10 PM</span>
       </div>
 
-      <div className="paper-panel mt-3 divide-y divide-subtle px-3 py-1 sm:px-4">
+      <div className="paper-panel mt-3 divide-y divide-subtle py-1">
         {SCHEDULE_HOURS.map((time) => {
           const item = byTime.get(time);
           return (
-            <div key={time} className="flex items-center gap-3">
-              <span className="tnum w-12 shrink-0 py-1 text-right text-[11px] text-muted-foreground">
+            <div key={time} className="flex items-stretch">
+              <span className="tnum flex w-16 shrink-0 items-center justify-end border-r border-gold/25 py-1.5 pr-3 text-[11px] text-muted-foreground">
                 {formatHourLabel(time)}
               </span>
               <EditableText
                 value={item?.text ?? ""}
                 onCommit={(text) => setAt(time, text)}
                 ariaLabel={`Schedule at ${formatHourLabel(time)}`}
-                className="flex-1 text-[0.85rem]"
+                className="flex-1 pl-3 text-[0.88rem]"
               />
             </div>
           );

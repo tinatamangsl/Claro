@@ -5,7 +5,6 @@ import { AppShell } from "@/components/AppShell";
 import { EditableText } from "@/components/EditableText";
 import { ItemRow } from "@/components/ItemRow";
 import { PeriodHeader } from "@/components/PeriodHeader";
-import { Section } from "@/components/Section";
 import { useClaro } from "@/lib/claro-store";
 import { formatQuarterMonths, formatQuarterShort, quarterOfDay, shiftQuarterId } from "@/lib/dates";
 import { newId } from "@/lib/id";
@@ -57,12 +56,17 @@ function QuarterView() {
         todayLabel="This quarter"
       />
 
-      <p className="max-w-xl text-[0.95rem] leading-relaxed text-muted-foreground">
-        What life are you trying to create? Name one thing that matters most in each half of
-        it — everything below the quarter should serve these.
-      </p>
+      <div className="max-w-2xl">
+        <p className="display text-[1.6rem] leading-[1.25] sm:text-[1.9rem]">
+          What life are you trying to create?
+        </p>
+        <p className="mt-3 text-[0.95rem] leading-relaxed text-muted-foreground">
+          Name one thing that matters most in each half of it — everything below the quarter
+          should serve these.
+        </p>
+      </div>
 
-      <div className="grid gap-10 md:grid-cols-2 md:gap-8">
+      <div className="grid items-stretch gap-8 md:grid-cols-2">
         {DOMAINS.map((domain) => (
           <QuarterColumn
             key={domain}
@@ -96,24 +100,23 @@ function QuarterColumn({
 
   const atCap = side.sideQuests.length >= MAX_SIDE_QUESTS;
 
+  const doneQuests = side.sideQuests.filter((s) => s.done).length;
+
   return (
-    <div className="space-y-7">
-      <div className="flex items-center gap-2.5">
-        <span
-          aria-hidden
-          className={
-            domain === "work" ? "h-1.5 w-1.5 rounded-full bg-primary" : "h-1.5 w-1.5 rounded-full bg-gold"
-          }
-        />
-        <h2 className="text-[1.15rem] font-medium tracking-tight">{label}</h2>
+    <div className="paper-page paper-bound tape relative flex h-full flex-col p-6 pt-8 sm:p-8 sm:pt-9">
+      <span aria-hidden className="binding-holes" />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="badge">{label}</span>
+        {side.sideQuests.length > 0 && (
+          <span className="tnum text-[11px] text-muted-foreground">
+            {doneQuests} of {side.sideQuests.length} side quests done
+          </span>
+        )}
       </div>
 
       {/* Main Quest — deliberately the loudest thing on the page. */}
-      <div className="surface relative overflow-hidden p-6 sm:p-7">
-        <span
-          aria-hidden
-          className="absolute inset-y-0 left-0 w-[3px] bg-gold"
-        />
+      <div className="mt-6">
         <div className="eyebrow">Main Quest</div>
         <EditableText
           value={side.mainQuest}
@@ -130,12 +133,17 @@ function QuarterColumn({
         />
       </div>
 
-      <Section
-        title="Side Quests"
-        hint="supporting goals"
-        counter={`${side.sideQuests.length}/${MAX_SIDE_QUESTS}`}
-      >
-        <div className="divide-y divide-subtle">
+      <div className="mt-7 border-t border-border/70 pt-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="flex items-baseline gap-2.5">
+            <h3 className="eyebrow">Side Quests</h3>
+            <span className="text-[11px] text-muted-foreground">supporting goals</span>
+          </div>
+          <span className="eyebrow tnum">
+            {side.sideQuests.length}/{MAX_SIDE_QUESTS}
+          </span>
+        </div>
+        <div className="mt-3 divide-y divide-subtle">
           {side.sideQuests.map((sq) => (
             <ItemRow
               key={sq.id}
@@ -167,7 +175,7 @@ function QuarterColumn({
             }
           />
         </div>
-      </Section>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { formatQuarterShort, formatWeekNumber, quarterOfDay, weekOfDay } from "@/lib/dates";
 import { useClaro } from "@/lib/claro-store";
 import { cn } from "@/lib/utils";
 
@@ -12,50 +13,62 @@ const NAV = [
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { ready, saveStatus } = useClaro();
+  const { ready, saveStatus, today } = useClaro();
   const path = useRouterState({ select: (s) => s.location.pathname });
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-6 px-5 sm:px-8">
-          <Link to="/today" className="flex items-baseline gap-2" aria-label="Claro home">
-            <span className="display text-[1.35rem] leading-none tracking-tight">
-              Claro
+      <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur-md">
+        <div className="page flex flex-wrap items-center gap-x-6 gap-y-1 py-2.5 sm:h-16 sm:flex-nowrap sm:py-0">
+          <Link to="/today" className="flex items-center gap-2.5" aria-label="Claro home">
+            <span className="roundel" aria-hidden>
+              C
             </span>
-            <span
-              aria-hidden
-              className="hidden h-1 w-1 rounded-full bg-gold sm:block"
-            />
+            <span className="text-[1.1rem] font-semibold tracking-tight">Claro</span>
           </Link>
 
-          <nav className="flex items-center gap-1" aria-label="Main">
+          {/*
+            One nav element at every width: an inline row on desktop, a
+            full-width segmented row on mobile. Duplicating it would mean two
+            "Main" landmarks for a screen reader.
+          */}
+          <nav
+            aria-label="Main"
+            className="order-3 flex w-full items-center gap-1 sm:order-none sm:w-auto sm:flex-1 sm:justify-center"
+          >
             {NAV.map((item) => {
               const active = path === item.to;
               return (
                 <Link
                   key={item.to}
                   to={item.to}
-                  className={cn("nav-link", active && "nav-link-active")}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "nav-link flex-1 text-center sm:flex-none",
+                    active && "nav-link-active",
+                  )}
                 >
                   {item.label}
                   {active && (
-                    <span className="absolute inset-x-3 -bottom-[5px] h-[2px] rounded-full bg-gold" />
+                    <span
+                      aria-hidden
+                      className="absolute inset-x-3 -bottom-[3px] h-[2px] rounded-full bg-gold"
+                    />
                   )}
                 </Link>
               );
             })}
           </nav>
 
-          <div className="hidden w-[7.5rem] justify-end sm:flex">
+          <div className="ml-auto flex items-center sm:ml-0 sm:w-[8.5rem] sm:justify-end">
             <SaveIndicator ready={ready} status={saveStatus} />
           </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-5 pb-24 pt-8 sm:px-8 sm:pt-12">
-        {ready ? children : <BootSkeleton />}
-      </main>
+      <main className="page flex-1 pb-14 pt-8 sm:pt-12">{ready ? children : <BootSkeleton />}</main>
+
+      <AppFooter ready={ready} today={today} />
     </div>
   );
 }
@@ -66,9 +79,44 @@ function SaveIndicator({ ready, status }: { ready: boolean; status: string }) {
     return <span className="text-[11px] text-destructive">Couldn't save</span>;
   }
   return (
-    <span className="text-[11px] text-muted-foreground">
+    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-positive/70" />
       {status === "saved" ? "All changes saved" : "Saved locally"}
     </span>
+  );
+}
+
+/**
+ * Quiet, and useful rather than promotional: it says where you are in the
+ * hierarchy and where the data actually lives.
+ */
+function AppFooter({ ready, today }: { ready: boolean; today: string }) {
+  return (
+    <footer className="mt-auto border-t border-border/70">
+      <div className="page flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-5">
+        <span className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
+          <span className="eyebrow">Claro</span>
+          <span aria-hidden className="text-muted-foreground/40">
+            ·
+          </span>
+          Quarter → Week → Day
+        </span>
+
+        {ready && today && (
+          <span className="tnum flex items-center gap-2.5 text-[11px] text-muted-foreground">
+            <span>{formatQuarterShort(quarterOfDay(today))}</span>
+            <span aria-hidden className="text-muted-foreground/40">
+              ·
+            </span>
+            <span>{formatWeekNumber(weekOfDay(today))}</span>
+            <span aria-hidden className="text-muted-foreground/40">
+              ·
+            </span>
+            <span>Stored on this device</span>
+          </span>
+        )}
+      </div>
+    </footer>
   );
 }
 
@@ -79,16 +127,16 @@ function SaveIndicator({ ready, status }: { ready: boolean; status: string }) {
  */
 function BootSkeleton() {
   return (
-    <div className="animate-pulse space-y-8" aria-hidden>
-      <div className="space-y-3">
+    <div className="animate-pulse space-y-10" aria-hidden>
+      <div className="space-y-3 border-b border-border pb-5">
         <div className="skeleton h-2.5 w-24" />
-        <div className="skeleton h-10 w-72 max-w-full" />
+        <div className="skeleton h-11 w-72 max-w-full" />
       </div>
+      <div className="skeleton h-52" />
       <div className="grid gap-5 md:grid-cols-2">
-        <div className="skeleton h-44" />
-        <div className="skeleton h-44" />
+        <div className="skeleton h-64" />
+        <div className="skeleton h-64" />
       </div>
-      <div className="skeleton h-32" />
     </div>
   );
 }
