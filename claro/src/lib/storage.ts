@@ -2,6 +2,8 @@ import {
   CLARO_SCHEMA_VERSION,
   type ClaroState,
   type Day,
+  type FocusSession,
+  type Interruption,
   type ISODate,
   type Quarter,
   type QuarterId,
@@ -21,7 +23,15 @@ const SAVE_DEBOUNCE_MS = 300;
 // ------------------------------------------------------------- blank records
 
 export function emptyState(): ClaroState {
-  return { version: CLARO_SCHEMA_VERSION, quarters: {}, weeks: {}, days: {} };
+  return {
+    version: CLARO_SCHEMA_VERSION,
+    quarters: {},
+    weeks: {},
+    days: {},
+    focusSessions: {},
+    activeFocusSessionId: null,
+    interruptions: {},
+  };
 }
 
 export function blankQuarter(id: QuarterId): Quarter {
@@ -72,11 +82,23 @@ export function migrate(raw: unknown): ClaroState {
 
   // Future migrations chain here: if (v < 2) state = v1ToV2(state)
 
+  // Additive fields need no version bump: a store saved before focus existed
+  // simply arrives with these empty.
   return {
     version: CLARO_SCHEMA_VERSION,
     quarters: isRecord(candidate.quarters) ? candidate.quarters : {},
     weeks: isRecord(candidate.weeks) ? candidate.weeks : {},
     days: isRecord(candidate.days) ? candidate.days : {},
+    focusSessions: isRecord<FocusSession>(candidate.focusSessions)
+      ? candidate.focusSessions
+      : {},
+    activeFocusSessionId:
+      typeof candidate.activeFocusSessionId === "string"
+        ? candidate.activeFocusSessionId
+        : null,
+    interruptions: isRecord<Interruption>(candidate.interruptions)
+      ? candidate.interruptions
+      : {},
   };
 }
 
@@ -119,6 +141,16 @@ export function readDay(state: ClaroState, id: ISODate): Day {
   const stored = state.days[id];
   if (!stored) return blankDay(id);
   return { ...blankDay(id), ...stored, id };
+}
+
+/**
+ * The one canonical live session, or null. Reading it anywhere else in the app
+ * goes through here so no view can invent a second source of truth.
+ */
+export function readActiveFocusSession(state: ClaroState): FocusSession | null {
+  const id = state.activeFocusSessionId;
+  if (!id) return null;
+  return state.focusSessions[id] ?? null;
 }
 
 // ------------------------------------------------------------------ browser

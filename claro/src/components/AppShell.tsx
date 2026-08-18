@@ -17,10 +17,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-6 px-5 sm:px-8">
           <Link to="/today" className="flex items-baseline gap-2" aria-label="Claro home">
-            <span className="font-[family-name:var(--font-display)] text-[1.35rem] leading-none tracking-tight">
+            <span className="display text-[1.35rem] leading-none tracking-tight">
               Claro
             </span>
             <span
@@ -36,16 +36,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link
                   key={item.to}
                   to={item.to}
-                  className={cn(
-                    "relative rounded px-3 py-1.5 text-[0.83rem] transition-colors",
-                    active
-                      ? "font-medium text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
+                  className={cn("nav-link", active && "nav-link-active")}
                 >
                   {item.label}
                   {active && (
-                    <span className="absolute inset-x-3 -bottom-[1px] h-[1.5px] rounded-full bg-foreground" />
+                    <span className="absolute inset-x-3 -bottom-[5px] h-[2px] rounded-full bg-gold" />
                   )}
                 </Link>
               );
@@ -86,14 +81,14 @@ function BootSkeleton() {
   return (
     <div className="animate-pulse space-y-8" aria-hidden>
       <div className="space-y-3">
-        <div className="h-2.5 w-24 rounded bg-muted" />
-        <div className="h-10 w-72 max-w-full rounded bg-muted" />
+        <div className="skeleton h-2.5 w-24" />
+        <div className="skeleton h-10 w-72 max-w-full" />
       </div>
       <div className="grid gap-5 md:grid-cols-2">
-        <div className="h-44 rounded-lg bg-muted" />
-        <div className="h-44 rounded-lg bg-muted" />
+        <div className="skeleton h-44" />
+        <div className="skeleton h-44" />
       </div>
-      <div className="h-32 rounded-lg bg-muted" />
+      <div className="skeleton h-32" />
     </div>
   );
 }

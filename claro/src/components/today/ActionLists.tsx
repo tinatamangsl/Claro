@@ -15,12 +15,13 @@ type Props = {
  */
 export function ActionLists({ day, onChange }: Props) {
   return (
-    <section className="space-y-7">
+    <section>
       <div className="flex items-baseline gap-2.5">
         <h2 className="eyebrow">Actions</h2>
         <span className="text-[11px] text-muted-foreground">grouped by effort</span>
       </div>
 
+      <div className="paper-panel mt-3 space-y-7 p-4 sm:p-5">
       {BUCKETS.map((bucket) => (
         <BucketList
           key={bucket}
@@ -30,6 +31,7 @@ export function ActionLists({ day, onChange }: Props) {
           onChange={onChange}
         />
       ))}
+      </div>
     </section>
   );
 }
@@ -119,7 +121,7 @@ function BucketSwitcher({
       aria-label={`Move "${itemLabel}" to another list`}
       value={value}
       onChange={(e) => onChange(e.target.value as Bucket)}
-      className="shrink-0 cursor-pointer rounded border border-transparent bg-transparent px-1 py-0.5 text-[11px] text-muted-foreground opacity-0 transition-opacity hover:border-border focus-visible:opacity-100 group-hover:opacity-100"
+      className="field-select shrink-0 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
     >
       {BUCKETS.map((b) => (
         <option key={b} value={b}>

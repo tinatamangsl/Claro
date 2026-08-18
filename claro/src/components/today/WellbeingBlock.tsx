@@ -23,7 +23,7 @@ export function WellbeingBlock({ day, onPatch }: Props) {
         <span className="text-[11px] text-muted-foreground">how the body's doing</span>
       </div>
 
-      <div className="mt-3 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid gap-px overflow-hidden rounded-lg border border-border bg-subtle sm:grid-cols-2 lg:grid-cols-4">
         <Cell label="Sleep" hint="hours">
           <Stepper
             value={day.sleepHours ?? 0}

@@ -11,9 +11,9 @@ type Props = {
 };
 
 const SIZES = {
-  sm: "h-[15px] w-[15px] rounded-[4px]",
-  md: "h-[18px] w-[18px] rounded-[5px]",
-  lg: "h-[22px] w-[22px] rounded-[6px]",
+  sm: "h-[15px] w-[15px] rounded-sm",
+  md: "h-[18px] w-[18px] rounded-sm",
+  lg: "h-[22px] w-[22px] rounded-md",
 } as const;
 
 const ICON = { sm: "h-2.5 w-2.5", md: "h-3 w-3", lg: "h-3.5 w-3.5" } as const;

@@ -38,7 +38,7 @@ export function ScheduleBlock({ day, onChange }: Props) {
         <span className="text-[11px] text-muted-foreground">5 AM – 10 PM</span>
       </div>
 
-      <div className="mt-3 divide-y divide-subtle border-y border-subtle">
+      <div className="paper-panel mt-3 divide-y divide-subtle px-3 py-1 sm:px-4">
         {SCHEDULE_HOURS.map((time) => {
           const item = byTime.get(time);
           return (

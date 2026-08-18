@@ -37,8 +37,8 @@ export function NonNegotiablesBlock({ day, onChange }: Props) {
           <div
             key={item.id}
             className={cn(
-              "group flex items-center gap-2.5 rounded-lg border px-3 py-3 transition-colors",
-              item.done ? "border-positive/30 bg-positive/6" : "border-border bg-card",
+              "surface group flex items-center gap-2.5 px-3 py-3 transition-colors",
+              item.done && "border-positive/40 bg-positive/8",
             )}
           >
             <CheckToggle
@@ -67,7 +67,7 @@ export function NonNegotiablesBlock({ day, onChange }: Props) {
         ))}
 
         {!atCap && (
-          <div className="rounded-lg border border-dashed border-border">
+          <div className="card-dashed">
             <AddItem
               label="Add a non-negotiable"
               className="px-3 py-3"

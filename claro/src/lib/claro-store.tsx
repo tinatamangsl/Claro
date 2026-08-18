@@ -15,6 +15,7 @@ import {
   emptyState,
   flushSave,
   loadState,
+  readActiveFocusSession,
   readDay,
   readQuarter,
   readWeek,
@@ -22,7 +23,17 @@ import {
   scheduleSave,
   type SaveResult,
 } from "./storage";
-import type { ClaroState, Day, ISODate, Quarter, QuarterId, Week, WeekId } from "./types";
+import type {
+  ClaroState,
+  Day,
+  FocusSession,
+  ISODate,
+  Interruption,
+  Quarter,
+  QuarterId,
+  Week,
+  WeekId,
+} from "./types";
 
 export type SaveStatus = "idle" | "saved" | "error";
 
@@ -41,6 +52,19 @@ type ClaroContextValue = {
   updateQuarter: (id: QuarterId, recipe: (q: Quarter) => Quarter) => void;
   updateWeek: (id: WeekId, recipe: (w: Week) => Week) => void;
   updateDay: (id: ISODate, recipe: (d: Day) => Day) => void;
+
+  /**
+   * The one canonical focus session, or null. Every view reads it from here —
+   * no component keeps timer state of its own, so a second timer cannot exist.
+   */
+  activeSession: FocusSession | null;
+  startSession: (session: FocusSession) => void;
+  updateSession: (recipe: (session: FocusSession) => FocusSession) => void;
+  /** Stops pointing at the live session. The record itself is kept. */
+  clearActiveSession: () => void;
+
+  logInterruption: (interruption: Interruption) => void;
+  updateInterruption: (id: string, patch: Partial<Interruption>) => void;
 
   resetAll: () => void;
 };
@@ -142,6 +166,75 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const startSession = useCallback((session: FocusSession) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          focusSessions: { ...prev.state.focusSessions, [session.id]: session },
+          activeFocusSessionId: session.id,
+        },
+      };
+    });
+  }, []);
+
+  const updateSession = useCallback((recipe: (session: FocusSession) => FocusSession) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      const current = readActiveFocusSession(prev.state);
+      if (!current) return prev;
+
+      const next = recipe(current);
+      // Transitions are pure and idempotent; skip the write when nothing moved.
+      if (next === current) return prev;
+
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          focusSessions: { ...prev.state.focusSessions, [next.id]: next },
+        },
+      };
+    });
+  }, []);
+
+  const clearActiveSession = useCallback(() => {
+    setSnap((prev) => {
+      if (!prev || prev.state.activeFocusSessionId === null) return prev;
+      return { ...prev, state: { ...prev.state, activeFocusSessionId: null } };
+    });
+  }, []);
+
+  const logInterruption = useCallback((interruption: Interruption) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          interruptions: { ...prev.state.interruptions, [interruption.id]: interruption },
+        },
+      };
+    });
+  }, []);
+
+  const updateInterruption = useCallback((id: string, patch: Partial<Interruption>) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      const current = prev.state.interruptions[id];
+      if (!current) return prev;
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          interruptions: { ...prev.state.interruptions, [id]: { ...current, ...patch } },
+        },
+      };
+    });
+  }, []);
+
   const resetAll = useCallback(() => {
     clearState();
     const fresh = emptyState();
@@ -162,6 +255,12 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       updateQuarter,
       updateWeek,
       updateDay,
+      activeSession: readActiveFocusSession(state),
+      startSession,
+      updateSession,
+      clearActiveSession,
+      logInterruption,
+      updateInterruption,
       resetAll,
     }),
     [
@@ -175,6 +274,11 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       updateQuarter,
       updateWeek,
       updateDay,
+      startSession,
+      updateSession,
+      clearActiveSession,
+      logInterruption,
+      updateInterruption,
       resetAll,
     ],
   );

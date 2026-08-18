@@ -109,7 +109,7 @@ function QuarterColumn({
       </div>
 
       {/* Main Quest — deliberately the loudest thing on the page. */}
-      <div className="surface-raised relative overflow-hidden p-6 sm:p-7">
+      <div className="surface relative overflow-hidden p-6 sm:p-7">
         <span
           aria-hidden
           className="absolute inset-y-0 left-0 w-[3px] bg-gold"
@@ -126,7 +126,7 @@ function QuarterColumn({
               ? "The one work outcome that would define this quarter…"
               : "The one personal outcome that would define this quarter…"
           }
-          className="mt-2.5 -ml-2 font-[family-name:var(--font-display)] text-[1.75rem] leading-[1.18] tracking-tight sm:text-[2rem]"
+          className="mt-2.5 -ml-2 display text-[1.75rem] leading-[1.18] tracking-tight sm:text-[2rem]"
         />
       </div>
 

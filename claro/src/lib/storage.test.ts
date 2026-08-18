@@ -15,6 +15,7 @@ import {
   readWeek,
   saveNow,
   scheduleSave,
+  readActiveFocusSession,
 } from "./storage";
 import { CLARO_SCHEMA_VERSION, type ClaroState } from "./types";
 
@@ -34,6 +35,9 @@ describe("blank records", () => {
       quarters: {},
       weeks: {},
       days: {},
+      focusSessions: {},
+      activeFocusSessionId: null,
+      interruptions: {},
     });
   });
 
@@ -82,10 +86,8 @@ describe("migrate", () => {
 
   it("preserves a valid payload", () => {
     const state: ClaroState = {
-      version: CLARO_SCHEMA_VERSION,
+      ...emptyState(),
       quarters: { "2026-Q3": blankQuarter("2026-Q3") },
-      weeks: {},
-      days: {},
     };
     expect(migrate(state).quarters["2026-Q3"]).toBeDefined();
   });
@@ -217,5 +219,50 @@ describe("scheduleSave debounce", () => {
 
   it("flushSave is safe when nothing is pending", () => {
     expect(() => flushSave()).not.toThrow();
+  });
+});
+
+describe("focus state defaults", () => {
+  it("starts with no sessions, no live session and no interruptions", () => {
+    const fresh = emptyState();
+
+    expect(fresh.focusSessions).toEqual({});
+    expect(fresh.activeFocusSessionId).toBeNull();
+    expect(fresh.interruptions).toEqual({});
+  });
+
+  it("gives a store saved before focus existed the new collections", () => {
+    const legacy = { version: CLARO_SCHEMA_VERSION, quarters: {}, weeks: {}, days: {} };
+
+    expect(migrate(legacy)).toEqual(emptyState());
+  });
+
+  it("keeps focus records that are already there", () => {
+    const stored = {
+      ...emptyState(),
+      activeFocusSessionId: "s1",
+      focusSessions: { s1: { id: "s1" } },
+      interruptions: { i1: { id: "i1" } },
+    };
+
+    const result = migrate(stored);
+    expect(result.activeFocusSessionId).toBe("s1");
+    expect(result.focusSessions.s1).toBeDefined();
+    expect(result.interruptions.i1).toBeDefined();
+  });
+
+  it("repairs a damaged active session pointer rather than trusting it", () => {
+    const damaged = { ...emptyState(), activeFocusSessionId: 42, focusSessions: [] };
+
+    const result = migrate(damaged);
+    expect(result.activeFocusSessionId).toBeNull();
+    expect(result.focusSessions).toEqual({});
+  });
+
+  it("reads the live session through the store, or null when there is none", () => {
+    expect(readActiveFocusSession(emptyState())).toBeNull();
+
+    const withDangling = { ...emptyState(), activeFocusSessionId: "gone" };
+    expect(readActiveFocusSession(withDangling)).toBeNull();
   });
 });

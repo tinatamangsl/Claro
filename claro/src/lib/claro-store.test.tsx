@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ClaroProvider, useClaro } from "./claro-store";
 import { STORAGE_KEY, blankDay, emptyState, loadState, saveNow } from "./storage";
 import { formatDayId } from "./dates";
-import { MAX_SIDE_QUESTS } from "./types";
+import { FOCUS_BLOCK_MS, MAX_SIDE_QUESTS } from "./types";
+import { createInterruption, markDistracted, startFocusSession } from "./focus-session";
 import { addCapped } from "./mutations";
 
 beforeEach(() => {
@@ -292,5 +293,202 @@ describe("useClaro guard", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(() => render(<Orphan />)).toThrow(/ClaroProvider/);
     spy.mockRestore();
+  });
+});
+
+describe("the one canonical focus session", () => {
+  const T0 = new Date("2026-08-18T09:00:00.000Z");
+
+  const newSession = () =>
+    startFocusSession({
+      dayId: "2026-08-18",
+      priority: { dayId: "2026-08-18", rank: 1 },
+      intention: "Ship the store",
+      plannedMs: FOCUS_BLOCK_MS,
+      now: T0,
+      timeZone: "Europe/London",
+    });
+
+  /** A provider we can unmount, so a remount is a genuine page refresh. */
+  function mountProvider() {
+    const api: { current: ReturnType<typeof useClaro> | null } = { current: null };
+
+    function Probe() {
+      api.current = useClaro();
+      return null;
+    }
+
+    const { unmount } = render(
+      <ClaroProvider>
+        <Probe />
+      </ClaroProvider>,
+    );
+
+    return { api, unmount };
+  }
+
+  const ready = async (api: { current: ReturnType<typeof useClaro> | null }) =>
+    waitFor(() => expect(api.current?.ready).toBe(true));
+
+  it("has no session until one is started", async () => {
+    const { api } = mountProvider();
+    await ready(api);
+
+    expect(api.current?.activeSession).toBeNull();
+  });
+
+  it("exposes the session it was given", async () => {
+    const { api } = mountProvider();
+    await ready(api);
+    const session = newSession();
+
+    act(() => api.current?.startSession(session));
+
+    expect(api.current?.activeSession?.id).toBe(session.id);
+    expect(api.current?.activeSession?.intention).toBe("Ship the store");
+  });
+
+  it("survives a refresh with its timestamps intact", async () => {
+    const first = mountProvider();
+    await ready(first.api);
+    const session = newSession();
+
+    act(() => first.api.current?.startSession(session));
+    await flush();
+    first.unmount();
+
+    // A fresh provider, reading the same disk — this is what a reload does.
+    const second = mountProvider();
+    await ready(second.api);
+
+    const restored = second.api.current?.activeSession;
+    expect(restored?.id).toBe(session.id);
+    expect(restored?.startedAt).toBe(session.startedAt);
+    expect(restored?.segmentStartedAt).toBe(session.segmentStartedAt);
+    expect(restored?.plannedMs).toBe(FOCUS_BLOCK_MS);
+  });
+
+  it("applies a transition through the store", async () => {
+    const { api } = mountProvider();
+    await ready(api);
+
+    act(() => api.current?.startSession(newSession()));
+    act(() => api.current?.updateSession((s) => markDistracted(s, new Date(T0.getTime() + 60_000))));
+
+    expect(api.current?.activeSession?.phase).toBe("interrupted");
+    expect(api.current?.activeSession?.elapsedBeforeMs).toBe(60_000);
+  });
+
+  it("ignores a transition that changes nothing", async () => {
+    const { api } = mountProvider();
+    await ready(api);
+    act(() => api.current?.startSession(newSession()));
+
+    const before = api.current?.activeSession;
+    act(() => api.current?.updateSession((s) => s));
+
+    expect(api.current?.activeSession).toBe(before);
+  });
+
+  it("keeps the record but drops the pointer when the session is cleared", async () => {
+    const { api } = mountProvider();
+    await ready(api);
+    const session = newSession();
+
+    act(() => api.current?.startSession(session));
+    act(() => api.current?.clearActiveSession());
+
+    expect(api.current?.activeSession).toBeNull();
+    expect(api.current?.state.focusSessions[session.id]).toBeDefined();
+  });
+
+  it("never holds two live sessions at once", async () => {
+    const { api } = mountProvider();
+    await ready(api);
+    const first = newSession();
+    const second = newSession();
+
+    act(() => api.current?.startSession(first));
+    act(() => api.current?.startSession(second));
+
+    expect(api.current?.state.activeFocusSessionId).toBe(second.id);
+    expect(Object.keys(api.current!.state.focusSessions)).toHaveLength(2);
+  });
+});
+
+describe("the private interruption log", () => {
+  const T0 = new Date("2026-08-18T09:00:00.000Z");
+
+  const session = () =>
+    startFocusSession({
+      dayId: "2026-08-18",
+      priority: null,
+      intention: "Ship the store",
+      plannedMs: FOCUS_BLOCK_MS,
+      now: T0,
+      timeZone: "UTC",
+    });
+
+  it("records an interruption and keeps it across a refresh", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    const s = session();
+    const interruption = createInterruption({ session: s, now: T0, timeZone: "UTC" });
+
+    act(() => {
+      api.current?.startSession(s);
+      api.current?.logInterruption(interruption);
+    });
+    await flush();
+
+    expect(loadState().interruptions[interruption.id].focusSessionId).toBe(s.id);
+  });
+
+  it("fills in the reason, the return block and the return afterwards", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    const s = session();
+    const interruption = createInterruption({ session: s, now: T0, timeZone: "UTC" });
+
+    act(() => {
+      api.current?.startSession(s);
+      api.current?.logInterruption(interruption);
+    });
+    act(() => api.current?.updateInterruption(interruption.id, { reason: "phone" }));
+    act(() => api.current?.updateInterruption(interruption.id, { returnBlockStarted: true }));
+    act(() =>
+      api.current?.updateInterruption(interruption.id, {
+        returnedAt: "2026-08-18T09:16:00.000Z",
+      }),
+    );
+
+    const stored = api.current!.state.interruptions[interruption.id];
+    expect(stored.reason).toBe("phone");
+    expect(stored.returnBlockStarted).toBe(true);
+    expect(stored.returnedAt).toBe("2026-08-18T09:16:00.000Z");
+  });
+
+  it("ignores a patch for an interruption that does not exist", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current?.updateInterruption("nope", { reason: "fatigue" }));
+
+    expect(api.current?.state.interruptions).toEqual({});
+  });
+
+  it("is wiped by resetAll along with everything else", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    const s = session();
+
+    act(() => {
+      api.current?.startSession(s);
+      api.current?.logInterruption(createInterruption({ session: s, now: T0, timeZone: "UTC" }));
+    });
+    act(() => api.current?.resetAll());
+
+    expect(api.current?.state).toEqual(emptyState());
+    expect(api.current?.activeSession).toBeNull();
   });
 });

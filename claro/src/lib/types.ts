@@ -88,6 +88,106 @@ export type Day = {
   notes: string;
 };
 
+// ---------------------------------------------------------------- focus
+
+export const FOCUS_BLOCK_MS = 25 * 60_000;
+/** The "just begin" block — small enough that starting is never the hard part. */
+export const JUST_BEGIN_BLOCK_MS = 5 * 60_000;
+/** The on-ramp back after an interruption. */
+export const RETURN_BLOCK_MS = 5 * 60_000;
+
+/**
+ * A focus session's phase. There is only ever one live session (see
+ * `ClaroState.activeFocusSessionId`), so these are the states of the whole
+ * feature, not of some component.
+ */
+export type FocusPhase =
+  /** The main block is counting down. */
+  | "running"
+  /** Deliberately stopped by the user. Nothing is counting and nothing is logged. */
+  | "paused"
+  /** An interruption is open and nothing is counting. */
+  | "interrupted"
+  /** The five-minute return block is counting down. */
+  | "returning"
+  /** The main block finished; waiting for the user to choose what happens next. */
+  | "ended"
+  /** The user resolved it. Kept for the record; never resumed. */
+  | "closed";
+
+/** Priorities are fixed slots on a day, so `(dayId, rank)` is their stable key. */
+export type PriorityRef = { dayId: ISODate; rank: 1 | 2 };
+
+export type FocusSession = {
+  id: string;
+  /** The local day the session was started on. */
+  dayId: ISODate;
+  /** What the session is for. Null when no priority was set at the time. */
+  priority: PriorityRef | null;
+  /** A snapshot of the priority text, so the record still reads honestly later. */
+  intention: string;
+  plannedMs: number;
+  startedAt: string;
+  /** IANA zone, captured at start so a later reader knows the local context. */
+  timeZone: string;
+  phase: FocusPhase;
+  /** Main-block time already spent before the current counting segment. */
+  elapsedBeforeMs: number;
+  /** When the current counting segment began. Null whenever nothing is counting. */
+  segmentStartedAt: string | null;
+  /** When the active return block is due to finish. */
+  returnBlockEndsAt: string | null;
+  /** When the main block ran out. */
+  endedAt: string | null;
+  /** How the user resolved the session. */
+  outcome: FocusOutcome | null;
+};
+
+export type FocusOutcome = "completed" | "continued" | "left";
+
+export type InterruptionReason =
+  | "phone"
+  | "notification"
+  | "person"
+  | "uncertainty"
+  | "fatigue"
+  | "other";
+
+export const INTERRUPTION_REASONS: InterruptionReason[] = [
+  "phone",
+  "notification",
+  "person",
+  "uncertainty",
+  "fatigue",
+  "other",
+];
+
+export const INTERRUPTION_REASON_LABELS: Record<InterruptionReason, string> = {
+  phone: "Phone",
+  notification: "A notification",
+  person: "Someone needed me",
+  uncertainty: "I wasn't sure what to do next",
+  fatigue: "Running out of steam",
+  other: "Something else",
+};
+
+/**
+ * A private record of one interruption. Never surfaced as a count, a streak or a
+ * dashboard — it exists so the pattern can be understood later, not to be scored.
+ */
+export type Interruption = {
+  id: string;
+  focusSessionId: string;
+  /** Local day, so a future adapter can group without re-deriving from UTC. */
+  dayId: ISODate;
+  occurredAt: string;
+  timeZone: string;
+  reason: InterruptionReason | null;
+  returnBlockStarted: boolean;
+  /** When focused work actually resumed. Null if the user never came back. */
+  returnedAt: string | null;
+};
+
 // ------------------------------------------------------------------ store
 
 export type ClaroState = {
@@ -95,6 +195,10 @@ export type ClaroState = {
   quarters: Record<QuarterId, Quarter>;
   weeks: Record<WeekId, Week>;
   days: Record<ISODate, Day>;
+  focusSessions: Record<string, FocusSession>;
+  /** The one canonical live session. There is nowhere for a second to exist. */
+  activeFocusSessionId: string | null;
+  interruptions: Record<string, Interruption>;
 };
 
 // ------------------------------------------------------------ presentation

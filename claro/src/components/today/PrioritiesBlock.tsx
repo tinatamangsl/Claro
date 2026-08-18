@@ -58,7 +58,7 @@ function PriorityCard({
         <div className="flex items-center gap-3 pt-1">
           <span
             className={cn(
-              "tnum select-none font-[family-name:var(--font-display)] leading-none text-muted-foreground/50",
+              "tnum select-none display leading-none text-muted-foreground/50",
               primary ? "text-2xl" : "text-lg",
             )}
           >
@@ -81,7 +81,7 @@ function PriorityCard({
               primary ? "The most important thing today…" : "A second priority (optional)"
             }
             className={cn(
-              "-ml-2 font-[family-name:var(--font-display)] leading-tight tracking-tight",
+              "-ml-2 display leading-tight tracking-tight",
               primary ? "text-[1.6rem] sm:text-[1.85rem]" : "text-[1.2rem]",
               priority.done && "strike-done text-muted-foreground",
             )}
@@ -116,12 +116,7 @@ function LinkPicker({
         id={`priority-${rank}-link`}
         value={priority.link ?? ""}
         onChange={(e) => onPatch({ link: (e.target.value || null) as Domain | null })}
-        className={cn(
-          "cursor-pointer rounded border px-1.5 py-0.5 text-[11px] transition-colors",
-          priority.link
-            ? "border-primary/25 bg-primary/8 text-primary"
-            : "border-transparent text-muted-foreground hover:border-border",
-        )}
+        className={cn("field-select", priority.link && "field-select-active")}
       >
         <option value="">Not linked</option>
         {DOMAINS.map((domain) => (

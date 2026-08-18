@@ -56,6 +56,9 @@ route views → components. There is no data fetching, no async, and no cache la
 src/lib/types.ts        domain model + the caps. Start here.
 src/lib/dates.ts        quarter/ISO-week/day ids, hierarchy resolution, navigation
 src/lib/storage.ts      the ONLY module that touches localStorage
+src/lib/focus.ts        Return to Focus: what to return to, and where a distraction goes
+src/lib/focus-session.ts the focus session state machine — pure, now-injected, no timers
+src/hooks/use-now.ts    the app's ONLY tick source
 src/lib/claro-store.tsx ClaroProvider + useClaro() — also owns the hydration contract
 src/routes/             __root, index (→ /today), today, week, quarter
 ```
@@ -68,13 +71,20 @@ on the client's first render, then loads real data in a mount effect and flips `
 A `useState(() => loadState())` initialiser would run during the first client render and
 produce a hydration mismatch. This is the single easiest way to break Claro.
 
-**2. `new Date()` is called in exactly two places**, both effects in `claro-store.tsx` (initial
-load, and the midnight-rollover interval). Every helper in `dates.ts` takes an explicit date or
-id. Computing "today" during render makes the server's timezone disagree with the browser's —
-a hydration mismatch *and* a correctness bug.
+**2. `new Date()` must never be called during render.** It is read in exactly two effects in
+`claro-store.tsx` (initial load, and the midnight-rollover interval), and in event handlers that
+stamp `createdAt` — `ActionLists` and Today's distraction capture. Handlers are safe because they
+only ever run on the client, after hydration. Every helper in `dates.ts` takes an explicit date or
+id, and pure logic that needs the time takes an injected `now` (see `focus-session.ts`, where the
+entire timer is pure functions of `(session, now)`). The one ticking clock is `useNow`, which
+returns `null` until mount for the same reason the store starts un`ready`. Computing
+"today" during render makes the server's timezone disagree with the browser's — a hydration
+mismatch *and* a correctness bug.
 
 **3. `src/routeTree.gen.ts` is generated** by the router plugin on `vite dev`. Never hand-edit.
 It type-augments `Register` against `getRouter` in `router.tsx`, so that export name is load-bearing.
+Colocated route tests are kept out of the scan by `router.routeFileIgnorePattern` in
+`vite.config.ts`; without it the generator warns that `src/routes/*.test.ts` exports no Route.
 
 **4. `validateSearch` must return a genuinely optional key** (`(s): {q?: string} => ... ? {q} : {}`),
 not `{q: undefined}`. The latter makes `search` a *required* prop on every `<Link>` to that route.
@@ -110,6 +120,12 @@ most likely to break unknowingly. Every one of them should have a test whose nam
 it protects, so a failure explains itself.
 
 ## Design decisions and why
+
+**The model is Supabase-shaped, but Supabase is not here.** `focusSessions`, `interruptions`,
+`quarters`, `weeks` and `days` are keyed maps of records with stable ids — each is a table in
+waiting, and `storage.ts` is the seam an adapter would replace. Priorities keep the natural
+composite key `(dayId, rank)` rather than uuids, because they are fixed slots on a day rather than
+free-standing rows. No auth, no sync and no network belongs in this codebase yet.
 
 **Persistence is `localStorage`, not Supabase.** ExampleRepo persists to a hosted Supabase
 project, but the dev machine has no Docker, no Supabase CLI and no psql, and the only available
@@ -167,29 +183,133 @@ goal, 3 non-negotiables, 2 priorities. At a cap the add affordance is *replaced*
 copy explaining why ("Three is the limit — that's the point."). Don't turn these into errors or
 raise them; the constraint is the product.
 
+**Return to Focus is a mode of Today, not a fourth screen.** A distracted user who reopens Claro
+meets the entire Today surface — two priorities, an 18-row schedule, three action buckets,
+non-negotiables, a check-in and notes — and that surface is itself the re-distraction.
+`/today?focus` strips it to one task, the rungs above it, and one capture field. It stays a search
+param rather than a route so the nav stays three items, the screen is linkable, and browser-back is
+the way out. It is offered only for today (`dayId === today`); returning to focus is about now, not
+about auditing last Tuesday.
+
+**The focus is derived, not stored.** `selectFocus` returns the first unfinished priority, then
+falls through to a done state that offers the top unfinished Project — never a Quick Tick, which is
+not a meaningful thing to return to. There is deliberately no saved "current focus": the hierarchy
+has already decided what matters today, so remembering it is the system's job rather than the
+user's, and the feature needs no schema change or migration. A parked distraction becomes a
+`quickTick` via `parkDistraction`, which takes an injected `now` — the point is to close the open
+loop, not to action it. No timer, no session count, no streaks; that is the analytics and
+gamification line the MVP draws.
+
+**There is exactly one focus session, and the store owns it.** `ClaroState.activeFocusSessionId`
+is a single pointer into `focusSessions`, so a second live timer has nowhere to exist. No component
+holds timer state; every view reads the same session through `useClaro()` and writes through
+`updateSession`, which keeps the "UI never touches storage" rule intact. `Today` and the focus
+screen therefore cannot disagree about what is running.
+
+**The timer stores timestamps, never a countdown.** A session records `startedAt`,
+`segmentStartedAt` and `elapsedBeforeMs`; everything shown is derived by a pure function of
+`(session, now)`. That is what makes it survive a refresh — reload, recompute, carry on — and
+`settleSession` replays whatever happened while the tab was closed, including a return block that
+ended and a main block that then ran out. It is idempotent and returns the same object when nothing
+moved, so committing it on every tick is free.
+
+**Being distracted costs nothing.** `markDistracted` freezes the block rather than letting it
+drain, so an hour away leaves the same time on the clock. The five-minute return block is an
+on-ramp, not a penalty, and it hands back to the remainder of the original block automatically.
+Interruptions are logged privately — session id, timestamp, local date and IANA zone, an optional
+reason, whether the return block was taken, and whether and when the user came back — and are
+**never** surfaced as a count, a streak or a dashboard. The record exists to be understood later,
+not to be scored.
+
+**A finished timer is not finished work.** The end of a block offers Complete priority, Continue,
+or Back to Today, and nothing completes a priority except that explicit tap. Auto-completion would
+make the app lie about what was actually done.
+
+**Pausing and being distracted are different states, and only one is logged.** `pauseSession`
+freezes the block exactly as `markDistracted` does, but sets the `paused` phase and writes nothing
+to the interruption log — pausing to answer the door is not behavioural data, and recording it
+would make the log useless. `endBlockNow` stops a block early and goes straight to the end choices,
+keeping the time actually spent. Both are reachable during the return block too, so the five
+minutes can never become a dead end.
+
+**Elapsed time is read from the session when the clock is off.** `useNow` returns `null` in every
+non-counting state, so any display that derives from `now` alone resets to zero the instant a block
+is paused. `mainElapsedMs` falls back to `elapsedBeforeMs`, which is exact while paused — this is
+why the progress bar and the remaining time hold steady instead of snapping to empty.
+
+**Today has exactly one focus control.** A single line above the priorities reads "Start focus"
+when nothing is running and "Resume focus" — with the phase and the time left — when something is.
+There is no second button in the Priorities header and no session history on the screen: the point
+is one way in, not a dashboard.
+
+**Parking a thought and admitting a distraction are different actions.** Parking appends a
+`quickTick` and leaves the clock running; being distracted stops the clock and opens the
+interruption flow. Collapsing the two would force a person to interrupt themselves in order to
+write something down.
+
 **Editing is inline everywhere.** Tap text and it becomes an input. There is no modal, no dialog
 primitive, and no `@radix-ui/react-dialog` dependency — better for a daily planner, and it avoids
 focus-trap/portal SSR concerns.
 
 ## Design system
 
-`src/styles.css` is the only stylesheet and holds every token. Paper, ink, and one accent:
-warm near-white background, near-black ink, `--primary` deep ink-indigo, `--gold` reserved
-*exclusively* for Main Quest and Priority 1 marks, `--positive` for completion only. `--radius`
-is `0.5rem` — tight and editorial, not pill-shaped.
+`src/styles.css` is the only stylesheet and holds every token. The palette is **ported verbatim
+from claro-your-voice-of-clarity.vercel.app**, which is the visual source of truth for both
+surfaces — warm cream parchment `hsl(30 30% 96%)`, ink `hsl(30 18% 9%)`, and a single **Claro
+amber** `hsl(22 73% 67%)` carrying `--primary`, `--gold` and `--ring`. `--positive`
+(`hsl(152 55% 42%)`) is for completion only. `--radius` is `1rem`.
 
-Type is two families: **Instrument Serif** (`--font-display`) for the things that should
-dominate — quests, goals, dates, priorities — and **Inter** (`--font-sans`) for all UI, with
-`tabular-nums` on every number.
+Two values deliberately differ from the reference, both for contrast, and both should stay:
 
-Utilities: `.surface` (calm default — white, hairline, no shadow), `.surface-raised` (one soft
-shadow, Main Quest and Priority 1 only), `.eyebrow` (micro-label — note it sets `font-family`
-explicitly, because these are often `<h2>` and the base layer sets headings to the display serif),
-`.field-plain`, `.strike-done`.
+- **Primary buttons use ink on amber** (`--primary-foreground: hsl(30 18% 9%)`, 7.9:1). The
+  reference's near-white on amber is 2.3:1 and fails AA.
+- **`--muted-foreground` is `hsl(28 8% 42%)`**, not the reference's `28 6% 47%` — same hue, 4.7:1
+  instead of 3.9:1, which matters because we use it at 11px.
+
+Type is three families: **Instrument Serif** (`--font-display`) for what should dominate — quests,
+goals, dates, priorities, the timer; **Inter** (`--font-sans`) for all UI, with `tabular-nums` on
+every number; and **Caveat** (`--font-hand`, the `.hand` utility) for margin notes only. Nothing
+load-bearing is ever set in the hand font.
+
+### Surfaces carry the journal feel, in three weights
+
+| Utility | Where | What it is |
+| --- | --- | --- |
+| `.paper-page` | **Focus only** | Ruled lines every 28px over a warm gradient, layered shadow, 14px radius. The heaviest treatment in the app. |
+| `.surface` / `.surface-raised` | **Today** | Warm paper, hairline border, one soft shadow. `-raised` is Main Quest, Priority 1, and the running block. |
+| `.paper-panel` | **Dense content** | Warm paper *without* rules — the schedule, action lists, the check-in grid. |
+| `.surface-quiet` | **Week and Quarter** | Flat card, no shadow — scanning matters more than texture up the hierarchy. |
+
+**Ruled lines are opt-in and deliberate.** `.rule-lines` (and the rules baked into
+`.paper-page`) belong only on roomy *writing* surfaces — the focus card and Today's notes, where
+the notes textarea is set to `leading-[28px]` so the text sits on the rules. Never put them behind
+the schedule, the check-in grid, an action list or any form: at those densities the lines fight
+the rows and cost readability. Dense content gets `.paper-panel` instead.
+
+Other utilities: `.eyebrow` (micro-label; it sets `font-family` explicitly because these are often
+`<h2>` and the base layer sets headings to the display serif), `.field-plain`, `.strike-done`,
+`.ink-highlight`, `.hand`.
+
+### Buttons are four utilities, never hand-rolled
+
+`.btn` owns shape, padding and transition; `.btn-primary` (amber gradient), `.btn-quiet`
+(bordered card), `.btn-ghost` (text only), `.btn-sm` and `.btn-icon` compose on top. There
+are **zero** literal `rounded-md px-… py-…` button strings left in the codebase — if you find
+yourself writing one, add a modifier instead.
+
+**Use `.btn-icon` for square icon buttons — never `p-0`.** Utility order inside
+`@layer utilities` is not guaranteed, so `p-0` can lose to `.btn`'s own padding; when it does, a
+32px button has zero content width and its icon collapses to nothing. That shipped once already.
+
+The rest of the shared vocabulary: `.display` (the serif face — there are no inline
+`font-[family-name:…]` strings left), `.nav-link` / `.nav-link-active`, `.field-select` /
+`.field-select-active`, `.card-dashed`, `.skeleton` (paper-toned loading, never grey), and the
+toast classNames wired in `__root.tsx` so notifications are paper too.
 
 **Hierarchy is enforced by size and weight, not colour**: Main Quest ≫ Side Quest, Priority ≫
 Task, Weekly Goal ≫ Supporting Action. When adding UI, place it in that ladder rather than
-reaching for a new colour. The `.dark` token block exists but no toggle ships.
+reaching for a new colour. The `.dark` token block tracks the reference's dark palette but no
+toggle ships.
 
 Deliberately *not* inherited from ExampleRepo: emoji-as-icons, pill-everything, `.paper-card`/
 `.pin-shadow`, and its warm terracotta/sage palette. Claro must not look like Jira, Trello, or a
@@ -211,6 +331,26 @@ gitignored**, two of its migration pairs are duplicated without `IF NOT EXISTS` 
 
 ## Out of scope for the MVP
 
-AI/LLM features, voice, audio briefings, analytics, calendar integration, notifications, social,
-teams, subscriptions, payments, gamification, and habit analytics. The MVP is about getting one
-loop right: **Quarter → Week → Day → Complete → Reflect.**
+AI/LLM features, voice, audio briefings, music, analytics and insight dashboards, calendar
+integration, notifications, social, teams, accountability partners, leaderboards, streaks,
+subscriptions, payments, gamification, habit tracking, affirmation cards, cycle tracking, and food
+guidance. The MVP is about getting one loop right: **Quarter → Week → Day → Complete → Reflect.**
+
+Focus deliberately stops short of the obvious additions: no session history UI, no interruption
+counts, no "focus time today". The data is recorded; the scoring is not.
+
+## Planned next slice: carry-forward review (not built)
+
+Unfinished work is **never** copied forward automatically. When a new day starts, yesterday's
+unfinished priorities and actions should be offered for an explicit review, one at a time, with
+four choices:
+
+- **Carry forward** — move it to today.
+- **Schedule later** — move it to a chosen future day.
+- **Complete** — it actually got done.
+- **Let go** — it is not happening, and that is a legitimate answer.
+
+The review is opt-in and skippable; a day with no review still starts clean. Automatic rollover is
+what turns a planner into a guilt ledger, which is the opposite of what Claro is for. Nothing in
+the current model needs to change to build it: days already hold their own records, and a moved
+item is a single write to the target day.

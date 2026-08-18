@@ -77,7 +77,7 @@ function WeekView() {
       />
 
       {/* The hierarchy made visible: this week answers to that quarter. */}
-      <div className="surface p-5 sm:p-6">
+      <div className="surface-quiet p-5 sm:p-6">
         <div className="flex items-baseline justify-between gap-3">
           <span className="eyebrow">Your quarter</span>
           <Link
@@ -94,9 +94,9 @@ function WeekView() {
               <div className="text-[11px] font-medium text-muted-foreground">
                 {DOMAIN_META[domain].label} Main Quest
               </div>
-              <p className="mt-1 font-[family-name:var(--font-display)] text-[1.15rem] leading-snug">
+              <p className="mt-1 display text-[1.15rem] leading-snug">
                 {parentQuarter[domain].mainQuest || (
-                  <span className="text-muted-foreground/60">Not set yet</span>
+                  <span className="text-muted-foreground">Not set yet</span>
                 )}
               </p>
             </div>
@@ -152,7 +152,7 @@ function WeekColumn({
         <h2 className="text-[1.15rem] font-medium tracking-tight">{label}</h2>
       </div>
 
-      <div className="surface-raised p-6">
+      <div className="surface p-6">
         <div className="eyebrow">
           My main {domain === "work" ? "work" : "personal"} goal this week
         </div>
@@ -163,7 +163,7 @@ function WeekColumn({
           rows={1}
           ariaLabel={`${label} weekly goal`}
           placeholder="What has to move forward by Sunday?"
-          className="mt-2.5 -ml-2 font-[family-name:var(--font-display)] text-[1.5rem] leading-[1.2] tracking-tight"
+          className="mt-2.5 -ml-2 display text-[1.5rem] leading-[1.2] tracking-tight"
         />
       </div>
 

@@ -1,6 +1,6 @@
 ---
 name: design-system
-description: Claro's visual and interaction language — the paper/ink/one-accent palette and where gold is allowed, the two type families, the .surface/.eyebrow/.field-plain utilities, hierarchy by size not colour, inline editing with no modals, and the product copy voice including cap messages. Use for any UI, styling, layout, icon or user-facing copy work, and before adding anything to src/styles.css.
+description: Claro's visual and interaction language — the parchment/ink/Claro-amber palette ported from the reference site, the three type families, the three surface weights (.paper-page for Focus, .surface for Today, .surface-quiet for Week and Quarter), the four button utilities, hierarchy by size not colour, inline editing with no modals, and the product copy voice. Use for any UI, styling, layout, icon or user-facing copy work, and before adding anything to src/styles.css.
 ---
 
 # Claro's design language
@@ -12,38 +12,56 @@ wrong regardless of how conventional it is.
 `src/styles.css` is the **only** stylesheet and holds every token. Tailwind v4 is
 CSS-first here; there is no `tailwind.config.js` to edit.
 
-## Colour: paper, ink, and one accent
+## Colour: parchment, ink, and one amber
 
-Warm near-white background, near-black ink, `--primary` a deep ink-indigo. Two colours are
-rationed and adding a third accent is a design decision, not a detail:
+The palette is **ported verbatim from claro-your-voice-of-clarity.vercel.app**, the visual source
+of truth. Warm cream parchment `hsl(30 30% 96%)`, ink `hsl(30 18% 9%)`, and a single **Claro
+amber** `hsl(22 73% 67%)` that carries `--primary`, `--gold` and `--ring`. `--positive`
+`hsl(152 55% 42%)` is for completion only — not for success toasts, not for "good" numbers.
+`--radius` is `1rem`.
 
-- **`--gold` is reserved exclusively for Main Quest and Priority 1 marks.** Nothing else
-  may use it. It is what makes those two things read as the top of the hierarchy.
-- **`--positive` is for completion only.** Not for success toasts, not for "good" numbers.
+Two values deviate from the reference on purpose, for contrast, and must not be "corrected" back:
+primary buttons use **ink on amber** (7.9:1, versus the reference's 2.3:1 near-white), and
+`--muted-foreground` is `hsl(28 8% 42%)` (4.7:1) because we use it at 11px.
 
-`--radius` is `0.5rem` — tight and editorial, never pill-shaped. The `.dark` token block
-exists and is maintained, but **no theme toggle ships**; don't build one unasked.
+Use the semantic tokens (`bg-background`, `text-muted-foreground`, `border-border`, `bg-gold`)
+rather than raw values, and add new tokens to `styles.css` instead of inlining a one-off colour.
 
-Use the semantic tokens (`bg-background`, `text-muted-foreground`, `border-border`,
-`bg-gold`) rather than raw values, and add new tokens to `styles.css` instead of inlining
-a one-off colour in a component.
+## Type: three families, and numbers are tabular
 
-## Type: two families, and numbers are tabular
-
-- **Instrument Serif** (`--font-display`) for the things that should dominate: quests,
-  goals, dates, priorities. The base layer already applies it to headings.
+- **Instrument Serif** (`--font-display`) for what should dominate: quests, goals, dates,
+  priorities, the focus timer. The base layer already applies it to headings.
 - **Inter** (`--font-sans`) for all UI.
+- **Caveat** (`.hand`) for margin notes *only* — never for anything load-bearing, since a
+  handwriting face is harder to read.
 - `tabular-nums` on every number, so figures don't jitter as they change.
 
-## The utilities, and what each one means
+## Surfaces: three weights, matched to the screen
 
-| Utility | Use it for |
-| --- | --- |
-| `.surface` | The calm default card — white, hairline border, **no shadow**. |
-| `.surface-raised` | One soft shadow. **Main Quest and Priority 1 only.** |
-| `.eyebrow` | The uppercase micro-label. Sets `font-family` explicitly on purpose — these are often `<h2>`, which the base layer would otherwise render in the display serif. |
-| `.field-plain` | A field that looks like plain text until you touch it: transparent, borderless, with a faint hover tint and a primary-tinted focus. |
-| `.strike-done` | Completed items — a thin, low-contrast strikethrough, not a colour change. |
+| Utility | Where | What it is |
+| --- | --- | --- |
+| `.paper-page` | **Focus only** | Ruled lines every 28px, warm gradient, layered shadow. The strongest journal treatment. |
+| `.surface` / `.surface-raised` | **Today** | Warm paper with a hairline border. `-raised` is Main Quest, Priority 1, the running block. |
+| `.paper-panel` | **Dense content** | Warm paper *without* rules — schedule, action lists, check-in grid. |
+| `.surface-quiet` | **Week / Quarter** | Flat card, no shadow — lighter as you go up the hierarchy. |
+
+Ruled lines (`.rule-lines`, and those baked into `.paper-page`) go **only** on roomy writing
+surfaces — the focus card, Today's notes. Never behind a schedule, a grid, a list or a form; at
+those densities they fight the rows. Dense content gets `.paper-panel`.
+
+Also: `.eyebrow` (sets `font-family` explicitly on purpose — these are often `<h2>`, which the
+base layer would render in the display serif), `.field-plain`, `.strike-done`, `.ink-highlight`.
+
+## Buttons are four utilities — never hand-rolled
+
+`.btn` owns shape, padding and transition. Compose `.btn-primary` (amber gradient), `.btn-quiet`
+(bordered card), `.btn-ghost` (text only), `.btn-sm`, and `.btn-icon` for square icon buttons.
+There are zero literal `rounded-md px-… py-…` button strings left; adding one back is a regression.
+
+**Never reach for `p-0` to square off a button** — utility order inside `@layer utilities` is not
+guaranteed, `.btn`'s padding can win, and a 32px button then has zero content width with an
+invisible icon. Use `.btn-icon`. Also on the system: `.display`, `.nav-link`, `.field-select`,
+`.card-dashed`, `.skeleton`.
 
 ## Hierarchy is enforced by size and weight, not colour
 

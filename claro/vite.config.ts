@@ -11,7 +11,9 @@ export default defineConfig({
   plugins: [
     tsConfigPaths({ projects: ["./tsconfig.json"] }),
     tailwindcss(),
-    tanstackStart(),
+    // Colocated route tests (src/routes/*.test.ts) are tests, not routes — without
+    // this the generator scans them and warns that they export no Route.
+    tanstackStart({ router: { routeFileIgnorePattern: "\\.test\\.tsx?$" } }),
     viteReact(),
   ],
 });

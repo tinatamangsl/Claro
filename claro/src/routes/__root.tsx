@@ -23,7 +23,7 @@ export const Route = createRootRoute({
         content:
           "A clarity operating system. Set your direction for the quarter, commit to it weekly, and execute today.",
       },
-      { name: "theme-color", content: "#faf9f7" },
+      { name: "theme-color", content: "#f8f5f2" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -34,7 +34,7 @@ export const Route = createRootRoute({
         href:
           "data:image/svg+xml," +
           encodeURIComponent(
-            `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#14110E"/><circle cx="16" cy="16" r="6" fill="none" stroke="#E0B267" stroke-width="2.5"/></svg>`,
+            `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#191410"/><circle cx="16" cy="16" r="6" fill="none" stroke="#E89B6D" stroke-width="2.5"/></svg>`,
           ),
       },
     ],
@@ -63,7 +63,19 @@ function RootComponent() {
   return (
     <ClaroProvider>
       <Outlet />
-      <Toaster position="bottom-right" toastOptions={{ className: "text-sm" }} />
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          // Toasts are paper too — never sonner's default white-on-grey.
+          classNames: {
+            toast: "surface text-sm text-foreground",
+            title: "font-medium",
+            description: "text-muted-foreground",
+            actionButton: "btn btn-sm btn-primary",
+            cancelButton: "btn btn-sm btn-quiet",
+          },
+        }}
+      />
     </ClaroProvider>
   );
 }
@@ -80,8 +92,8 @@ function CenteredNotice({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center px-6">
-      <div className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center px-5 sm:px-6">
+      <div className="paper-page w-full max-w-md p-7 sm:p-9">
         <div className="eyebrow">{eyebrow}</div>
         <h1 className="mt-3 text-4xl">{title}</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{body}</p>
@@ -100,13 +112,13 @@ function NotFoundComponent() {
     >
       <Link
         to="/today"
-        className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-85"
+        className="btn btn-primary"
       >
         Go to Today
       </Link>
       <Link
         to="/quarter"
-        className="rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
+        className="btn btn-quiet"
       >
         Go to Quarter
       </Link>
@@ -128,13 +140,13 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           router.invalidate();
           reset();
         }}
-        className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-85"
+        className="btn btn-primary"
       >
         Try again
       </button>
       <a
         href="/today"
-        className="rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
+        className="btn btn-quiet"
       >
         Reload Today
       </a>

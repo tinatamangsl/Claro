@@ -50,7 +50,7 @@ export function PeriodHeader({
           <button
             type="button"
             onClick={onToday}
-            className="mr-1 rounded-md border border-border px-2.5 py-1.5 text-[0.78rem] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="btn btn-sm btn-quiet mr-1"
           >
             {todayLabel}
           </button>
@@ -80,7 +80,7 @@ function NavButton({
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="grid h-8 w-8 place-items-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      className="btn btn-quiet btn-icon"
     >
       {children}
     </button>
