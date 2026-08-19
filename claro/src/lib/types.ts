@@ -1,6 +1,6 @@
 /** The Claro domain model. Everything here is plain data — no React, no dates library. */
 
-export const CLARO_SCHEMA_VERSION = 3;
+export const CLARO_SCHEMA_VERSION = 4;
 
 export const MAX_SIDE_QUESTS = 3;
 export const MAX_WEEK_ACTIONS = 3;
@@ -211,12 +211,35 @@ export type FocusPhase =
 /** Priorities are fixed slots on a day, so `(dayId, rank)` is their stable key. */
 export type PriorityRef = { dayId: ISODate; rank: PriorityRank };
 
+/**
+ * What a focus session is for. A session can be started from any level of the
+ * hierarchy, so the target names the level as well as the record — and carries
+ * a snapshot of the title, so the log still reads honestly after the goal is
+ * edited or deleted.
+ */
+export type FocusTargetRef =
+  | { kind: "priority"; dayId: ISODate; rank: PriorityRank; title: string }
+  | { kind: "weekAction"; weekId: WeekId; domain: Domain; actionId: string; title: string }
+  | { kind: "weekGoal"; weekId: WeekId; domain: Domain; title: string }
+  | { kind: "mainQuest"; quarterId: QuarterId; domain: Domain; title: string }
+  | { kind: "sideQuest"; quarterId: QuarterId; domain: Domain; questId: string; title: string }
+  /** Started from the header with nothing selected. */
+  | { kind: "open"; title: string };
+
+export const focusTargetTitle = (target: FocusTargetRef | null): string =>
+  target?.title.trim() ?? "";
+
 export type FocusSession = {
   id: string;
   /** The local day the session was started on. */
   dayId: ISODate;
-  /** What the session is for. Null when no priority was set at the time. */
+  /**
+   * Kept for the records written before focus could target anything but a
+   * priority. `target` is the field to read; this one is never written now.
+   */
   priority: PriorityRef | null;
+  /** What the session is for, at any level of the hierarchy. */
+  target: FocusTargetRef | null;
   /** A snapshot of the priority text, so the record still reads honestly later. */
   intention: string;
   plannedMs: number;
@@ -293,6 +316,8 @@ export type Habit = {
   createdAt: string;
   /** Archived habits keep their history but leave the weekly view. */
   archivedAt: string | null;
+  /** Explicit position. Absent on habits created before reordering existed. */
+  order?: number;
 };
 
 /** Keyed `${habitId}:${dayId}` — one completion per habit per day. */

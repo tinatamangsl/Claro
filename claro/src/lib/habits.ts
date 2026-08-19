@@ -9,10 +9,10 @@
 import { newId } from "./id";
 import { habitCompletionId, type Habit, type HabitCompletion, type ISODate } from "./types";
 
-export function createHabit(name: string, now: Date): Habit | null {
+export function createHabit(name: string, now: Date, order = 0): Habit | null {
   const trimmed = name.trim();
   if (!trimmed) return null;
-  return { id: newId(), name: trimmed, createdAt: now.toISOString(), archivedAt: null };
+  return { id: newId(), name: trimmed, createdAt: now.toISOString(), archivedAt: null, order };
 }
 
 /** Archived habits keep their history but leave the weekly view. */
@@ -24,16 +24,31 @@ export function restoreHabit(habit: Habit): Habit {
   return { ...habit, archivedAt: null };
 }
 
+/**
+ * Explicit order first, creation date as the tiebreak — so habits saved before
+ * reordering existed keep exactly the order they already had.
+ */
+function byOrder(a: Habit, b: Habit): number {
+  const left = a.order ?? Number.MAX_SAFE_INTEGER;
+  const right = b.order ?? Number.MAX_SAFE_INTEGER;
+  return left === right ? a.createdAt.localeCompare(b.createdAt) : left - right;
+}
+
 export function activeHabits(habits: Record<string, Habit>): Habit[] {
-  return Object.values(habits)
-    .filter((h) => h.archivedAt === null)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return Object.values(habits).filter((h) => h.archivedAt === null).sort(byOrder);
+}
+
+/** Renumbers from an explicit sequence, so a reorder survives a reload. */
+export function reorderHabits(habits: Habit[]): Record<string, Partial<Habit>> {
+  const patches: Record<string, Partial<Habit>> = {};
+  habits.forEach((habit, index) => {
+    if (habit.order !== index) patches[habit.id] = { order: index };
+  });
+  return patches;
 }
 
 export function archivedHabits(habits: Record<string, Habit>): Habit[] {
-  return Object.values(habits)
-    .filter((h) => h.archivedAt !== null)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return Object.values(habits).filter((h) => h.archivedAt !== null).sort(byOrder);
 }
 
 export function isDoneOn(

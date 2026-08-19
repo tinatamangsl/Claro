@@ -4,15 +4,16 @@ import { useEffect, useMemo } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { EditableText } from "@/components/EditableText";
-import { BucketColumn } from "@/components/today/ActionLists";
+import { ActionLists } from "@/components/today/ActionLists";
 import { CarriedForwardBlock } from "@/components/today/CarriedForwardBlock";
 import { FocusView } from "@/components/today/FocusView";
 import { HabitsBlock } from "@/components/today/HabitsBlock";
-import { NonNegotiablesBlock } from "@/components/today/NonNegotiablesBlock";
 import { PrioritiesBlock } from "@/components/today/PrioritiesBlock";
 import { ScheduleBlock } from "@/components/today/ScheduleBlock";
 import { WellbeingBlock } from "@/components/today/WellbeingBlock";
 import { useClaro } from "@/lib/claro-store";
+import { useFocusSession } from "@/hooks/use-focus-session";
+import { blankPriority } from "@/lib/storage";
 import {
   formatDayDate,
   formatDayWeekday,
@@ -24,7 +25,7 @@ import {
   weekOfDay,
 } from "@/lib/dates";
 import { parkDistraction, selectFocus } from "@/lib/focus";
-import { createHabit } from "@/lib/habits";
+import { activeHabits, createHabit, reorderHabits } from "@/lib/habits";
 import { writePriority } from "@/lib/priorities";
 import {
   keepCarriedAsAction,
@@ -32,25 +33,20 @@ import {
   promoteCarried,
 } from "@/lib/rollover";
 import {
-  beginReturnBlock,
-  closeSession,
-  createInterruption,
-  endBlockNow,
   formatRemaining,
-  isCounting,
   isSessionOpen,
-  localTimeZone,
   mainElapsedMs,
-  markDistracted,
-  pauseSession,
-  resumeFocus,
-  settleSession,
-  startFocusSession,
 } from "@/lib/focus-session";
-import { useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/utils";
-import { priorityKey } from "@/lib/types";
-import type { Day, FocusSession, ISODate, Priority, PriorityKey } from "@/lib/types";
+import { FOCUS_BLOCK_MS, PRIORITY_KEYS, priorityKey } from "@/lib/types";
+import type {
+  Day,
+  FocusSession,
+  ISODate,
+  Priority,
+  PriorityKey,
+  PriorityRank,
+} from "@/lib/types";
 
 /** `?focus`, `?focus=1` and `?focus=true` all mean the same thing. */
 const FOCUS_VALUES = new Set<unknown>([true, "", "1", "true"]);
@@ -94,7 +90,7 @@ function TodayView() {
     deleteHabit,
     toggleHabitDone,
   } = useClaro();
-  const { d, focus } = Route.useSearch();
+  const { d, focus: focusMode } = Route.useSearch();
   const navigate = useNavigate();
 
   const dayId: ISODate = d ?? today;
@@ -105,43 +101,8 @@ function TodayView() {
   const parentWeek = week(weekId);
   const parentQuarter = quarter(quarterId);
 
-  // The app's only timer. It ticks solely while something is actually counting.
-  const now = useNow(activeSession && isCounting(activeSession) ? 1000 : null);
-
-  // Displayed state is settled immediately; the commit follows in the effect.
-  const session = activeSession && now ? settleSession(activeSession, now) : activeSession;
-
-  /**
-   * The interruption still waiting to be resolved. Derived from the store rather
-   * than held in component state, so a refresh mid-interruption loses nothing.
-   */
-  const openInterruption = useMemo(() => {
-    if (!session) return null;
-    return (
-      Object.values(state.interruptions)
-        .filter((i) => i.focusSessionId === session.id && i.returnedAt === null)
-        .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt))
-        .at(-1) ?? null
-    );
-  }, [session, state.interruptions]);
-
-  // Advance the machine for time that really passed, including while the tab
-  // was closed. `settleSession` is idempotent, so this is a no-op most ticks.
-  useEffect(() => {
-    if (!now || !activeSession) return;
-    if (settleSession(activeSession, now) === activeSession) return;
-
-    // Settle whatever is current at commit time, not the copy captured above —
-    // the user may have hit "I got distracted" between render and this effect.
-    updateSession((s) => settleSession(s, now));
-
-    // A return block handing back counts as having come back.
-    if (activeSession.phase === "returning" && openInterruption) {
-      updateInterruption(openInterruption.id, {
-        returnedAt: activeSession.returnBlockEndsAt ?? now.toISOString(),
-      });
-    }
-  }, [now, activeSession, openInterruption, updateSession, updateInterruption]);
+  const focus = useFocusSession();
+  const { session, now, openInterruption } = focus;
 
   const go = (id: ISODate) => navigate({ to: "/today", search: { d: id } });
   const patch = (p: Partial<Day>) => updateDay(dayId, (current) => ({ ...current, ...p }));
@@ -156,92 +117,71 @@ function TodayView() {
   const enterFocus = () => navigate({ to: "/today", search: { focus: true } });
   const leaveFocus = () => navigate({ to: "/today", search: {} });
 
+  /** Starts a block on one of the day's three priorities, from anywhere on the page. */
+  const focusOnPriority = (rank: PriorityRank, plannedMs = FOCUS_BLOCK_MS) => {
+    const priority = record[priorityKey(rank)];
+    focus.start(
+      { kind: "priority", dayId, rank, title: priority.text },
+      plannedMs,
+    );
+    enterFocus();
+  };
+
   const beginBlock = (plannedMs: number) => {
     const target = selectFocus(record);
-    const intention =
-      target.kind === "priority"
-        ? target.priority.text
-        : target.kind === "done"
-          ? (target.next?.text ?? "")
-          : "";
-
-    startSession(
-      startFocusSession({
-        dayId,
-        priority: target.kind === "priority" ? { dayId, rank: target.rank } : null,
-        intention,
+    if (target.kind === "priority") {
+      focus.start(
+        { kind: "priority", dayId, rank: target.rank, title: target.priority.text },
         plannedMs,
-        now: new Date(),
-        timeZone: localTimeZone(),
-      }),
-    );
-  };
-
-  const reportDistraction = () => {
-    if (!session) return;
-    const at = new Date();
-    updateSession((s) => markDistracted(s, at));
-    logInterruption(createInterruption({ session, now: at, timeZone: localTimeZone() }));
-  };
-
-  const pauseBlock = () => updateSession((s) => pauseSession(s, new Date()));
-  const resumeBlock = () => updateSession((s) => resumeFocus(s, new Date()));
-  const endBlock = () => updateSession((s) => endBlockNow(s, new Date()));
-
-  const takeReturnBlock = () => {
-    updateSession((s) => beginReturnBlock(s, new Date()));
-    if (openInterruption) updateInterruption(openInterruption.id, { returnBlockStarted: true });
-  };
-
-  const resumeNow = () => {
-    const at = new Date();
-    updateSession((s) => resumeFocus(s, at));
-    if (openInterruption) {
-      updateInterruption(openInterruption.id, { returnedAt: at.toISOString() });
+      );
+      return;
     }
+    const title = target.kind === "done" ? (target.next?.text ?? "") : "";
+    focus.start(title ? { kind: "open", title } : null, plannedMs);
   };
 
   /** The only path to a completed priority is this explicit choice. */
   const completePriority = () => {
-    if (session?.priority) patchPriority(priorityKey(session.priority.rank), { done: true });
-    updateSession((s) => closeSession(s, "completed", new Date()));
-    clearActiveSession();
+    const target = session?.target;
+    if (target?.kind === "priority") {
+      patchPriority(priorityKey(target.rank), { done: true });
+    } else if (session?.priority) {
+      patchPriority(priorityKey(session.priority.rank), { done: true });
+    }
+    focus.close("completed");
   };
 
   const continueWorking = () => {
     const plannedMs = session?.plannedMs ?? 0;
-    updateSession((s) => closeSession(s, "continued", new Date()));
-    clearActiveSession();
-    if (plannedMs > 0) beginBlock(plannedMs);
+    const target = session?.target ?? null;
+    focus.close("continued");
+    if (plannedMs > 0) focus.start(target, plannedMs);
   };
 
   const leaveFinishedBlock = () => {
-    updateSession((s) => closeSession(s, "left", new Date()));
-    clearActiveSession();
+    focus.close("left");
     leaveFocus();
   };
 
   // Returning to focus is about now — it isn't offered while browsing another day.
-  if (focus && dayId === today) {
+  if (focusMode && dayId === today) {
     return (
       <FocusView
         day={record}
         week={parentWeek}
-        quarter={quarter(quarterId)}
+        quarter={parentQuarter}
         session={session}
         openInterruption={openInterruption}
         now={now}
         onPatchPriority={patchPriority}
         onStart={beginBlock}
-        onDistracted={reportDistraction}
-        onPause={pauseBlock}
-        onResumeBlock={resumeBlock}
-        onEnd={endBlock}
-        onChooseReason={(reason) => {
-          if (openInterruption) updateInterruption(openInterruption.id, { reason });
-        }}
-        onReturnBlock={takeReturnBlock}
-        onResume={resumeNow}
+        onDistracted={focus.distracted}
+        onPause={focus.pause}
+        onResumeBlock={focus.resume}
+        onEnd={focus.endBlock}
+        onChooseReason={focus.chooseReason}
+        onReturnBlock={focus.takeReturnBlock}
+        onResume={focus.resumeAfterInterruption}
         onComplete={completePriority}
         onContinue={continueWorking}
         onLeave={leaveFinishedBlock}
@@ -252,25 +192,29 @@ function TodayView() {
   }
 
   const live = isSessionOpen(session) ? session : null;
-  const actions = (next: typeof record.actions) => patch({ actions: next });
+
+  /** A reorder rewrites all three slots at once, keeping each slot's identity. */
+  const reorderPriorities = (next: Priority[]) =>
+    updateDay(dayId, (current) => {
+      const rewritten = { ...current };
+      PRIORITY_KEYS.forEach((key, index) => {
+        rewritten[key] = next[index] ?? blankPriority();
+      });
+      return rewritten;
+    });
 
   return (
-    /*
-      On a laptop the whole day is one screen: the outer column is pinned to the
-      viewport, and the four inner columns take what is left. Below `lg` the
-      height cap is dropped entirely and everything simply stacks and flows.
-    */
-    <div className="flex flex-col gap-4 lg:h-[calc(100vh-14.5rem)] lg:min-h-[36rem]">
+    <div className="space-y-5">
       {live && dayId === today && (
         <FocusStrip session={live} now={now} onOpen={enterFocus} />
       )}
 
       {/*
-        One notebook opened flat: two pages, two columns each. A phone gets the
-        same content in the same order, stacked.
+        One notebook opened flat. The day's three priorities run across the top
+        of the sheet, above both pages — everything else is what supports them.
       */}
-      <div className="spread lg:min-h-0 lg:flex-1">
-        <div className="spread-page flex min-h-0 flex-col gap-4">
+      <div className="spread">
+        <div className="spread-band">
           <DayHeading
             dayId={dayId}
             today={today}
@@ -281,32 +225,7 @@ function TodayView() {
             onToday={dayId !== today ? () => go(today) : undefined}
           />
 
-          <div className="grid min-h-0 flex-1 gap-5 sm:grid-cols-[1.05fr_1fr]">
-            <ScheduleBlock
-              day={record}
-              onChange={(scheduleItems) => patch({ scheduleItems })}
-              className="min-h-0"
-            />
-
-            <div className="flex min-h-0 flex-col gap-4">
-              <BucketColumn
-                bucket="quickTick"
-                actions={record.actions}
-                onChange={actions}
-                className="min-h-0 flex-1"
-              />
-              <NonNegotiablesBlock
-                day={record}
-                onChange={(nonNegotiables) => patch({ nonNegotiables })}
-              />
-            </div>
-          </div>
-
-          <WellbeingBlock day={record} onPatch={patch} />
-        </div>
-
-        <div className="spread-page spread-seam flex min-h-0 flex-col gap-3">
-          <section className="shrink-0">
+          <section className="mt-4">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <h2 className="eyebrow">One day, three clear priorities</h2>
               {dayId === today && !live && (
@@ -320,11 +239,18 @@ function TodayView() {
               )}
             </div>
 
-            <PrioritiesBlock day={record} quarter={parentQuarter} onPatch={patchPriority} />
+            <PrioritiesBlock
+              day={record}
+              quarter={parentQuarter}
+              onPatch={patchPriority}
+              onReorder={reorderPriorities}
+              onFocus={dayId === today ? () => enterFocus() : undefined}
+            />
           </section>
 
           <CarriedForwardBlock
             day={record}
+            className="mt-5"
             onPromote={(itemId) => updateDay(dayId, (current) => promoteCarried(current, itemId))}
             onKeepAsAction={(itemId) =>
               updateDay(dayId, (current) => keepCarriedAsAction(current, itemId, new Date()))
@@ -332,48 +258,72 @@ function TodayView() {
             onSchedule={(itemId, toDayId) => moveCarried(dayId, toDayId, itemId)}
             onLetGo={(itemId) => updateDay(dayId, (current) => letGoCarried(current, itemId))}
           />
+        </div>
 
-          <div className="grid min-h-0 flex-1 gap-5 sm:grid-cols-2 lg:min-h-[8.5rem]">
-            <BucketColumn bucket="task" actions={record.actions} onChange={actions} />
-            <BucketColumn bucket="project" actions={record.actions} onChange={actions} />
+        <div className="spread-pages">
+          <div className="spread-page flex flex-col gap-6">
+            <ScheduleBlock
+              day={record}
+              onChange={(scheduleItems) => patch({ scheduleItems })}
+            />
+            <WellbeingBlock day={record} onPatch={patch} />
+
+            <section>
+              <div className="flex items-baseline gap-2">
+                <h2 className="eyebrow">Notes</h2>
+                <span className="text-[10px] text-muted-foreground">anything worth keeping</span>
+              </div>
+              {/* A writing surface, so the page's rules earn their place here. */}
+              <div className="paper-panel rule-lines mt-2 px-3 py-2">
+                <EditableText
+                  value={record.notes}
+                  onCommit={(notes) => patch({ notes })}
+                  multiline
+                  rows={3}
+                  ariaLabel="Notes for today"
+                  placeholder="How did today actually go?"
+                  className="-ml-2 text-[0.88rem] leading-[26px]"
+                />
+              </div>
+            </section>
           </div>
 
-          <HabitsBlock
-            habits={state.habits}
-            completions={state.habitCompletions}
-            dayId={dayId}
-            weekDayIds={weekDayIds(weekId)}
-            todayId={today}
-            onAdd={(name) => {
-              const habit = createHabit(name, new Date());
-              if (habit) addHabit(habit);
-            }}
-            onToggle={(habitId, on) => toggleHabitDone(habitId, on, new Date())}
-            onArchive={(habitId) =>
-              patchHabit(habitId, { archivedAt: new Date().toISOString() })
-            }
-            onRestore={(habitId) => patchHabit(habitId, { archivedAt: null })}
-            onDelete={deleteHabit}
-          />
-
-          <section className="shrink-0">
-            <div className="flex items-baseline gap-2">
-              <h2 className="eyebrow">Notes</h2>
-              <span className="text-[10px] text-muted-foreground">anything worth keeping</span>
-            </div>
-            {/* A writing surface, so the page's rules earn their place here. */}
-            <div className="paper-panel rule-lines mt-2 px-3 py-1.5">
-              <EditableText
-                value={record.notes}
-                onCommit={(notes) => patch({ notes })}
-                multiline
-                rows={2}
-                ariaLabel="Notes for today"
-                placeholder="How did today actually go?"
-                className="-ml-2 py-0.5 text-[0.82rem] leading-[22px]"
+          <div className="spread-page spread-seam flex flex-col gap-6">
+            <section>
+              <div className="flex items-baseline gap-2">
+                <h2 className="eyebrow">Actions</h2>
+                <span className="text-[10px] text-muted-foreground">grouped by effort</span>
+              </div>
+              <ActionLists
+                actions={record.actions}
+                onChange={(actions) => patch({ actions })}
+                className="mt-2"
               />
-            </div>
-          </section>
+            </section>
+
+            <HabitsBlock
+              habits={state.habits}
+              completions={state.habitCompletions}
+              dayId={dayId}
+              weekDayIds={weekDayIds(weekId)}
+              todayId={today}
+              onAdd={(name) => {
+                const habit = createHabit(name, new Date(), activeHabits(state.habits).length);
+                if (habit) addHabit(habit);
+              }}
+              onReorder={(next) => {
+                for (const [id, patchValue] of Object.entries(reorderHabits(next))) {
+                  patchHabit(id, patchValue);
+                }
+              }}
+              onToggle={(habitId, on) => toggleHabitDone(habitId, on, new Date())}
+              onArchive={(habitId) =>
+                patchHabit(habitId, { archivedAt: new Date().toISOString() })
+              }
+              onRestore={(habitId) => patchHabit(habitId, { archivedAt: null })}
+              onDelete={deleteHabit}
+            />
+          </div>
         </div>
       </div>
     </div>

@@ -1,6 +1,11 @@
+import { ChevronDown } from "lucide-react";
+
 import { CheckToggle } from "@/components/CheckToggle";
+import { DragHandle } from "@/components/DragHandle";
 import { EditableText } from "@/components/EditableText";
 import { GoalTag } from "@/components/GoalTag";
+import { SortAnnouncer } from "@/components/SortAnnouncer";
+import { useSortable } from "@/hooks/use-sortable";
 import { formatDayShort } from "@/lib/dates";
 import { goalKey, goalOptions, parseGoalKey, resolveGoal } from "@/lib/goals";
 import { cn } from "@/lib/utils";
@@ -9,6 +14,7 @@ import {
   PRIORITY_RANKS,
   priorityKey,
   type Day,
+  type GoalRef,
   type Priority,
   type PriorityKey,
   type PriorityRank,
@@ -19,25 +25,57 @@ type Props = {
   day: Day;
   quarter: Quarter;
   onPatch: (key: PriorityKey, patch: Partial<Priority>) => void;
+  /** Rewrites all three slots at once — how a reorder is expressed. */
+  onReorder: (priorities: Priority[]) => void;
+  onFocus?: (rank: PriorityRank) => void;
 };
+
+/** The three slots as a list, so they can be reordered like one. */
+type Slot = { id: string; rank: PriorityRank; priority: Priority };
 
 /**
  * One day, three clear priorities — written as entries on the page that holds
- * them, not as cards. Priority 1 dominates by size and by the gold mark; two
- * and three sit level with each other beneath it.
+ * them, not as cards. Priority 1 dominates by size and by the gold mark.
+ *
+ * Text wraps rather than truncating: a priority you cannot read is not a
+ * priority. Goal context is the tag alone — the Main Quest's full text already
+ * lives on Quarter, and repeating it here just crowds the day.
  */
-export function PrioritiesBlock({ day, quarter, onPatch }: Props) {
+export function PrioritiesBlock({ day, quarter, onPatch, onReorder, onFocus }: Props) {
+  const slots: Slot[] = PRIORITY_RANKS.map((rank) => ({
+    // Rank is the stable slot identity; a blank slot still needs to be a target.
+    id: `slot-${rank}`,
+    rank,
+    priority: day[priorityKey(rank)],
+  }));
+
+  const sortable = useSortable<Slot>({
+    items: slots,
+    label: (slot) => slot.priority.text || `priority ${slot.rank}`,
+    onReorder: (next) => onReorder(next.map((slot) => slot.priority)),
+  });
+
   return (
     <div className="mt-2 space-y-1.5">
-      {PRIORITY_RANKS.map((rank, index) => (
-        <div key={rank}>
+      <SortAnnouncer message={sortable.announcement} />
+
+      {sortable.ordered.map((slot, index) => (
+        <div key={slot.id} ref={sortable.itemRef(slot.id)}>
           {index > 0 && <div aria-hidden className="mb-1.5 h-px bg-border/70" />}
           <PriorityEntry
-            rank={rank}
+            rank={(index + 1) as PriorityRank}
             dayId={day.id}
-            priority={day[priorityKey(rank)]}
+            priority={slot.priority}
             quarter={quarter}
-            onPatch={(patch) => onPatch(priorityKey(rank), patch)}
+            dragging={sortable.draggingId === slot.id}
+            handle={
+              <DragHandle
+                {...sortable.handleProps(slot)}
+                dragging={sortable.draggingId === slot.id}
+              />
+            }
+            onPatch={(patch) => onPatch(priorityKey((index + 1) as PriorityRank), patch)}
+            onFocus={onFocus ? () => onFocus((index + 1) as PriorityRank) : undefined}
           />
         </div>
       ))}
@@ -50,20 +88,33 @@ function PriorityEntry({
   dayId,
   priority,
   quarter,
+  handle,
+  dragging,
   onPatch,
+  onFocus,
 }: {
   rank: PriorityRank;
   dayId: string;
   priority: Priority;
   quarter: Quarter;
+  handle: React.ReactNode;
+  dragging: boolean;
   onPatch: (patch: Partial<Priority>) => void;
+  onFocus?: () => void;
 }) {
   const primary = rank === 1;
   const carriedFrom =
     priority.originDayId && priority.originDayId !== dayId ? priority.originDayId : null;
 
   return (
-    <div className="flex items-start gap-2.5">
+    <div
+      className={cn(
+        "group flex items-start gap-2 rounded-md transition-shadow",
+        dragging && "bg-card/80 shadow-[0_8px_24px_-12px_hsl(30_22%_8%/0.3)]",
+      )}
+    >
+      {handle}
+
       <div className="flex items-center gap-2 pt-0.5">
         <span
           aria-hidden
@@ -82,10 +133,11 @@ function PriorityEntry({
         />
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+      <div className="min-w-0 flex-1">
         <EditableText
           value={priority.text}
           onCommit={(text) => onPatch({ text })}
+          wrap
           ariaLabel={`Priority ${rank}`}
           placeholder={
             primary
@@ -95,26 +147,42 @@ function PriorityEntry({
                 : "A third priority (optional)"
           }
           className={cn(
-            "-ml-2 min-w-[9rem] flex-1 py-0.5 display",
+            "-ml-2 py-0.5 display",
             primary ? "text-[1.35rem] sm:text-[1.5rem]" : "text-[1.05rem]",
             priority.done && "strike-done text-muted-foreground",
           )}
         />
 
-        <GoalPicker priority={priority} quarter={quarter} onPatch={onPatch} rank={rank} />
-        {carriedFrom && (
-          <span className="shrink-0 text-[10px] text-muted-foreground">
-            Carried from {formatDayShort(carriedFrom)}
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-0.5">
+          <GoalPicker priority={priority} quarter={quarter} onPatch={onPatch} rank={rank} />
+          {carriedFrom && (
+            <span className="text-[10px] text-muted-foreground">
+              Carried from {formatDayShort(carriedFrom)}
+            </span>
+          )}
+          {onFocus && priority.text.trim() !== "" && !priority.done && (
+            <button
+              type="button"
+              onClick={onFocus}
+              className="text-[10px] text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+            >
+              Focus on this
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 /**
- * Ties a priority to any one goal in the quarter — a Main Quest or a Side
- * Quest, on either side of life — making the ladder explicit.
+ * Ties a priority to any one goal in the quarter.
+ *
+ * The goal's own words appear exactly once. A native `<select>` always renders
+ * its chosen option's text, so showing the tag *and* the select repeated the
+ * Main Quest twice on the same line — instead the tag is the visible control
+ * and the real select sits transparently over it, keeping the keyboard and
+ * screen-reader behaviour a plain select already has.
  */
 function GoalPicker({
   priority,
@@ -129,18 +197,26 @@ function GoalPicker({
 }) {
   const options = goalOptions(quarter);
   const linked = resolveGoal(priority.goal, quarter);
-  const value = priority.goal ? goalKey(priority.goal) : "";
 
   return (
-    <>
+    <span className="relative inline-flex max-w-full items-center">
+      {linked ? (
+        <GoalTag category={linked.category} title={linked.title} short />
+      ) : (
+        <span className="field-select inline-flex items-center gap-1 border border-dashed border-border">
+          {priority.goal ? "That goal is no longer set" : "Link a goal"}
+          <ChevronDown aria-hidden className="h-3 w-3" />
+        </span>
+      )}
+
       <label className="sr-only" htmlFor={`priority-${rank}-goal`}>
         Link priority {rank} to a goal
       </label>
       <select
         id={`priority-${rank}-goal`}
-        value={linked ? value : ""}
+        value={linked ? goalKey(priority.goal as GoalRef) : ""}
         onChange={(e) => onPatch({ goal: parseGoalKey(e.target.value) })}
-        className={cn("field-select", linked && "field-select-active")}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
       >
         <option value="">No linked goal</option>
         {options.map((option) => (
@@ -149,11 +225,6 @@ function GoalPicker({
           </option>
         ))}
       </select>
-
-      {linked && <GoalTag category={linked.category} title={linked.title} short />}
-      {priority.goal && !linked && (
-        <span className="text-[11px] text-muted-foreground">↳ that goal is no longer set</span>
-      )}
-    </>
+    </span>
   );
 }

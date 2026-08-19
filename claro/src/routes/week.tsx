@@ -4,7 +4,8 @@ import { ArrowUpRight } from "lucide-react";
 import { AddItem } from "@/components/AddItem";
 import { AppShell } from "@/components/AppShell";
 import { EditableText } from "@/components/EditableText";
-import { ItemRow } from "@/components/ItemRow";
+import { FocusOn } from "@/components/FocusOn";
+import { SortableRows } from "@/components/SortableRows";
 import { PeriodHeader } from "@/components/PeriodHeader";
 import { useClaro } from "@/lib/claro-store";
 import {
@@ -152,8 +153,14 @@ function WeekColumn({
       </div>
 
       <div className="mt-6">
-        <div className="eyebrow">
-          My main {domain === "work" ? "work" : "personal"} goal this week
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="eyebrow">
+            My main {domain === "work" ? "work" : "personal"} goal this week
+          </div>
+          <FocusOn
+            compact
+            target={{ kind: "weekGoal", weekId, domain, title: side.goal }}
+          />
         </div>
         <EditableText
           value={side.goal}
@@ -173,21 +180,34 @@ function WeekColumn({
             {side.actions.length}/{MAX_WEEK_ACTIONS}
           </span>
         </div>
-        <div className="mt-3 divide-y divide-subtle">
-          {side.actions.map((action) => (
-            <ItemRow
-              key={action.id}
-              text={action.text}
-              done={action.done}
-              label={`${label} weekly action`}
-              onToggle={() => patch((s) => ({ ...s, actions: toggleById(s.actions, action.id) }))}
-              onCommit={(value) =>
-                patch((s) => ({ ...s, actions: updateById(s.actions, action.id, { text: value }) }))
-              }
-              onDelete={() => patch((s) => ({ ...s, actions: removeById(s.actions, action.id) }))}
+        <SortableRows
+          items={side.actions}
+          label={`${label} weekly action`}
+          className="mt-3 divide-y divide-subtle"
+          onReorder={(actions) => patch((s) => ({ ...s, actions }))}
+          onToggle={(action) =>
+            patch((s) => ({ ...s, actions: toggleById(s.actions, action.id) }))
+          }
+          onCommit={(action, value) =>
+            patch((s) => ({ ...s, actions: updateById(s.actions, action.id, { text: value }) }))
+          }
+          onDelete={(action) =>
+            patch((s) => ({ ...s, actions: removeById(s.actions, action.id) }))
+          }
+          trailing={(action) => (
+            <FocusOn
+              compact
+              target={{
+                kind: "weekAction",
+                weekId,
+                domain,
+                actionId: action.id,
+                title: action.text,
+              }}
+              className="opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
             />
-          ))}
-        </div>
+          )}
+        />
         <div className="mt-1">
           <AddItem
             label="Add an action"

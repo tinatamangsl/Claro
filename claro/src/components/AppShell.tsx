@@ -2,6 +2,8 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import { formatQuarterShort, formatWeekNumber, quarterOfDay, weekOfDay } from "@/lib/dates";
+import { FocusControl } from "@/components/FocusControl";
+import { SoundControl } from "@/components/SoundControl";
 import { useClaro } from "@/lib/claro-store";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +12,7 @@ const NAV = [
   { to: "/today", label: "Today" },
   { to: "/week", label: "Week" },
   { to: "/quarter", label: "Quarter" },
+  { to: "/calendar", label: "Month" },
 ] as const;
 
 /**
@@ -66,8 +69,17 @@ export function AppShell({ children, wide }: { children: ReactNode; wide?: boole
             })}
           </nav>
 
-          <div className="ml-auto flex items-center sm:ml-0 sm:w-[8.5rem] sm:justify-end">
-            <SaveIndicator ready={ready} status={saveStatus} />
+          {/* One focus control and one sound engine, on every route. */}
+          <div className="ml-auto flex items-center gap-1 sm:ml-0">
+            {ready && (
+              <>
+                <FocusControl />
+                <SoundControl />
+              </>
+            )}
+            <span className="hidden lg:inline">
+              <SaveIndicator ready={ready} status={saveStatus} />
+            </span>
           </div>
         </div>
       </header>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   activeHabits,
+  reorderHabits,
   archiveHabit,
   archivedHabits,
   completedDays,
@@ -161,5 +162,50 @@ describe("deleting a habit", () => {
 
     expect(isDoneOn(pruned, "h1", "2026-08-18")).toBe(false);
     expect(isDoneOn(pruned, "h2", "2026-08-18")).toBe(true);
+  });
+});
+
+describe("ordering habits", () => {
+  const habit = (id: string, order?: number, createdAt = "2026-08-01T09:00:00.000Z") => ({
+    id,
+    name: id,
+    createdAt,
+    archivedAt: null,
+    ...(order === undefined ? {} : { order }),
+  });
+
+  it("sorts by explicit order", () => {
+    const habits = { a: habit("a", 2), b: habit("b", 0), c: habit("c", 1) };
+
+    expect(activeHabits(habits).map((h) => h.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("leaves habits saved before ordering existed in creation order", () => {
+    const habits = {
+      a: habit("a", undefined, "2026-08-03T09:00:00.000Z"),
+      b: habit("b", undefined, "2026-08-01T09:00:00.000Z"),
+    };
+
+    expect(activeHabits(habits).map((h) => h.id)).toEqual(["b", "a"]);
+  });
+
+  it("puts explicitly ordered habits before unordered ones", () => {
+    const habits = { a: habit("a"), b: habit("b", 0) };
+
+    expect(activeHabits(habits).map((h) => h.id)).toEqual(["b", "a"]);
+  });
+
+  it("renumbers only the habits whose position actually changed", () => {
+    // a is already 0 and c is already 2; only b's number is wrong for its slot.
+    const patches = reorderHabits([habit("a", 0), habit("b", 5), habit("c", 2)]);
+
+    expect(patches).toEqual({ b: { order: 1 } });
+  });
+
+  it("gives every habit an order when none had one", () => {
+    expect(reorderHabits([habit("a"), habit("b")])).toEqual({
+      a: { order: 0 },
+      b: { order: 1 },
+    });
   });
 });

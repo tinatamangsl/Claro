@@ -31,6 +31,7 @@ const completions = (...pairs: [string, string][]): Record<string, HabitCompleti
 
 const handlers = () => ({
   onAdd: vi.fn(),
+  onReorder: vi.fn(),
   onToggle: vi.fn(),
   onArchive: vi.fn(),
   onRestore: vi.fn(),
@@ -150,5 +151,57 @@ describe("HabitsBlock — the celebration", () => {
     );
 
     expect(isConfetti(container)).toBe(false);
+  });
+});
+
+describe("HabitsBlock — reordering", () => {
+  const two = { h1: habit("h1", "Meditate"), h2: habit("h22", "Walk") };
+
+  it("gives every habit a labelled grip that says how to use it", () => {
+    renderHabits({ habits: two });
+
+    expect(
+      screen.getByRole("button", { name: /Reorder Meditate\. Use the up and down arrow keys/ }),
+    ).toBeTruthy();
+  });
+
+  it("moves a habit down with the keyboard alone", () => {
+    const { spies } = renderHabits({ habits: two });
+
+    fireEvent.keyDown(screen.getByRole("button", { name: /Reorder Meditate/ }), {
+      key: "ArrowDown",
+    });
+
+    expect(spies.onReorder).toHaveBeenCalledTimes(1);
+    const [next] = spies.onReorder.mock.calls[0] as [Habit[]];
+    expect(next.map((h) => h.name)).toEqual(["Walk", "Meditate"]);
+  });
+
+  it("does not move the first habit above itself", () => {
+    const { spies } = renderHabits({ habits: two });
+
+    fireEvent.keyDown(screen.getByRole("button", { name: /Reorder Meditate/ }), {
+      key: "ArrowUp",
+    });
+
+    expect(spies.onReorder).not.toHaveBeenCalled();
+  });
+
+  it("announces where the habit landed", () => {
+    const { container } = renderHabits({ habits: two });
+
+    fireEvent.keyDown(screen.getByRole("button", { name: /Reorder Meditate/ }), {
+      key: "ArrowDown",
+    });
+
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toContain(
+      "Meditate is now 2 of 2",
+    );
+  });
+
+  it("leaves the name itself undraggable, so text stays selectable", () => {
+    const { container } = renderHabits({ habits: two });
+
+    expect(container.querySelector('[draggable="true"]')).toBeNull();
   });
 });

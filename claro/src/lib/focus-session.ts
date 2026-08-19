@@ -12,8 +12,8 @@ import {
   type FocusOutcome,
   type FocusSession,
   type ISODate,
+  type FocusTargetRef,
   type Interruption,
-  type PriorityRef,
 } from "./types";
 
 const iso = (d: Date) => d.toISOString();
@@ -30,16 +30,22 @@ export function localTimeZone(): string {
 
 export function startFocusSession(input: {
   dayId: ISODate;
-  priority: PriorityRef | null;
+  /** What the block is for, at any level of the hierarchy. */
+  target: FocusTargetRef | null;
   intention: string;
   plannedMs: number;
   now: Date;
   timeZone: string;
 }): FocusSession {
+  const target = input.target;
   return {
     id: newId(),
     dayId: input.dayId,
-    priority: input.priority,
+    // Still written for a priority target so an older build reading this store
+    // finds what it expects; `target` is what this build reads.
+    priority:
+      target?.kind === "priority" ? { dayId: target.dayId, rank: target.rank } : null,
+    target,
     intention: input.intention,
     plannedMs: input.plannedMs,
     startedAt: iso(input.now),

@@ -36,7 +36,7 @@ const withPriority = dayWith({
 const runningSession = (plannedMs = FOCUS_BLOCK_MS): FocusSession =>
   startFocusSession({
     dayId: "2026-08-18",
-    priority: { dayId: "2026-08-18", rank: 1 },
+    target: { kind: "priority", dayId: "2026-08-18", rank: 1, title: "Ship the store" },
     intention: "Ship the store",
     plannedMs,
     now: T0,
@@ -270,7 +270,7 @@ describe("when the block ends", () => {
     const loose = settleSession(
       startFocusSession({
         dayId: "2026-08-18",
-        priority: null,
+        target: null,
         intention: "Rewrite the pricing page",
         plannedMs: FOCUS_BLOCK_MS,
         now: T0,

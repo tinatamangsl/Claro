@@ -1,35 +1,79 @@
 import { AddItem } from "@/components/AddItem";
+import { DragHandle } from "@/components/DragHandle";
 import { ItemRow } from "@/components/ItemRow";
+import { SortAnnouncer } from "@/components/SortAnnouncer";
+import { useSortable } from "@/hooks/use-sortable";
 import { newId } from "@/lib/id";
 import { removeById, toggleById, updateById } from "@/lib/mutations";
-import { BUCKET_META, type ActionItem, type Bucket } from "@/lib/types";
+import { BUCKETS, BUCKET_META, type ActionItem, type Bucket } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Props = {
-  bucket: Bucket;
-  /** The whole day's actions — one array holds all three buckets. */
   actions: ActionItem[];
   onChange: (actions: ActionItem[]) => void;
   className?: string;
+  /** Renders the three buckets side by side rather than stacked. */
+  columns?: boolean;
 };
 
 /**
- * One effort bucket as its own column, so Quick Ticks, Tasks and Projects can
- * sit side by side across the spread rather than stacking into a long page.
+ * Quick Ticks, Tasks and Projects. All three read from one array discriminated
+ * by `bucket`, which is what lets an item be dragged from one to another
+ * without either list owning the data.
  *
- * All three read from the same array, discriminated by `bucket`, which is what
- * makes recategorising an item a single field change.
+ * One `useSortable` covers all three lanes, so a drag that starts in Tasks can
+ * finish in Projects. The bucket `<select>` on each row stays as the non-drag
+ * fallback, and the grip's arrow keys move between lanes too.
  */
-export function BucketColumn({ bucket, actions, onChange, className }: Props) {
+export function ActionLists({ actions, onChange, className, columns }: Props) {
+  const sortable = useSortable<ActionItem>({
+    items: actions,
+    label: (item) => item.text || BUCKET_META[item.bucket].short,
+    onReorder: onChange,
+    getGroup: (item) => item.bucket,
+    setGroup: (item, bucket) => ({ ...item, bucket: bucket as Bucket }),
+    groupNoun: "bucket",
+  });
+
+  return (
+    <div className={cn(columns ? "grid gap-5 sm:grid-cols-3" : "space-y-5", className)}>
+      <SortAnnouncer message={sortable.announcement} />
+
+      {BUCKETS.map((bucket) => (
+        <BucketColumn
+          key={bucket}
+          bucket={bucket}
+          items={sortable.ordered.filter((a) => a.bucket === bucket)}
+          allActions={actions}
+          sortable={sortable}
+          onChange={onChange}
+        />
+      ))}
+    </div>
+  );
+}
+
+function BucketColumn({
+  bucket,
+  items,
+  allActions,
+  sortable,
+  onChange,
+}: {
+  bucket: Bucket;
+  items: ActionItem[];
+  allActions: ActionItem[];
+  sortable: ReturnType<typeof useSortable<ActionItem>>;
+  onChange: (actions: ActionItem[]) => void;
+}) {
   const meta = BUCKET_META[bucket];
-  const items = actions.filter((a) => a.bucket === bucket);
   const doneCount = items.filter((i) => i.done).length;
 
   return (
-    <section className={cn("flex min-h-0 flex-col", className)}>
+    <section className="flex min-h-0 flex-col">
       <div className="flex items-baseline justify-between gap-2">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="eyebrow truncate">{meta.column}</h2>
+          <h3 className="eyebrow">{meta.column}</h3>
           <span className="shrink-0 text-[10px] text-muted-foreground">{meta.hint}</span>
         </div>
         {items.length > 0 && (
@@ -39,35 +83,48 @@ export function BucketColumn({ bucket, actions, onChange, className }: Props) {
         )}
       </div>
 
-      <div className="paper-panel scroll-pane mt-2 flex min-h-0 flex-1 flex-col px-3 py-1">
+      {/* The lane the pointer is tested against when a drag crosses buckets. */}
+      <div
+        ref={sortable.groupRef(bucket)}
+        className="paper-panel mt-2 flex min-h-0 flex-1 flex-col px-2 py-1"
+      >
         <div className="min-h-0 flex-1 divide-y divide-subtle">
           {items.map((item) => (
-            <ItemRow
-              key={item.id}
-              dense
-              text={item.text}
-              done={item.done}
-              label={meta.short}
-              onToggle={() => onChange(toggleById(actions, item.id))}
-              onCommit={(text) => onChange(updateById(actions, item.id, { text }))}
-              onDelete={() => onChange(removeById(actions, item.id))}
-              trailing={
-                <BucketSwitcher
-                  value={item.bucket}
-                  onChange={(next) => onChange(updateById(actions, item.id, { bucket: next }))}
-                  itemLabel={item.text || meta.short}
-                />
-              }
-            />
+            <div key={item.id} ref={sortable.itemRef(item.id)}>
+              <ItemRow
+                dense
+                text={item.text}
+                done={item.done}
+                label={item.text || meta.short}
+                dragging={sortable.draggingId === item.id}
+                handle={
+                  <DragHandle
+                    {...sortable.handleProps(item)}
+                    dragging={sortable.draggingId === item.id}
+                    className="mt-1"
+                  />
+                }
+                onToggle={() => onChange(toggleById(allActions, item.id))}
+                onCommit={(text) => onChange(updateById(allActions, item.id, { text }))}
+                onDelete={() => onChange(removeById(allActions, item.id))}
+                trailing={
+                  <BucketSwitcher
+                    value={item.bucket}
+                    onChange={(next) => onChange(updateById(allActions, item.id, { bucket: next }))}
+                    itemLabel={item.text || meta.short}
+                  />
+                }
+              />
+            </div>
           ))}
         </div>
 
         <AddItem
-          label={`Add to ${meta.label.toLowerCase()}`}
+          label={`Add to ${meta.column.toLowerCase()}`}
           className="shrink-0 text-[0.8rem]"
           onAdd={(text) =>
             onChange([
-              ...actions,
+              ...allActions,
               {
                 id: newId(),
                 text,
@@ -85,7 +142,7 @@ export function BucketColumn({ bucket, actions, onChange, className }: Props) {
   );
 }
 
-/** Recategorising an item is just changing its bucket. */
+/** The non-drag way to recategorise: still just changing one field. */
 function BucketSwitcher({
   value,
   onChange,
@@ -102,7 +159,7 @@ function BucketSwitcher({
       onChange={(e) => onChange(e.target.value as Bucket)}
       className="field-select w-0 shrink-0 overflow-hidden p-0 opacity-0 transition-opacity focus-visible:w-auto focus-visible:p-[0.125rem_0.375rem] focus-visible:opacity-100 group-hover:w-auto group-hover:p-[0.125rem_0.375rem] group-hover:opacity-100"
     >
-      {(["quickTick", "task", "project"] as Bucket[]).map((b) => (
+      {BUCKETS.map((b) => (
         <option key={b} value={b}>
           {BUCKET_META[b].short}
         </option>

@@ -26,7 +26,7 @@ const MINUTE = 60_000;
 const start = (plannedMs = FOCUS_BLOCK_MS): FocusSession =>
   startFocusSession({
     dayId: "2026-08-18",
-    priority: { dayId: "2026-08-18", rank: 1 },
+    target: { kind: "priority", dayId: "2026-08-18", rank: 1, title: "Ship the store" },
     intention: "Ship the store",
     plannedMs,
     now: T0,

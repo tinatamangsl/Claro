@@ -3,10 +3,12 @@ import { ArrowUp, CalendarClock, ListPlus, X } from "lucide-react";
 
 import { formatDayShort } from "@/lib/dates";
 import { firstFreePriorityKey } from "@/lib/rollover";
+import { cn } from "@/lib/utils";
 import type { CarriedItem, Day } from "@/lib/types";
 
 type Props = {
   day: Day;
+  className?: string;
   onPromote: (itemId: string) => void;
   onKeepAsAction: (itemId: string) => void;
   onSchedule: (itemId: string, toDayId: string) => void;
@@ -24,6 +26,7 @@ type Props = {
  */
 export function CarriedForwardBlock({
   day,
+  className,
   onPromote,
   onKeepAsAction,
   onSchedule,
@@ -34,7 +37,7 @@ export function CarriedForwardBlock({
   const hasFreeSlot = firstFreePriorityKey(day) !== null;
 
   return (
-    <section className="shrink-0">
+    <section className={cn("shrink-0", className)}>
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex items-baseline gap-2.5">
           <h2 className="eyebrow">Review carried forward</h2>
@@ -46,7 +49,7 @@ export function CarriedForwardBlock({
         </div>
       </div>
 
-      <div className="paper-panel scroll-pane scroll-pane-short mt-2 divide-y divide-subtle px-3">
+      <div className="paper-panel mt-2 divide-y divide-subtle px-3">
         {day.carriedForward.map((item) => (
           <CarriedRow
             key={item.id}
@@ -83,7 +86,7 @@ function CarriedRow({
   return (
     <div className="py-3">
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <span className="min-w-0 flex-1 text-[0.9rem]">{item.text}</span>
+        <span className="min-w-0 flex-1 text-[0.9rem] leading-snug">{item.text}</span>
         <span className="shrink-0 text-[11px] text-muted-foreground">
           from {formatDayShort(item.originDayId)}
         </span>

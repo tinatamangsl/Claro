@@ -3,6 +3,9 @@ import { useEffect, useRef, useState } from "react";
 
 import { AddItem } from "@/components/AddItem";
 import { Confetti } from "@/components/Confetti";
+import { DragHandle } from "@/components/DragHandle";
+import { SortAnnouncer } from "@/components/SortAnnouncer";
+import { useSortable } from "@/hooks/use-sortable";
 import { formatDayLong, formatDayOfMonth, formatWeekdayShort } from "@/lib/dates";
 import {
   activeHabits,
@@ -24,6 +27,7 @@ type Props = {
   /** The real today, so days that haven't happened yet stay un-tickable. */
   todayId: ISODate;
   onAdd: (name: string) => void;
+  onReorder: (habits: Habit[]) => void;
   onToggle: (habitId: string, dayId: ISODate) => void;
   onArchive: (habitId: string) => void;
   onRestore: (habitId: string) => void;
@@ -42,6 +46,7 @@ export function HabitsBlock({
   weekDayIds,
   todayId,
   onAdd,
+  onReorder,
   onToggle,
   onArchive,
   onRestore,
@@ -51,6 +56,12 @@ export function HabitsBlock({
   const [celebrating, setCelebrating] = useState(false);
   const active = activeHabits(habits);
   const archived = archivedHabits(habits);
+
+  const sortable = useSortable<Habit>({
+    items: active,
+    label: (habit) => habit.name,
+    onReorder,
+  });
 
   const allDone =
     active.length > 0 && active.every((habit) => isDoneOn(completions, habit.id, dayId));
@@ -85,10 +96,11 @@ export function HabitsBlock({
 
       <div className="paper-panel relative mt-2 px-3 py-0.5">
         {celebrating && <Confetti onDone={() => setCelebrating(false)} />}
+        <SortAnnouncer message={sortable.announcement} />
 
         {active.length > 0 && (
           <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-subtle py-1">
-            <span className="hidden flex-1 sm:block" />
+            <span className="hidden flex-1 sm:block" aria-hidden />
             <div className="flex w-full shrink-0 gap-1 sm:w-auto">
               {weekDayIds.map((id) => (
                 <span
@@ -111,12 +123,22 @@ export function HabitsBlock({
         )}
 
         <div className="divide-y divide-subtle">
-          {active.map((habit) => (
+          {sortable.ordered.map((habit) => (
             <div
               key={habit.id}
-              className="group flex flex-wrap items-center gap-x-3 gap-y-2 py-0.5"
+              ref={sortable.itemRef(habit.id)}
+              className={cn(
+                "group flex flex-wrap items-center gap-x-2 gap-y-2 rounded-md py-0.5",
+                sortable.draggingId === habit.id &&
+                  "bg-card/80 shadow-[0_8px_24px_-12px_hsl(30_22%_8%/0.3)]",
+              )}
             >
-              <span className="min-w-0 flex-1 truncate text-[0.9rem]">{habit.name}</span>
+              <DragHandle
+                {...sortable.handleProps(habit)}
+                dragging={sortable.draggingId === habit.id}
+              />
+              {/* Wraps rather than truncating — a habit's name is the whole label. */}
+              <span className="min-w-0 flex-1 text-[0.9rem] leading-snug">{habit.name}</span>
 
               <div className="order-last flex w-full shrink-0 gap-1 sm:order-none sm:w-auto">
                 {weekDayIds.map((id) => (

@@ -69,8 +69,13 @@ export function FocusView(props: Props) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onExit]);
 
-  const priority = session?.priority
-    ? day[priorityKey(session.priority.rank)]
+  const sessionRank =
+    session?.target?.kind === "priority"
+      ? session.target.rank
+      : (session?.priority?.rank ?? null);
+
+  const priority = sessionRank
+    ? day[priorityKey(sessionRank)]
     : target.kind === "priority"
       ? target.priority
       : null;
@@ -122,7 +127,7 @@ export function FocusView(props: Props) {
         {session && session.phase === "ended" && (
           <FocusEnd
             session={session}
-            canComplete={session.priority !== null}
+            canComplete={sessionRank !== null}
             onComplete={props.onComplete}
             onContinue={props.onContinue}
             onExit={props.onLeave}

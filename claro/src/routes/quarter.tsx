@@ -3,7 +3,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AddItem } from "@/components/AddItem";
 import { AppShell } from "@/components/AppShell";
 import { EditableText } from "@/components/EditableText";
-import { ItemRow } from "@/components/ItemRow";
+import { FocusOn } from "@/components/FocusOn";
+import { SortableRows } from "@/components/SortableRows";
 import { PeriodHeader } from "@/components/PeriodHeader";
 import { useClaro } from "@/lib/claro-store";
 import { formatQuarterMonths, formatQuarterShort, quarterOfDay, shiftQuarterId } from "@/lib/dates";
@@ -117,7 +118,13 @@ function QuarterColumn({
 
       {/* Main Quest — deliberately the loudest thing on the page. */}
       <div className="mt-6">
-        <div className="eyebrow">Main Quest</div>
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="eyebrow">Main Quest</div>
+          <FocusOn
+            compact
+            target={{ kind: "mainQuest", quarterId, domain, title: side.mainQuest }}
+          />
+        </div>
         <EditableText
           value={side.mainQuest}
           onCommit={(value) => patch((s) => ({ ...s, mainQuest: value }))}
@@ -143,21 +150,30 @@ function QuarterColumn({
             {side.sideQuests.length}/{MAX_SIDE_QUESTS}
           </span>
         </div>
-        <div className="mt-3 divide-y divide-subtle">
-          {side.sideQuests.map((sq) => (
-            <ItemRow
-              key={sq.id}
-              text={sq.text}
-              done={sq.done}
-              label={`${label} side quest`}
-              onToggle={() => patch((s) => ({ ...s, sideQuests: toggleById(s.sideQuests, sq.id) }))}
-              onCommit={(value) =>
-                patch((s) => ({ ...s, sideQuests: updateById(s.sideQuests, sq.id, { text: value }) }))
-              }
-              onDelete={() => patch((s) => ({ ...s, sideQuests: removeById(s.sideQuests, sq.id) }))}
+        <SortableRows
+          items={side.sideQuests}
+          label={`${label} side quest`}
+          className="mt-3 divide-y divide-subtle"
+          onReorder={(sideQuests) => patch((s) => ({ ...s, sideQuests }))}
+          onToggle={(sq) => patch((s) => ({ ...s, sideQuests: toggleById(s.sideQuests, sq.id) }))}
+          onCommit={(sq, value) =>
+            patch((s) => ({ ...s, sideQuests: updateById(s.sideQuests, sq.id, { text: value }) }))
+          }
+          onDelete={(sq) => patch((s) => ({ ...s, sideQuests: removeById(s.sideQuests, sq.id) }))}
+          trailing={(sq) => (
+            <FocusOn
+              compact
+              target={{
+                kind: "sideQuest",
+                quarterId,
+                domain,
+                questId: sq.id,
+                title: sq.text,
+              }}
+              className="opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
             />
-          ))}
-        </div>
+          )}
+        />
         <div className="mt-1">
           <AddItem
             label="Add a side quest"

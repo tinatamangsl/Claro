@@ -34,9 +34,14 @@ workspace; `ExampleRepo/` next door is a separate, unrelated app.
 ## What Claro is
 
 A clarity operating system for one person juggling several lives at once. Not a task manager.
-The day's copy is fixed: **"One day, three clear priorities"**, **"My three anchors"**, and
-**Habits** (never "rituals" in user-facing text; the data keys stay `habits`/`nonNegotiables`
-because renaming them would be migration risk for nothing).
+The day's copy is fixed: **"One day, three clear priorities"** and **Habits** (never "rituals" in
+user-facing text; the data key stays `habits` because renaming it would be migration risk for
+nothing).
+
+**"My three anchors" is no longer shown.** The section was removed from Today, but
+`Day.nonNegotiables` is still in the model, still migrated and still written by `blankDay` —
+existing entries are preserved untouched. Removing a feature from the UI must never quietly
+delete what people already wrote.
 
 Everything hangs off a single three-level hierarchy:
 
@@ -44,9 +49,10 @@ Everything hangs off a single three-level hierarchy:
 QUARTER  Direction    → WEEK  Commitment  → DAY  Execution
 ```
 
-Nav is exactly three items: **Today | Week | Quarter**. Resist adding a fourth. The product
-thesis is "fewer, more meaningful things", so most feature requests should be answered by
-deepening one of these three screens rather than adding a section.
+Nav is four items: **Today | Week | Quarter | Month**. Month was added deliberately, as a calm
+read-only-ish view of habit patterns and private cycle notes — it is a *review* surface, not a
+fifth planning level. The product thesis is still "fewer, more meaningful things", so answer most
+feature requests by deepening an existing screen rather than adding another.
 
 ## Architecture
 
@@ -63,6 +69,13 @@ src/lib/storage.ts      the ONLY module that touches localStorage
 src/lib/focus.ts        Return to Focus: what to return to, and where a distraction goes
 src/lib/focus-session.ts the focus session state machine — pure, now-injected, no timers
 src/lib/rollover.ts     the 10 PM carry-forward rule and the review-area decisions
+src/lib/reorder.ts      pure list movement — every drag and every keyboard nudge goes through it
+src/lib/schedule.ts     moving a schedule entry between hours, and the swap when one is taken
+src/lib/calendar.ts     month grid + habit aggregation (counts only, never a streak)
+src/lib/cycle.ts        private cycle estimates, from the user's own history and nothing else
+src/lib/sound.ts        the single generated-ambient-sound engine
+src/hooks/use-sortable.ts   pointer + keyboard reordering, group-aware
+src/hooks/use-focus-session.ts  the one canonical session, shared by every route
 src/lib/priorities.ts   where a blank priority slot acquires its identity
 src/lib/goals.ts        the one goal vocabulary — resolve and label a GoalRef
 src/lib/habits.ts       habits and their consistency counts (never streaks)
@@ -126,6 +139,55 @@ is worse than no test, because it manufactures confidence.
 Prioritise the invariants above and the decisions below — they are the things a future change is
 most likely to break unknowingly. Every one of them should have a test whose name says what rule
 it protects, so a failure explains itself.
+
+## Reordering
+
+`useSortable` is the only drag implementation, and it uses **pointer events, not HTML5
+drag-and-drop** — HTML5 DnD does not fire on touch at all, so it could never satisfy "mouse and
+touch". Three rules it exists to keep:
+
+- **Only the grip is draggable.** Text fields stay ordinary text fields, so selecting and editing
+  text still works. `DragHandle` is a real `<button>`, focusable, carrying its own instructions.
+- **Every reorder is reachable from the keyboard.** Arrow keys on the grip move an item; with
+  grouping, left/right change lane (or up/down, when the lanes are stacked — the schedule's
+  hours). Each move is announced through `SortAnnouncer`'s `aria-live` region.
+- **A drag previews locally and commits once.** `liveIds` holds the order during the gesture; the
+  store is written on pointer-up. The exception is a *lane* change, which is committed as it
+  happens, because an id order alone cannot express "this now belongs to another bucket".
+
+Habits are a keyed map, so they carry an explicit `order`; everything else is already an array.
+`activeHabits` falls back to `createdAt` when `order` is absent, so habits saved before
+reordering existed keep exactly the order they had.
+
+## Focus is global, and there is still only one session
+
+`useFocusSession` owns the canonical session and every operation on it. Today, Week, Quarter and
+the header control all go through it, and the store still holds exactly one
+`activeFocusSessionId` — starting a block from Quarter replaces the pointer, it does not add a
+clock. `FocusTargetRef` names what a block is for at any level of the hierarchy and snapshots the
+title, so the record still reads honestly after the goal is renamed or deleted.
+
+**Resolving a session never completes the work it pointed at.** `close()` writes only to the
+session. The single path to a completed priority is the explicit choice on the end screen.
+
+## Ambient sound
+
+`lib/sound.ts` synthesises filtered brown noise through the Web Audio API: no audio file, no
+catalogue, no network request, nothing to license and nothing to track. The engine is a
+module-level singleton, so moving between routes cannot start a second sound. It is started only
+from a user gesture — that is the product's rule, not just the browser's. The stored preference is
+a volume and a mute, never "resume automatically".
+
+## Private cycle notes
+
+Off until explicitly turned on, kept in its own branch of the store, and deletable in one action.
+An estimate is the **median of the gaps the user has actually logged** — never a population
+average, never a model — withheld entirely below three entries, and always labelled as an
+estimate with the number of gaps it drew on. Implausible gaps are excluded as likely mis-logs.
+
+Out of bounds, permanently: any medical, fertility, contraception, pregnancy, diagnostic,
+nutrition, supplement or symptom-treatment interpretation, and any suggestion that a phase should
+change what someone works on.
 
 ## Design decisions and why
 
@@ -293,13 +355,21 @@ Today is a **double-page spread** from `lg` up, and it is sized to **one screen*
 column is `h-[calc(100vh-14.5rem)]`, which is the header, main padding and footer measured rather
 than guessed. Four columns, as on the paper planner it is modelled on:
 
-| | left column | right column |
-| --- | --- | --- |
-| **Left page** | date, then Schedule | Quick Ticks, then My three anchors, then Check-in |
-| **Right page** | the three priorities across the top, then the carried-forward review | Tasks and Projects side by side, then Habits, then Notes |
+**The day's three priorities run across the top of the sheet**, in a full-width `.spread-band`
+above both pages — they are what the rest of the page is in service of. Below that,
+`.spread-pages` is the two-page grid: **left** carries Schedule, Check-in and Notes; **right**
+carries the three action buckets and Habits.
 
 A live focus session gets a calm full-width strip *above* the spread. `AppShell` takes a `wide`
 prop that opens header, main and footer to `.page-wide` together.
+
+**Text wraps; it is never clipped.** List rows use `EditableText`'s `wrap` mode — a one-line
+textarea that grows, because an `<input>` cannot wrap at any width. Enter still commits. Do not
+reach for `truncate` on anything a user wrote.
+
+**Goal context appears exactly once.** A native `<select>` always renders its chosen option's
+text, so showing the tag *and* the select printed the Main Quest twice on one line. The tag is
+the visible control; the real select sits transparently over it.
 
 **Density is the whole design here, and it is fragile.** Some notes for anyone changing it:
 

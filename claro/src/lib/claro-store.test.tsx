@@ -5,7 +5,12 @@ import { ClaroProvider, useClaro } from "./claro-store";
 import { STORAGE_KEY, blankDay, emptyState, loadState, saveNow } from "./storage";
 import { formatDayId } from "./dates";
 import { FOCUS_BLOCK_MS, MAX_SIDE_QUESTS } from "./types";
-import { createInterruption, markDistracted, startFocusSession } from "./focus-session";
+import {
+  closeSession,
+  createInterruption,
+  markDistracted,
+  startFocusSession,
+} from "./focus-session";
 import { addCapped } from "./mutations";
 
 beforeEach(() => {
@@ -302,7 +307,7 @@ describe("the one canonical focus session", () => {
   const newSession = () =>
     startFocusSession({
       dayId: "2026-08-18",
-      priority: { dayId: "2026-08-18", rank: 1 },
+      target: { kind: "priority", dayId: "2026-08-18", rank: 1, title: "Ship the store" },
       intention: "Ship the store",
       plannedMs: FOCUS_BLOCK_MS,
       now: T0,
@@ -422,7 +427,7 @@ describe("the private interruption log", () => {
   const session = () =>
     startFocusSession({
       dayId: "2026-08-18",
-      priority: null,
+      target: null,
       intention: "Ship the store",
       plannedMs: FOCUS_BLOCK_MS,
       now: T0,
@@ -553,5 +558,78 @@ describe("carry-forward at load", () => {
     await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
 
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe("one canonical focus session, whatever started it", () => {
+  const start = (
+    api: ReturnType<typeof harness>,
+    target: Parameters<typeof startFocusSession>[0]["target"],
+  ) =>
+    act(() => {
+      api.current!.startSession(
+        startFocusSession({
+          dayId: "2026-08-19",
+          target,
+          intention: target?.title ?? "",
+          plannedMs: FOCUS_BLOCK_MS,
+          now: new Date(),
+          timeZone: "UTC",
+        }),
+      );
+    });
+
+  it("points at the block started from Quarter just as it does one from Today", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    start(api, { kind: "mainQuest", quarterId: "2026-Q3", domain: "work", title: "Ship Claro" });
+
+    expect(api.current!.activeSession?.target).toEqual({
+      kind: "mainQuest",
+      quarterId: "2026-Q3",
+      domain: "work",
+      title: "Ship Claro",
+    });
+  });
+
+  it("replaces the live session rather than running two clocks", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    start(api, { kind: "priority", dayId: "2026-08-19", rank: 1, title: "First" });
+    const first = api.current!.activeSession!.id;
+
+    start(api, { kind: "weekGoal", weekId: "2026-W34", domain: "life", title: "Second" });
+    const second = api.current!.activeSession!.id;
+
+    expect(second).not.toBe(first);
+    // Exactly one pointer exists, so there is nowhere for a second timer to live.
+    expect(api.current!.state.activeFocusSessionId).toBe(second);
+    // The earlier record is kept, not deleted.
+    expect(api.current!.state.focusSessions[first]).toBeTruthy();
+  });
+
+  it("never marks the linked priority done when the session is resolved", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => {
+      api.current!.updateDay("2026-08-19", (d) => ({
+        ...d,
+        priority1: { ...d.priority1, id: "p1", text: "Ship it" },
+      }));
+    });
+    start(api, { kind: "priority", dayId: "2026-08-19", rank: 1, title: "Ship it" });
+
+    act(() => {
+      api.current!.updateSession((s) => closeSession(s, "completed", new Date()));
+      api.current!.clearActiveSession();
+    });
+
+    // Completing a *block* is not completing the work: only the explicit
+    // choice on the end screen may do that.
+    expect(api.current!.day("2026-08-19").priority1.done).toBe(false);
+    expect(api.current!.activeSession).toBeNull();
   });
 });

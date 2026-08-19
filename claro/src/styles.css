@@ -535,6 +535,7 @@
    */
   .spread {
     position: relative;
+    overflow: hidden;
     border: 1px solid hsl(30 18% 86%);
     border-radius: var(--radius-xl);
     background: linear-gradient(180deg, hsl(0 0% 100% / 0.94), hsl(30 35% 97% / 0.94));
@@ -557,28 +558,40 @@
     }
   }
 
+  /*
+   * The band across the top of the sheet. What matters most on the day sits
+   * here, above the fold of both pages rather than inside one of them.
+   */
+  .spread-band {
+    position: relative;
+    padding: 1.5rem 1.25rem 0;
+  }
+
+  .spread-pages {
+    position: relative;
+  }
+
+  @media (min-width: 640px) {
+    .spread-band {
+      padding: 2rem 1.75rem 0;
+    }
+  }
+
   @media (min-width: 1024px) {
-    .spread {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      /* Grid children default to `stretch`, but they also need a floor of zero
-         before an inner `flex-1` pane is allowed to scroll instead of grow. */
-      min-height: 0;
+    .spread-band {
+      padding: 2.25rem 2.25rem 0;
     }
 
-    .spread-page {
-      min-height: 0;
-      overflow-y: auto;
-      overscroll-behavior: contain;
-      scrollbar-width: thin;
-      scrollbar-color: hsl(30 18% 78%) transparent;
+    .spread-pages {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     }
 
     /* The gutter: where the two pages meet the binding. */
-    .spread::before {
+    .spread-pages::before {
       content: "";
       position: absolute;
-      top: 0.75rem;
+      top: 0;
       bottom: 0.75rem;
       left: 50%;
       width: 38px;
@@ -596,14 +609,14 @@
     }
 
     .spread-page {
-      padding: 2.25rem 2.25rem;
+      padding: 2rem 2.25rem 2.25rem;
     }
 
     /* Each page keeps the notebook's margin rule, as on the focus card. */
     .spread-page::before {
       content: "";
       position: absolute;
-      top: 1.5rem;
+      top: 0.5rem;
       bottom: 1.5rem;
       left: 1.25rem;
       width: 1px;
@@ -657,6 +670,12 @@
     border-radius: 9999px;
     border: 2px solid transparent;
     background-clip: content-box;
+  }
+
+  /* A row lifted off the page while it is being dragged. */
+  .row-dragging {
+    background: var(--color-card);
+    box-shadow: 0 10px 26px -14px hsl(30 22% 8% / 0.35);
   }
 
   /* -------------------------------------------------------------- confetti */

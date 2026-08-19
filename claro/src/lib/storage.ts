@@ -115,9 +115,10 @@ export function migrate(raw: unknown): ClaroState {
     quarters: isRecord(candidate.quarters) ? candidate.quarters : {},
     weeks: isRecord(candidate.weeks) ? candidate.weeks : {},
     days: migrateDays(days, candidate.version),
-    focusSessions: isRecord<FocusSession>(candidate.focusSessions)
-      ? candidate.focusSessions
-      : {},
+    focusSessions: v3SessionsToV4(
+      isRecord<FocusSession>(candidate.focusSessions) ? candidate.focusSessions : {},
+      candidate.version,
+    ),
     activeFocusSessionId:
       typeof candidate.activeFocusSessionId === "string"
         ? candidate.activeFocusSessionId
@@ -222,6 +223,37 @@ function v2PriorityToV3(priority: unknown, dayId: ISODate): Priority {
     originDayId: p.originDayId ?? (written ? dayId : null),
     carriedTo: p.carriedTo ?? null,
   };
+}
+
+/**
+ * v4 lets a focus session target any level of the hierarchy, not only a day's
+ * priority. Sessions recorded before that keep their meaning: an old
+ * `priority` reference becomes a priority target, carrying the session's own
+ * `intention` as the title so the record still reads honestly.
+ */
+function v3SessionsToV4(
+  sessions: Record<string, FocusSession>,
+  version: number,
+): Record<string, FocusSession> {
+  if (version >= 4) return sessions;
+
+  const migrated: Record<string, FocusSession> = {};
+  for (const [id, session] of Object.entries(sessions)) {
+    migrated[id] = {
+      ...session,
+      target:
+        session.target ??
+        (session.priority
+          ? {
+              kind: "priority" as const,
+              dayId: session.priority.dayId,
+              rank: session.priority.rank,
+              title: session.intention ?? "",
+            }
+          : null),
+    };
+  }
+  return migrated;
 }
 
 function readCycle(raw: unknown): CycleState {
