@@ -49,9 +49,10 @@ Everything hangs off a single three-level hierarchy:
 QUARTER  Direction    → WEEK  Commitment  → DAY  Execution
 ```
 
-Nav is four items: **Today | Week | Quarter | Month**. Month was added deliberately, as a calm
-read-only-ish view of habit patterns and private cycle notes — it is a *review* surface, not a
-fifth planning level. The product thesis is still "fewer, more meaningful things", so answer most
+Nav is four items: **Today | Week | Quarter | Calendar**. Calendar was added deliberately as a
+*review* surface, not a fifth planning level: it holds Month (the detailed view), Quarter and Year,
+all read from one shared aggregation in `lib/calendar.ts`. Quarter and Year are read only, and no
+view computes a total of its own. The planning Quarter in the nav is a different screen. The product thesis is still "fewer, more meaningful things", so answer most
 feature requests by deepening an existing screen rather than adding another.
 
 ## Architecture

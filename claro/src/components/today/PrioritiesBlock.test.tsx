@@ -24,10 +24,8 @@ const quarter = (): Quarter => ({
 const dayWith = (patch: Partial<Day>): Day => ({ ...blankDay("2026-08-19"), ...patch });
 
 const renderBlock = (day: Day) => {
-  const spies = { onPatch: vi.fn(), onReorder: vi.fn() };
-  const utils = render(
-    <PrioritiesBlock day={day} quarter={quarter()} {...spies} />,
-  );
+  const spies = { onPatch: vi.fn(), onReorder: vi.fn(), onClear: vi.fn() };
+  const utils = render(<PrioritiesBlock day={day} quarter={quarter()} {...spies} />);
   return { ...utils, spies };
 };
 
@@ -41,14 +39,39 @@ describe("PrioritiesBlock — three clear priorities", () => {
     expect(screen.queryByLabelText("Priority 4")).toBeNull();
   });
 
-  it("writes into the slot that was edited", () => {
+  it("addresses an empty slot by its position, since there is nothing to overwrite", () => {
     const { spies } = renderBlock(dayWith({}));
 
     const field = screen.getByLabelText("Priority 2");
     fireEvent.change(field, { target: { value: "Call the accountant" } });
     fireEvent.blur(field);
 
-    expect(spies.onPatch).toHaveBeenCalledWith("priority2", { text: "Call the accountant" });
+    expect(spies.onPatch).toHaveBeenCalledWith({ rank: 2 }, { text: "Call the accountant" });
+  });
+
+  it("addresses written work by its id, so a reorder cannot redirect the write", () => {
+    const { spies } = renderBlock(dayWith({ priority2: p("Read ten pages") }));
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Complete priority 2" }));
+
+    expect(spies.onPatch).toHaveBeenCalledWith({ id: "Read ten pages" }, { done: true });
+  });
+
+  it("gives all three the same type size, so none reads as the important one", () => {
+    renderBlock(
+      dayWith({ priority1: p("First"), priority2: p("Second"), priority3: p("Third") }),
+    );
+
+    const classes = ["Priority 1", "Priority 2", "Priority 3"].map(
+      (l) => screen.getByLabelText(l).className,
+    );
+    expect(new Set(classes).size).toBe(1);
+  });
+
+  it("offers the same placeholder in every empty slot", () => {
+    renderBlock(dayWith({}));
+
+    expect(screen.getAllByPlaceholderText("Something that matters today")).toHaveLength(3);
   });
 });
 
@@ -102,9 +125,10 @@ describe("PrioritiesBlock — goal context", () => {
       target: { value: "workSide:s1" },
     });
 
-    expect(spies.onPatch).toHaveBeenCalledWith("priority1", {
-      goal: { category: "workSide", sideQuestId: "s1" },
-    });
+    expect(spies.onPatch).toHaveBeenCalledWith(
+      { id: "Ship it" },
+      { goal: { category: "workSide", sideQuestId: "s1" } },
+    );
   });
 });
 
@@ -112,15 +136,15 @@ describe("PrioritiesBlock — reordering", () => {
   const day = () =>
     dayWith({ priority1: p("First"), priority2: p("Second"), priority3: p("Third") });
 
-  it("moves a priority down with the keyboard", () => {
+  it("moves a priority down with the keyboard, reporting ids only", () => {
     const { spies } = renderBlock(day());
 
     fireEvent.keyDown(screen.getByRole("button", { name: /Reorder First/ }), {
       key: "ArrowDown",
     });
 
-    const [next] = spies.onReorder.mock.calls[0] as [Priority[]];
-    expect(next.map((x) => x.text)).toEqual(["Second", "First", "Third"]);
+    const [ids] = spies.onReorder.mock.calls[0] as [(string | null)[]];
+    expect(ids).toEqual(["Second", "First", "Third"]);
   });
 
   it("moves a priority up with the keyboard", () => {
@@ -130,8 +154,8 @@ describe("PrioritiesBlock — reordering", () => {
       key: "ArrowUp",
     });
 
-    const [next] = spies.onReorder.mock.calls[0] as [Priority[]];
-    expect(next.map((x) => x.text)).toEqual(["First", "Third", "Second"]);
+    const [ids] = spies.onReorder.mock.calls[0] as [(string | null)[]];
+    expect(ids).toEqual(["First", "Third", "Second"]);
   });
 
   it("will not move the top priority off the top", () => {
@@ -149,13 +173,38 @@ describe("PrioritiesBlock — reordering", () => {
       key: "ArrowDown",
     });
 
-    const [next] = spies.onReorder.mock.calls[0] as [Priority[]];
-    expect(next).toHaveLength(3);
+    const [ids] = spies.onReorder.mock.calls[0] as [(string | null)[]];
+    expect(ids).toHaveLength(3);
+    expect(ids).toContain("Only one");
+  });
+
+  it("names an empty slot in the grip without calling it optional", () => {
+    renderBlock(dayWith({}));
+
+    expect(screen.getByRole("button", { name: /Reorder empty priority 1/ })).toBeTruthy();
   });
 
   it("does not make the text field itself draggable", () => {
     const { container } = renderBlock(day());
 
     expect(container.querySelector('textarea[draggable="true"]')).toBeNull();
+  });
+});
+
+describe("PrioritiesBlock — clearing a slot", () => {
+  it("offers a clear control only where something is written", () => {
+    renderBlock(dayWith({ priority1: p("Ship it") }));
+
+    expect(screen.getAllByRole("button", { name: /^Clear priority/ })).toHaveLength(1);
+  });
+
+  it("clears by id, so the right slot empties after a reorder", () => {
+    const { spies } = renderBlock(
+      dayWith({ priority1: p("First"), priority2: p("Second") }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear priority 2, Second" }));
+
+    expect(spies.onClear).toHaveBeenCalledWith({ id: "Second" });
   });
 });

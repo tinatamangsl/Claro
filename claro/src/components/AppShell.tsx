@@ -12,7 +12,7 @@ const NAV = [
   { to: "/today", label: "Today" },
   { to: "/week", label: "Week" },
   { to: "/quarter", label: "Quarter" },
-  { to: "/calendar", label: "Month" },
+  { to: "/calendar", label: "Calendar" },
 ] as const;
 
 /**

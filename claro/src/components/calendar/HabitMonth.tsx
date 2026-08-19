@@ -1,6 +1,12 @@
 import { formatDayLong, formatDayOfMonth } from "@/lib/dates";
-import { consistency, monthCompletions, monthGrid, type MonthId } from "@/lib/calendar";
-import { activeHabits, consistencyLabel } from "@/lib/habits";
+import {
+  formatFocusTotal,
+  monthCompletions,
+  monthGrid,
+  type MonthId,
+  type MonthSummary,
+} from "@/lib/calendar";
+import { activeHabits } from "@/lib/habits";
 import { isLoggedStart } from "@/lib/cycle";
 import { cn } from "@/lib/utils";
 import type { CycleState, Habit, HabitCompletion, ISODate } from "@/lib/types";
@@ -14,6 +20,8 @@ type Props = {
   todayId: ISODate;
   /** Only ever read once the user has opted in. */
   cycle: CycleState | null;
+  /** One summary per day, from the shared aggregation. */
+  summary: MonthSummary;
   onOpenDay: (dayId: ISODate) => void;
 };
 
@@ -24,9 +32,18 @@ type Props = {
  * fill. There is no score, no ranking and no run — an empty day is simply
  * empty, drawn like any other.
  */
-export function HabitMonth({ monthId, habits, completions, todayId, cycle, onOpenDay }: Props) {
+export function HabitMonth({
+  monthId,
+  habits,
+  completions,
+  todayId,
+  cycle,
+  summary,
+  onOpenDay,
+}: Props) {
   const active = activeHabits(habits);
   const byDay = monthCompletions(active, completions, monthId);
+  const summaries = new Map(summary.days.map((d) => [d.dayId, d]));
 
   return (
     <div>
@@ -43,8 +60,11 @@ export function HabitMonth({ monthId, habits, completions, todayId, cycle, onOpe
 
         {monthGrid(monthId).map((cell) => {
           const day = byDay[cell.dayId];
+          const stats = summaries.get(cell.dayId);
           const ratio = day && day.total > 0 ? day.done / day.total : 0;
           const started = cycle ? isLoggedStart(cycle, cell.dayId) : false;
+          const completedCount =
+            (stats?.prioritiesDone ?? 0) + (stats?.actionsDone ?? 0) + (stats?.scheduleDone ?? 0);
 
           return (
             <button
@@ -52,8 +72,15 @@ export function HabitMonth({ monthId, habits, completions, todayId, cycle, onOpe
               type="button"
               onClick={() => onOpenDay(cell.dayId)}
               aria-label={
-                cell.inMonth && day
-                  ? `${formatDayLong(cell.dayId)}, ${day.done} of ${day.total} habits kept`
+                cell.inMonth && day && stats
+                  ? [
+                      formatDayLong(cell.dayId),
+                      `${day.done} of ${day.total} habits kept`,
+                      `${completedCount} things completed`,
+                      stats.focusMs > 0 ? `${formatFocusTotal(stats.focusMs)} focused` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ")
                   : formatDayLong(cell.dayId)
               }
               aria-current={cell.dayId === todayId ? "date" : undefined}
@@ -76,6 +103,21 @@ export function HabitMonth({ monthId, habits, completions, todayId, cycle, onOpe
               <span className={cn("tnum", day?.complete && "font-medium")}>
                 {formatDayOfMonth(cell.dayId)}
               </span>
+
+              {/* A day that held completed work carries a quiet dot. */}
+              {cell.inMonth && completedCount > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute top-1 left-1 h-1 w-1 rounded-full bg-foreground/40"
+                />
+              )}
+              {/* And one that held a focus block carries the gold mark. */}
+              {cell.inMonth && (stats?.focusMs ?? 0) > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute right-1 bottom-[3px] h-1.5 w-1.5 rounded-full bg-gold"
+                />
+              )}
               {started && (
                 <span
                   aria-hidden
@@ -88,29 +130,6 @@ export function HabitMonth({ monthId, habits, completions, todayId, cycle, onOpe
         })}
       </div>
 
-      {active.length > 0 && (
-        <div className="mt-6">
-          <h3 className="eyebrow">Consistency</h3>
-          <div className="paper-panel mt-2 divide-y divide-subtle px-3">
-            {active.map((habit) => {
-              const counts = consistency(completions, habit.id, todayId);
-              return (
-                <div
-                  key={habit.id}
-                  className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2"
-                >
-                  <span className="min-w-0 flex-1 text-[0.88rem] leading-snug">{habit.name}</span>
-                  <span className="tnum flex shrink-0 flex-wrap gap-x-4 text-[11px] text-muted-foreground">
-                    <span>{consistencyLabel(counts.week, "week")}</span>
-                    <span>{consistencyLabel(counts.month, "month")}</span>
-                    <span>{counts.quarter} this quarter</span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

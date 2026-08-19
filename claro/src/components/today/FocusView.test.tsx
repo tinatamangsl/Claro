@@ -112,7 +112,7 @@ describe("starting a block", () => {
     fireEvent.change(field, { target: { value: "Write the brief" } });
     fireEvent.keyDown(field, { key: "Enter" });
 
-    expect(spies.onPatchPriority).toHaveBeenCalledWith("priority1", { text: "Write the brief" });
+    expect(spies.onPatchPriority).toHaveBeenCalledWith({ rank: 1 }, { text: "Write the brief" });
   });
 
   it("offers a block against the next project once the priorities are done", () => {

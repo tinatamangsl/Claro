@@ -6,8 +6,23 @@
 import { addDays, addMonths, endOfMonth, format, startOfISOWeek, startOfMonth } from "date-fns";
 
 import { formatDayId, parseDayId, weekDayIds, weekOfDay } from "./dates";
+import { goalKey, resolveGoal } from "./goals";
 import { countCompletions, isDoneOn } from "./habits";
-import type { Habit, HabitCompletion, ISODate } from "./types";
+import { resolveSchedule } from "./schedule";
+import { readDay, readQuarter } from "./storage";
+import {
+  GOAL_CATEGORIES,
+  PRIORITY_KEYS,
+  isPrioritySet,
+  type ClaroState,
+  type FocusSession,
+  type GoalCategory,
+  type Habit,
+  type HabitCompletion,
+  type ISODate,
+  type Quarter,
+  type QuarterId,
+} from "./types";
 
 /** "2026-08" */
 export type MonthId = string;
@@ -130,4 +145,302 @@ export function consistency(
     month,
     quarter: countCompletions(completions, habitId, quarterDays),
   };
+}
+
+// ------------------------------------------------------- period identities
+
+/** "2026-Q3" for the quarter a month belongs to. */
+export function quarterOfMonth(id: MonthId): QuarterId {
+  const [year, month] = id.split("-").map(Number);
+  return `${year}-Q${Math.floor((month - 1) / 3) + 1}`;
+}
+
+export function monthsOfQuarter(id: QuarterId): MonthId[] {
+  const [year, quarter] = id.split("-Q").map(Number);
+  const first = (quarter - 1) * 3 + 1;
+  return [0, 1, 2].map((i) => `${year}-${String(first + i).padStart(2, "0")}`);
+}
+
+export function monthsOfYear(year: number): MonthId[] {
+  return Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+}
+
+export function yearOfMonth(id: MonthId): number {
+  return Number(id.split("-")[0]);
+}
+
+/** "Jul" — for the compact month labels in the quarter and year views. */
+export function formatMonthShort(id: MonthId): string {
+  return format(parseMonthId(id), "MMM");
+}
+
+// ----------------------------------------------------------- day summaries
+
+/**
+ * What one day actually held. Every count is read from the canonical records:
+ * nothing here stores its own copy, so a change made on Today, in the 3-3-3
+ * flow, in Week or in Focus is reflected the next time this is computed.
+ */
+export type DaySummary = {
+  dayId: ISODate;
+  habitsDone: number;
+  habitsTotal: number;
+  prioritiesDone: number;
+  prioritiesSet: number;
+  actionsDone: number;
+  actionsTotal: number;
+  scheduleDone: number;
+  scheduleTotal: number;
+  /** Time actually spent in focus blocks that day. */
+  focusMs: number;
+  focusSessions: number;
+  /** True when nothing at all was recorded, so a view can stay quiet. */
+  empty: boolean;
+};
+
+/**
+ * A session's focused time.
+ *
+ * Reviews look backwards, so only settled time is counted: a block still
+ * running contributes what it has already banked rather than a moving number,
+ * which keeps every total here pure and reproducible.
+ */
+export function focusedMs(session: FocusSession): number {
+  return Math.max(0, session.elapsedBeforeMs);
+}
+
+export function summariseDay(
+  state: ClaroState,
+  dayId: ISODate,
+  habits: Habit[],
+): DaySummary {
+  const day = readDay(state, dayId);
+
+  const habitsDone = habits.reduce(
+    (n, habit) => n + (isDoneOn(state.habitCompletions, habit.id, dayId) ? 1 : 0),
+    0,
+  );
+
+  const priorities = PRIORITY_KEYS.map((key) => day[key]).filter(isPrioritySet);
+  const actions = day.actions.filter((a) => a.text.trim() !== "");
+
+  // Schedule completion is resolved, so a linked row reports its original's
+  // state rather than a second answer of its own.
+  const rows = resolveSchedule(day, state.habits, state.habitCompletions);
+
+  const sessions = Object.values(state.focusSessions).filter((s) => s.dayId === dayId);
+  const focusMs = sessions.reduce((total, s) => total + focusedMs(s), 0);
+
+  const scheduleDone = rows.filter((r) => r.done).length;
+
+  return {
+    dayId,
+    habitsDone,
+    habitsTotal: habits.length,
+    prioritiesDone: priorities.filter((p) => p.done).length,
+    prioritiesSet: priorities.length,
+    actionsDone: actions.filter((a) => a.done).length,
+    actionsTotal: actions.length,
+    scheduleDone,
+    scheduleTotal: rows.length,
+    focusMs,
+    focusSessions: sessions.length,
+    empty:
+      habitsDone === 0 &&
+      priorities.length === 0 &&
+      actions.length === 0 &&
+      rows.length === 0 &&
+      sessions.length === 0,
+  };
+}
+
+// --------------------------------------------------------- goal progress
+
+/**
+ * How far each linked goal got. Grouped by the goal itself, so every side quest
+ * is counted separately rather than lumped into its category.
+ */
+export type GoalProgress = {
+  key: string;
+  category: GoalCategory;
+  /** The user's own words, or empty when the goal is no longer set. */
+  title: string;
+  linked: number;
+  done: number;
+};
+
+export function goalProgress(
+  state: ClaroState,
+  dayIds: ISODate[],
+  quarter: Quarter,
+): GoalProgress[] {
+  const byKey = new Map<string, GoalProgress>();
+
+  for (const dayId of dayIds) {
+    const day = readDay(state, dayId);
+    for (const key of PRIORITY_KEYS) {
+      const priority = day[key];
+      if (!isPrioritySet(priority) || !priority.goal) continue;
+
+      const id = goalKey(priority.goal);
+      const existing = byKey.get(id);
+      if (existing) {
+        existing.linked += 1;
+        existing.done += priority.done ? 1 : 0;
+        continue;
+      }
+
+      byKey.set(id, {
+        key: id,
+        category: priority.goal.category,
+        title: resolveGoal(priority.goal, quarter)?.title ?? "",
+        linked: 1,
+        done: priority.done ? 1 : 0,
+      });
+    }
+  }
+
+  // Category order, then the user's own words, so the list reads predictably.
+  return [...byKey.values()].sort(
+    (a, b) =>
+      GOAL_CATEGORIES.indexOf(a.category) - GOAL_CATEGORIES.indexOf(b.category) ||
+      a.title.localeCompare(b.title),
+  );
+}
+
+// ------------------------------------------------------- month summaries
+
+export type HabitConsistency = { habit: Habit; kept: number; of: number };
+
+export type MonthSummary = {
+  monthId: MonthId;
+  days: DaySummary[];
+  /** Days on which at least one habit was kept. */
+  daysWithHabit: number;
+  daysInMonth: number;
+  habitsKept: number;
+  prioritiesDone: number;
+  actionsDone: number;
+  scheduleDone: number;
+  focusMs: number;
+  focusSessions: number;
+  perHabit: HabitConsistency[];
+  empty: boolean;
+};
+
+export function summariseMonth(
+  state: ClaroState,
+  monthId: MonthId,
+  habits: Habit[],
+): MonthSummary {
+  const dayIds = monthDayIds(monthId);
+  const days = dayIds.map((dayId) => summariseDay(state, dayId, habits));
+
+  const total = <K extends keyof DaySummary>(field: K) =>
+    days.reduce((n, d) => n + (d[field] as number), 0);
+
+  return {
+    monthId,
+    days,
+    daysWithHabit: days.filter((d) => d.habitsDone > 0).length,
+    daysInMonth: dayIds.length,
+    habitsKept: total("habitsDone"),
+    prioritiesDone: total("prioritiesDone"),
+    actionsDone: total("actionsDone"),
+    scheduleDone: total("scheduleDone"),
+    focusMs: total("focusMs"),
+    focusSessions: total("focusSessions"),
+    perHabit: habits.map((habit) => ({
+      habit,
+      kept: countCompletions(state.habitCompletions, habit.id, dayIds),
+      of: dayIds.length,
+    })),
+    empty: days.every((d) => d.empty),
+  };
+}
+
+// ------------------------------------------------ quarter and year reviews
+
+export type QuarterSummary = {
+  quarterId: QuarterId;
+  months: MonthSummary[];
+  habitsKept: number;
+  prioritiesDone: number;
+  actionsDone: number;
+  focusMs: number;
+  focusSessions: number;
+  daysWithHabit: number;
+  goals: GoalProgress[];
+  empty: boolean;
+};
+
+export function summariseQuarter(
+  state: ClaroState,
+  quarterId: QuarterId,
+  habits: Habit[],
+): QuarterSummary {
+  const months = monthsOfQuarter(quarterId).map((id) =>
+    summariseMonth(state, id, habits),
+  );
+  const total = <K extends keyof MonthSummary>(field: K) =>
+    months.reduce((n, m) => n + (m[field] as number), 0);
+
+  const dayIds = months.flatMap((m) => m.days.map((d) => d.dayId));
+
+  return {
+    quarterId,
+    months,
+    habitsKept: total("habitsKept"),
+    prioritiesDone: total("prioritiesDone"),
+    actionsDone: total("actionsDone"),
+    focusMs: total("focusMs"),
+    focusSessions: total("focusSessions"),
+    daysWithHabit: total("daysWithHabit"),
+    goals: goalProgress(state, dayIds, readQuarter(state, quarterId)),
+    empty: months.every((m) => m.empty),
+  };
+}
+
+export type YearSummary = {
+  year: number;
+  months: MonthSummary[];
+  quarters: QuarterId[];
+  habitsKept: number;
+  prioritiesDone: number;
+  focusMs: number;
+  focusSessions: number;
+  daysWithHabit: number;
+  empty: boolean;
+};
+
+export function summariseYear(
+  state: ClaroState,
+  year: number,
+  habits: Habit[],
+): YearSummary {
+  const months = monthsOfYear(year).map((id) => summariseMonth(state, id, habits));
+  const total = <K extends keyof MonthSummary>(field: K) =>
+    months.reduce((n, m) => n + (m[field] as number), 0);
+
+  return {
+    year,
+    months,
+    quarters: [1, 2, 3, 4].map((q) => `${year}-Q${q}`),
+    habitsKept: total("habitsKept"),
+    prioritiesDone: total("prioritiesDone"),
+    focusMs: total("focusMs"),
+    focusSessions: total("focusSessions"),
+    daysWithHabit: total("daysWithHabit"),
+    empty: months.every((m) => m.empty),
+  };
+}
+
+/** "2h 15m", "45m", or "none" when there was no focused time at all. */
+export function formatFocusTotal(ms: number): string {
+  if (ms <= 0) return "none";
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
 }

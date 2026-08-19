@@ -13,7 +13,6 @@ import { ScheduleBlock } from "@/components/today/ScheduleBlock";
 import { WellbeingBlock } from "@/components/today/WellbeingBlock";
 import { useClaro } from "@/lib/claro-store";
 import { useFocusSession } from "@/hooks/use-focus-session";
-import { blankPriority } from "@/lib/storage";
 import {
   formatDayDate,
   formatDayWeekday,
@@ -39,7 +38,14 @@ import {
   setFocusHours,
   startPlan,
 } from "@/lib/plan333";
-import { writePriority } from "@/lib/priorities";
+import {
+  clearPriority,
+  reorderPriorities,
+  resolvePriorityKey,
+  writePriority,
+  type PriorityTarget,
+} from "@/lib/priorities";
+import { scheduleHabitToggle, toggleScheduleItem } from "@/lib/schedule";
 import {
   keepCarriedAsAction,
   letGoCarried,
@@ -141,23 +147,32 @@ function TodayView() {
   const go = (id: ISODate) => navigate({ to: "/today", search: { d: id } });
   const patch = (p: Partial<Day>) => updateDay(dayId, (current) => ({ ...current, ...p }));
 
-  /** Writing into a blank slot is what creates a priority — see `writePriority`. */
-  const patchPriority = (key: PriorityKey, p: Partial<Priority>) =>
-    updateDay(dayId, (current) => ({
-      ...current,
-      [key]: writePriority(current[key], p, dayId, new Date()),
-    }));
+  /**
+   * Writing into a blank slot is what creates a priority, see `writePriority`.
+   *
+   * The slot is resolved from the target against the day as it is *now*, not
+   * from a position captured when the row rendered. That is what makes editing
+   * safe across a reorder: an id addresses the same work wherever it has moved.
+   */
+  const patchPriority = (target: PriorityTarget, p: Partial<Priority>) =>
+    updateDay(dayId, (current) => {
+      const key = resolvePriorityKey(current, target);
+      if (!key) return current;
+      return { ...current, [key]: writePriority(current[key], p, dayId, new Date()) };
+    });
+
+  const clearPriorityAt = (target: PriorityTarget) =>
+    updateDay(dayId, (current) => clearPriority(current, target));
 
   const enterFocus = () => navigate({ to: "/today", search: { focus: true } });
   const leaveFocus = () => navigate({ to: "/today", search: {} });
 
   /** Starts a block on one of the day's three priorities, from anywhere on the page. */
-  const focusOnPriority = (rank: PriorityRank, plannedMs = FOCUS_BLOCK_MS) => {
-    const priority = record[priorityKey(rank)];
-    focus.start(
-      { kind: "priority", dayId, rank, title: priority.text },
-      plannedMs,
-    );
+  const focusOnPriority = (target: PriorityTarget, plannedMs = FOCUS_BLOCK_MS) => {
+    const key = resolvePriorityKey(record, target);
+    if (!key) return;
+    const rank = (PRIORITY_KEYS.indexOf(key) + 1) as PriorityRank;
+    focus.start({ kind: "priority", dayId, rank, title: record[key].text }, plannedMs);
     enterFocus();
   };
 
@@ -178,9 +193,9 @@ function TodayView() {
   const completePriority = () => {
     const target = session?.target;
     if (target?.kind === "priority") {
-      patchPriority(priorityKey(target.rank), { done: true });
+      patchPriority({ rank: target.rank }, { done: true });
     } else if (session?.priority) {
-      patchPriority(priorityKey(session.priority.rank), { done: true });
+      patchPriority({ rank: session.priority.rank }, { done: true });
     }
     focus.close("completed");
   };
@@ -197,6 +212,21 @@ function TodayView() {
     leaveFocus();
   };
 
+  /**
+   * Ticking a schedule row. A linked row writes through to the record it points
+   * at, so the schedule and the rest of the day never hold two answers: a
+   * habit's completion lives outside the day and is toggled through the store,
+   * everything else is a write to the day itself.
+   */
+  const toggleScheduleRow = (itemId: string) => {
+    const habitId = scheduleHabitToggle(record, itemId);
+    if (habitId) {
+      toggleHabitDone(habitId, dayId, new Date());
+      return;
+    }
+    updateDay(dayId, (current) => toggleScheduleItem(current, itemId));
+  };
+
   // ------------------------------------------------------------ 3-3-3 plan
 
   const planDay = (recipe: (d: Day) => Day) => updateDay(dayId, recipe);
@@ -204,10 +234,7 @@ function TodayView() {
   const focusOnProject = () => {
     const project = meaningfulProject(record).trim();
     if (!project) return;
-    focus.start(
-      { kind: "priority", dayId, rank: 1, title: project },
-      focusBlockMs(record),
-    );
+    focus.start({ kind: "priority", dayId, rank: 1, title: project }, focusBlockMs(record));
     enterFocus();
   };
 
@@ -244,15 +271,9 @@ function TodayView() {
 
   const live = isSessionOpen(session) ? session : null;
 
-  /** A reorder rewrites all three slots at once, keeping each slot's identity. */
-  const reorderPriorities = (next: Priority[]) =>
-    updateDay(dayId, (current) => {
-      const rewritten = { ...current };
-      PRIORITY_KEYS.forEach((key, index) => {
-        rewritten[key] = next[index] ?? blankPriority();
-      });
-      return rewritten;
-    });
+  /** A reorder is an id sequence, resolved against live state. See `reorderPriorities`. */
+  const reorderPrioritiesTo = (ids: (string | null)[]) =>
+    updateDay(dayId, (current) => reorderPriorities(current, ids));
 
   return (
     <div className="space-y-5">
@@ -278,7 +299,12 @@ function TodayView() {
 
           <section className="mt-4">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <h2 className="eyebrow">One day, three clear priorities</h2>
+              <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                <h2 className="eyebrow">Today's three priorities</h2>
+                <span className="text-[10px] text-muted-foreground">
+                  One day, three clear priorities.
+                </span>
+              </div>
               {dayId === today && !live && (
                 <button
                   type="button"
@@ -294,8 +320,9 @@ function TodayView() {
               day={record}
               quarter={parentQuarter}
               onPatch={patchPriority}
-              onReorder={reorderPriorities}
-              onFocus={dayId === today ? () => enterFocus() : undefined}
+              onReorder={reorderPrioritiesTo}
+              onClear={clearPriorityAt}
+              onFocus={dayId === today ? focusOnPriority : undefined}
             />
           </section>
 
@@ -326,7 +353,10 @@ function TodayView() {
           <div className="spread-page flex flex-col gap-6">
             <ScheduleBlock
               day={record}
+              habits={state.habits}
+              completions={state.habitCompletions}
               onChange={(scheduleItems) => patch({ scheduleItems })}
+              onToggle={toggleScheduleRow}
             />
             <WellbeingBlock day={record} onPatch={patch} />
 

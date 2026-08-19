@@ -155,6 +155,41 @@ function migrateDays(days: Record<string, Day>, version: number): Record<string,
   let migrated = days;
   if (version < 2) migrated = v1DaysToV2(migrated);
   if (version < 3) migrated = v2DaysToV3(migrated);
+  if (version < 6) migrated = v5DaysToV6(migrated);
+  return migrated;
+}
+
+/**
+ * v6 gives a schedule entry a kind: a reference to work that exists elsewhere,
+ * or a time block that stands alone.
+ *
+ * **Every existing entry becomes a standalone block.** Nothing is inferred from
+ * matching text: two entries reading "Ship the store" may well be the same
+ * work, but guessing would silently bind a user's schedule to a record they
+ * never linked it to, and un-guessing it later is impossible. A block is the
+ * honest reading of an entry that was only ever text, and the user can link it
+ * deliberately from here on.
+ *
+ * Nothing is dropped, nothing is merged, and no entry changes its hour or its
+ * words. Entries had no completion before v6, so `done` starts false without
+ * discarding any history that existed.
+ */
+function v5DaysToV6(days: Record<string, Day>): Record<string, Day> {
+  const migrated: Record<string, Day> = {};
+
+  for (const [id, day] of Object.entries(days)) {
+    const items = Array.isArray(day.scheduleItems) ? day.scheduleItems : [];
+    migrated[id] = {
+      ...day,
+      scheduleItems: items.map((item) => ({
+        ...item,
+        // Spread first so an entry that somehow already carries a link keeps it.
+        link: item.link ?? null,
+        done: item.done ?? false,
+      })),
+    };
+  }
+
   return migrated;
 }
 

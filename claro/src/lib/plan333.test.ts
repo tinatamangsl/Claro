@@ -16,7 +16,8 @@ import {
   startPlan,
   tasksOf,
 } from "./plan333";
-import { blankDay } from "./storage";
+import { blockItem, resolveScheduleItem, toggleScheduleItem } from "./schedule";
+import { blankDay, blankPriority } from "./storage";
 import type { Day } from "./types";
 
 const NOW = new Date("2026-08-19T09:00:00.000Z");
@@ -158,7 +159,7 @@ describe("scheduling the focus block", () => {
 
   it("never overwrites an hour the user has already written in", () => {
     let d = startPlan(setMeaningfulProject(day(), "Ship the store", NOW), NOW, 3);
-    d = { ...d, scheduleItems: [{ id: "s1", time: "10:00", text: "Call with Dan" }] };
+    d = { ...d, scheduleItems: [blockItem("10:00", "Call with Dan")] };
     d = scheduleFocusBlock(d, "09:00");
 
     const at10 = d.scheduleItems.filter((i) => i.time === "10:00");
@@ -175,5 +176,58 @@ describe("scheduling the focus block", () => {
   it("turns the plan's hours into a focus block length", () => {
     expect(focusBlockMs(startPlan(day(), NOW, 3))).toBe(3 * 60 * 60_000);
     expect(focusBlockMs(startPlan(day(), NOW, 1.5))).toBe(90 * 60_000);
+  });
+});
+
+describe("scheduling links rather than copies", () => {
+  it("points the blocked hours at priority 1, not at a copy of its words", () => {
+    let d = startPlan(setMeaningfulProject(day(), "Ship the store", NOW), NOW, 2);
+    d = scheduleFocusBlock(d, "09:00");
+
+    const priorityId = d.priority1.id;
+    expect(priorityId).not.toBeNull();
+    expect(d.scheduleItems.map((i) => i.link)).toEqual([
+      { kind: "priority", priorityId },
+      { kind: "priority", priorityId },
+    ]);
+  });
+
+  it("shows the priority's completion on every hour it occupies", () => {
+    let d = startPlan(setMeaningfulProject(day(), "Ship the store", NOW), NOW, 2);
+    d = scheduleFocusBlock(d, "09:00");
+    d = { ...d, priority1: { ...d.priority1, done: true } };
+
+    for (const item of d.scheduleItems) {
+      expect(resolveScheduleItem(item, d, {}, {}).done).toBe(true);
+    }
+  });
+
+  it("completes the priority when one of its hours is ticked", () => {
+    let d = startPlan(setMeaningfulProject(day(), "Ship the store", NOW), NOW, 2);
+    d = scheduleFocusBlock(d, "09:00");
+
+    const next = toggleScheduleItem(d, d.scheduleItems[0].id);
+    expect(next.priority1.done).toBe(true);
+  });
+
+  it("follows a rename, because the words were never copied", () => {
+    let d = startPlan(setMeaningfulProject(day(), "Ship the store", NOW), NOW, 1);
+    d = scheduleFocusBlock(d, "09:00");
+    d = setMeaningfulProject(d, "Ship the store, properly", NOW);
+
+    expect(resolveScheduleItem(d.scheduleItems[0], d, {}, {}).title).toBe(
+      "Ship the store, properly",
+    );
+  });
+
+  it("does nothing when the project has no identity to point at", () => {
+    // A project written straight into the slot without going through the
+    // priority writer has no id, so there is nothing to link to.
+    const d: Day = {
+      ...startPlan(day(), NOW, 2),
+      priority1: { ...blankPriority(), text: "Typed in directly" },
+    };
+
+    expect(scheduleFocusBlock(d, "09:00")).toBe(d);
   });
 });

@@ -12,6 +12,8 @@ import {
   startFocusSession,
 } from "./focus-session";
 import { addCapped } from "./mutations";
+import { clearPriority, reorderPriorities } from "./priorities";
+import { resolveScheduleItem, toggleScheduleItem } from "./schedule";
 
 beforeEach(() => {
   localStorage.clear();
@@ -765,5 +767,194 @@ describe("sound presets and feedback", () => {
     );
 
     expect(api.current!.state.soundFeedback.f2.response).toBe("skipped");
+  });
+});
+
+describe("schedule completion survives a refresh", () => {
+  const dayId = "2026-08-19";
+
+  const seed = (api: ReturnType<typeof harness>) =>
+    act(() => {
+      api.current!.updateDay(dayId, (d) => ({
+        ...d,
+        priority1: { ...d.priority1, id: "p1", text: "Ship the store" },
+        actions: [
+          { id: "a1", text: "Draft the note", bucket: "task", done: false, createdAt: "x" },
+        ],
+        scheduleItems: [
+          { id: "s1", time: "09:00", text: "Ship the store", link: { kind: "priority", priorityId: "p1" }, done: false },
+          { id: "s2", time: "11:00", text: "Draft the note", link: { kind: "action", actionId: "a1" }, done: false },
+          { id: "s3", time: "13:00", text: "Lunch away from the desk", link: null, done: false },
+        ],
+      }));
+    });
+
+  it("writes a linked completion to the original, and reads it back after a reload", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seed(api);
+
+    act(() => api.current!.updateDay(dayId, (d) => toggleScheduleItem(d, "s1")));
+    await flush();
+
+    const stored = loadState().days[dayId];
+    // The completion lives on the priority, and nowhere else.
+    expect(stored.priority1.done).toBe(true);
+    expect(stored.scheduleItems[0].done).toBe(false);
+    expect(resolveScheduleItem(stored.scheduleItems[0], stored, {}, {}).done).toBe(true);
+  });
+
+  it("keeps a standalone block's own completion across a reload", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seed(api);
+
+    act(() => api.current!.updateDay(dayId, (d) => toggleScheduleItem(d, "s3")));
+    await flush();
+
+    const stored = loadState().days[dayId];
+    expect(stored.scheduleItems[2].done).toBe(true);
+    // A standalone block touches nothing else.
+    expect(stored.priority1.done).toBe(false);
+    expect(stored.actions[0].done).toBe(false);
+  });
+
+  it("shows a completion made in Today on the schedule, without a second write", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seed(api);
+
+    // Completed the ordinary way, from the priorities block.
+    act(() =>
+      api.current!.updateDay(dayId, (d) => ({
+        ...d,
+        priority1: { ...d.priority1, done: true },
+      })),
+    );
+    await flush();
+
+    const stored = loadState().days[dayId];
+    expect(resolveScheduleItem(stored.scheduleItems[0], stored, {}, {}).done).toBe(true);
+  });
+
+  it("shows a habit ticked on Today as complete on its scheduled hour", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => {
+      api.current!.addHabit({
+        id: "h1",
+        name: "Ten pages",
+        createdAt: "2026-08-01T09:00:00.000Z",
+        archivedAt: null,
+      });
+      api.current!.updateDay(dayId, (d) => ({
+        ...d,
+        scheduleItems: [
+          { id: "s1", time: "07:00", text: "Ten pages", link: { kind: "habit", habitId: "h1" }, done: false },
+        ],
+      }));
+    });
+    act(() => api.current!.toggleHabitDone("h1", dayId, new Date()));
+    await flush();
+
+    const state = loadState();
+    const stored = state.days[dayId];
+    expect(
+      resolveScheduleItem(stored.scheduleItems[0], stored, state.habits, state.habitCompletions).done,
+    ).toBe(true);
+  });
+
+  it("leaves the row readable and safe once the linked action is deleted", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seed(api);
+
+    act(() => api.current!.updateDay(dayId, (d) => ({ ...d, actions: [] })));
+    await flush();
+
+    const stored = loadState().days[dayId];
+    const row = resolveScheduleItem(stored.scheduleItems[1], stored, {}, {});
+    expect(row.available).toBe(false);
+    expect(row.title).toBe("Draft the note");
+    // The hour is kept, and nothing was recreated.
+    expect(stored.scheduleItems).toHaveLength(3);
+    expect(stored.actions).toEqual([]);
+  });
+});
+
+describe("priority order survives a refresh", () => {
+  const dayId = "2026-08-19";
+
+  const seedThree = (api: ReturnType<typeof harness>) =>
+    act(() => {
+      api.current!.updateDay(dayId, (d) => ({
+        ...d,
+        priority1: { ...d.priority1, id: "a", text: "Cloud Cycle session", done: true, goal: { category: "workMain" } },
+        priority2: { ...d.priority2, id: "b", text: "Read ten pages", goal: { category: "lifeMain" } },
+        priority3: { ...d.priority3, id: "c", text: "Plan Claro" },
+      }));
+    });
+
+  it("keeps the new order, and every record intact, after a reload", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seedThree(api);
+
+    act(() =>
+      api.current!.updateDay(dayId, (d) => reorderPriorities(d, ["c", "a", "b"])),
+    );
+    await flush();
+
+    const stored = loadState().days[dayId];
+    expect([stored.priority1.id, stored.priority2.id, stored.priority3.id]).toEqual([
+      "c",
+      "a",
+      "b",
+    ]);
+    expect(stored.priority1.text).toBe("Plan Claro");
+    // The completion and the goal travelled with the priority, not the slot.
+    expect(stored.priority2.text).toBe("Cloud Cycle session");
+    expect(stored.priority2.done).toBe(true);
+    expect(stored.priority2.goal).toEqual({ category: "workMain" });
+    expect(stored.priority3.goal).toEqual({ category: "lifeMain" });
+  });
+
+  it("keeps a scheduled reference pointing at the same work after a reorder", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seedThree(api);
+
+    act(() =>
+      api.current!.updateDay(dayId, (d) => ({
+        ...d,
+        scheduleItems: [
+          { id: "s1", time: "09:00", text: "Read ten pages", link: { kind: "priority", priorityId: "b" }, done: false },
+        ],
+      })),
+    );
+    act(() => api.current!.updateDay(dayId, (d) => reorderPriorities(d, ["c", "a", "b"])));
+    await flush();
+
+    const stored = loadState().days[dayId];
+    const row = resolveScheduleItem(stored.scheduleItems[0], stored, {}, {});
+    expect(row.title).toBe("Read ten pages");
+    expect(row.available).toBe(true);
+  });
+
+  it("clears one slot without disturbing the other two", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seedThree(api);
+
+    act(() => api.current!.updateDay(dayId, (d) => clearPriority(d, { id: "b" })));
+    await flush();
+
+    const stored = loadState().days[dayId];
+    expect(stored.priority2.text).toBe("");
+    expect(stored.priority2.id).toBeNull();
+    expect(stored.priority1.text).toBe("Cloud Cycle session");
+    expect(stored.priority1.done).toBe(true);
+    expect(stored.priority3.text).toBe("Plan Claro");
   });
 });

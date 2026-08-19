@@ -489,3 +489,144 @@ describe("v2 → v3 migration", () => {
     expect(day.priority1.originDayId).toBe("2026-08-14");
   });
 });
+
+describe("v5 → v6 schedule migration", () => {
+  const v5Day = () => ({
+    ...blankDay("2026-08-19"),
+    scheduleItems: [
+      { id: "s1", time: "09:00", text: "Deep work" },
+      { id: "s2", time: "13:00", text: "Lunch away from the desk" },
+    ],
+    priority1: {
+      id: "p1",
+      text: "Deep work",
+      done: false,
+      goal: null,
+      createdAt: null,
+      originDayId: "2026-08-19",
+      carriedTo: null,
+    },
+  });
+
+  const v5Store = () => ({ ...emptyState(), version: 5, days: { "2026-08-19": v5Day() } });
+
+  it("keeps every entry, on its own hour, with its own words", () => {
+    const items = migrate(v5Store()).days["2026-08-19"].scheduleItems;
+
+    expect(items).toHaveLength(2);
+    expect(items.map((i) => [i.id, i.time, i.text])).toEqual([
+      ["s1", "09:00", "Deep work"],
+      ["s2", "13:00", "Lunch away from the desk"],
+    ]);
+  });
+
+  it("makes every existing entry a standalone block", () => {
+    const items = migrate(v5Store()).days["2026-08-19"].scheduleItems;
+
+    expect(items.every((i) => i.link === null)).toBe(true);
+  });
+
+  it("never infers a link from matching text", () => {
+    // "Deep work" is also priority 1's text. Guessing would bind a user's
+    // schedule to a record they never linked it to, and that is not undoable.
+    const day = migrate(v5Store()).days["2026-08-19"];
+
+    expect(day.scheduleItems[0].link).toBeNull();
+    expect(day.priority1.id).toBe("p1");
+  });
+
+  it("starts every entry incomplete, since entries had no completion before v6", () => {
+    expect(migrate(v5Store()).days["2026-08-19"].scheduleItems.every((i) => i.done === false)).toBe(
+      true,
+    );
+  });
+
+  it("creates no extra entries", () => {
+    const before = v5Store().days["2026-08-19"].scheduleItems.length;
+
+    expect(migrate(v5Store()).days["2026-08-19"].scheduleItems).toHaveLength(before);
+  });
+
+  it("loses nothing else on the day", () => {
+    const day = migrate(v5Store()).days["2026-08-19"];
+
+    expect(day.priority1.text).toBe("Deep work");
+    expect(day.priority1.id).toBe("p1");
+  });
+
+  it("copes with a day that has no schedule at all", () => {
+    const store = { ...emptyState(), version: 5, days: { "2026-08-19": blankDay("2026-08-19") } };
+
+    expect(migrate(store).days["2026-08-19"].scheduleItems).toEqual([]);
+  });
+
+  it("leaves a link alone if the payload somehow already carries one", () => {
+    const store = {
+      ...emptyState(),
+      version: 5,
+      days: {
+        "2026-08-19": {
+          ...blankDay("2026-08-19"),
+          scheduleItems: [
+            {
+              id: "s1",
+              time: "09:00",
+              text: "Ship it",
+              link: { kind: "priority", priorityId: "p1" },
+              done: true,
+            },
+          ],
+        },
+      },
+    };
+
+    const item = migrate(store).days["2026-08-19"].scheduleItems[0];
+    expect(item.link).toEqual({ kind: "priority", priorityId: "p1" });
+    expect(item.done).toBe(true);
+  });
+
+  it("carries a v1 store all the way to a v6 schedule", () => {
+    const v1 = {
+      version: 1,
+      quarters: {},
+      weeks: {},
+      days: {
+        "2026-08-19": {
+          id: "2026-08-19",
+          priority1: { text: "Old work", done: false, link: "work" },
+          scheduleItems: [{ id: "s1", time: "09:00", text: "Standup" }],
+          actions: [],
+        },
+      },
+    };
+
+    const day = migrate(v1).days["2026-08-19"];
+    expect(day.scheduleItems[0]).toMatchObject({ id: "s1", time: "09:00", link: null, done: false });
+    expect(day.priority1.goal).toEqual({ category: "workMain" });
+  });
+
+  it("does not re-run on a store already at v6", () => {
+    const v6 = {
+      ...emptyState(),
+      days: {
+        "2026-08-19": {
+          ...blankDay("2026-08-19"),
+          scheduleItems: [
+            {
+              id: "s1",
+              time: "09:00",
+              text: "Ship it",
+              link: { kind: "action", actionId: "a1" },
+              done: false,
+            },
+          ],
+        },
+      },
+    };
+
+    expect(migrate(v6).days["2026-08-19"].scheduleItems[0].link).toEqual({
+      kind: "action",
+      actionId: "a1",
+    });
+  });
+});

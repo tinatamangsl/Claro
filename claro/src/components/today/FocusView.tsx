@@ -7,6 +7,7 @@ import { FocusEnd } from "@/components/today/FocusEnd";
 import { FocusInterruption } from "@/components/today/FocusInterruption";
 import { FocusTimer } from "@/components/today/FocusTimer";
 import { focusLadder, selectFocus } from "@/lib/focus";
+import type { PriorityTarget } from "@/lib/priorities";
 import { FOCUS_BLOCK_MS, JUST_BEGIN_BLOCK_MS, priorityKey } from "@/lib/types";
 import type {
   Day,
@@ -14,7 +15,6 @@ import type {
   Interruption,
   InterruptionReason,
   Priority,
-  PriorityKey,
   Quarter,
   SoundFeedbackResponse,
   Week,
@@ -30,7 +30,7 @@ type Props = {
   /** The interruption currently being logged, if any. */
   openInterruption: Interruption | null;
   now: Date | null;
-  onPatchPriority: (key: PriorityKey, patch: Partial<Priority>) => void;
+  onPatchPriority: (target: PriorityTarget, patch: Partial<Priority>) => void;
   onStart: (plannedMs: number) => void;
   onDistracted: () => void;
   onPause: () => void;
@@ -166,7 +166,7 @@ function StartPanel({ day, week, quarter, onPatchPriority, onStart }: Props) {
         <div className="mt-4">
           <EditableText
             value=""
-            onCommit={(text) => onPatchPriority("priority1", { text })}
+            onCommit={(text) => onPatchPriority({ rank: 1 }, { text })}
             ariaLabel="Priority 1"
             placeholder="The most important thing today…"
             autoFocus
@@ -234,7 +234,7 @@ function StartPanel({ day, week, quarter, onPatchPriority, onStart }: Props) {
           <CheckToggle
             checked={target.priority.done}
             onChange={() =>
-              onPatchPriority(priorityKey(target.rank), { done: !target.priority.done })
+              onPatchPriority({ rank: target.rank }, { done: !target.priority.done })
             }
             label={`Complete priority ${target.rank}`}
             size="lg"

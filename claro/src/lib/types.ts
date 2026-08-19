@@ -1,6 +1,6 @@
 /** The Claro domain model. Everything here is plain data — no React, no dates library. */
 
-export const CLARO_SCHEMA_VERSION = 5;
+export const CLARO_SCHEMA_VERSION = 6;
 
 export const MAX_SIDE_QUESTS = 3;
 export const MAX_WEEK_ACTIONS = 3;
@@ -118,8 +118,43 @@ export type Priority = {
 /** A slot is free only when nothing has been written in it. */
 export const isPrioritySet = (priority: Priority): boolean => priority.text.trim() !== "";
 
-/** time is "HH:mm" on the 05:00–22:00 grid. */
-export type ScheduleItem = { id: string; time: string; text: string };
+/**
+ * What a schedule entry points at, when it points at something.
+ *
+ * A priority is referenced by its own stable id rather than by its slot number,
+ * because slots can be reordered and a rank would then silently address a
+ * different piece of work.
+ */
+export type ScheduleLink =
+  | { kind: "priority"; priorityId: string }
+  | { kind: "action"; actionId: string }
+  | { kind: "habit"; habitId: string };
+
+/**
+ * An hour on the day's grid. `time` is "HH:mm" on the 05:00 to 22:00 grid.
+ *
+ * There are exactly two kinds, and the difference matters:
+ *
+ * - **Linked** (`link` is set) is a reference to a priority, action or habit
+ *   that already exists. Its title and its completion are read from that
+ *   record, never stored here, so ticking it from the schedule updates the
+ *   original everywhere and completing the original updates the schedule.
+ * - **Standalone** (`link` is null) is a time block that exists only here.
+ *   Its own `done` is the whole truth about it.
+ *
+ * `text` is authoritative for a standalone block. For a linked entry it is only
+ * a snapshot taken at link time, kept so the row still reads something if the
+ * original is later deleted or archived.
+ */
+export type ScheduleItem = {
+  id: string;
+  time: string;
+  text: string;
+  /** Null for a standalone time block. */
+  link: ScheduleLink | null;
+  /** Completion of a standalone block. Linked entries ignore this. */
+  done: boolean;
+};
 
 /**
  * Effort buckets. One list holds all three so that recategorising an item

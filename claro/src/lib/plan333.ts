@@ -16,6 +16,7 @@
  */
 
 import { newId } from "./id";
+import { linkedItem } from "./schedule";
 import { writePriority } from "./priorities";
 import {
   PLAN_333_DEFAULT_HOURS,
@@ -156,12 +157,17 @@ export function focusSlots(day: Day, fromTime: string): string[] {
 }
 
 /**
- * Blocks the schedule out for the meaningful project. Occupied hours are left
- * alone: the plan never overwrites something the user already wrote.
+ * Blocks the schedule out for the meaningful project.
+ *
+ * The hours are *linked* to priority 1, not copies of its words: ticking one
+ * from the schedule completes the priority, and completing the priority shows
+ * on every hour it occupies. Occupied hours are left alone, so the plan never
+ * overwrites something the user already wrote.
  */
 export function scheduleFocusBlock(day: Day, fromTime: string): Day {
   const project = meaningfulProject(day).trim();
-  if (!project) return day;
+  const priorityId = day.priority1.id;
+  if (!project || !priorityId) return day;
 
   const taken = new Set(day.scheduleItems.map((item) => item.time));
   const free = focusSlots(day, fromTime).filter((time) => !taken.has(time));
@@ -171,7 +177,9 @@ export function scheduleFocusBlock(day: Day, fromTime: string): Day {
     ...day,
     scheduleItems: [
       ...day.scheduleItems,
-      ...free.map((time) => ({ id: newId(), time, text: project })),
+      ...free.map((time) =>
+        linkedItem(time, { kind: "priority", priorityId }, project),
+      ),
     ],
   };
 }
