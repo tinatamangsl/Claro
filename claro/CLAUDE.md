@@ -178,9 +178,33 @@ noise, gentle rain (band-passed pink noise with a slow drift), a soft ambient pa
 through a lowpass), and a short optional chime. No audio file, no catalogue, no network request,
 nothing to license and nothing to track.
 
-**Real jazz, lo-fi or instrumental music is a separate decision, not a missing feature.** It would
-require original or properly licensed recordings, with the cost and obligation that carries.
-Until that decision is taken, generated audio is never described as jazz, lo-fi, or music.
+### Lo-fi and jazz: what would be required before they can ship
+
+**This repository contains no audio assets of any kind.** Checked at the time of writing: no
+`.mp3`, `.wav`, `.ogg`, `.m4a`, `.flac`, `.aac` or `.opus` anywhere outside `node_modules`, no
+`public/` directory, and no licence file. So there is nothing to offer, and nothing was added.
+
+Generated audio is never labelled lo-fi, jazz, or music. Doing so would misdescribe filtered noise
+and set an expectation the engine cannot meet.
+
+Shipping real instrumental audio needs all of the following settled first, none of which is a
+coding task:
+
+1. **The asset itself**, either commissioned original recordings or tracks under a licence that
+   permits redistribution inside a product. A "free for personal use" or "royalty free" download
+   is usually neither.
+2. **A written licence** covering commercial use, redistribution as part of an application,
+   and the territories the app is available in, kept in the repository beside the audio.
+3. **Attribution requirements** recorded and honoured in the interface where the licence demands
+   it.
+4. **A size and delivery decision.** Real audio is orders of magnitude larger than the current
+   engine, which generates everything at runtime and ships no bytes. Bundling it changes the
+   install size; streaming it introduces a network dependency and a hosting cost, and would break
+   the current promise that nothing is streamed.
+5. **A privacy answer** for anything streamed, since the app currently makes no network requests
+   for sound at all.
+
+Until those exist, do not scrape, re-encode, or "temporarily" bundle third-party tracks.
 
 The engine is a module-level singleton with one voice mounted at a time: switching soundscape
 tears the old voice down as it mounts the new one, so two can never overlap. Playback starts only
@@ -220,7 +244,18 @@ score, reward or completion-pressure language anywhere in the flow.
 
 ## Private cycle notes
 
-Off until explicitly turned on, kept in its own branch of the store, and deletable in one action.
+Its own route at `/cycle`, reached from Calendar and from Daily. Off until explicitly turned on,
+kept in its own branch of the store, and deletable in one action.
+
+**Cycle data is separate from planning data on purpose.** The optional daily note (energy, mood,
+stress) lives in `cycle.checkIns`, not on the `Day`, so "delete all cycle data" can remove every
+trace of it without touching the day's own reflection. That separation is the reason a day can
+carry both a Daily review mood and a private cycle note: they are different records, on different
+pages, serving different purposes.
+
+Claro never reads anything into a note. The Daily prompt asks "Would you like to adjust today's
+plan?" and does nothing else: no priority, habit, schedule, focus length, sound or calendar plan
+is ever changed because of cycle data.
 An estimate is the **median of the gaps the user has actually logged** — never a population
 average, never a model — withheld entirely below three entries, and always labelled as an
 estimate with the number of gaps it drew on. Implausible gaps are excluded as likely mis-logs.

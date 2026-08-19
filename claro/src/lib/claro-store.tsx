@@ -28,6 +28,7 @@ import { removeHabitCompletions, toggleCompletion } from "./habits";
 import { queueCarried, takeCarried } from "./rollover";
 import type {
   ClaroState,
+  CycleCheckIn,
   CycleEntry,
   CycleState,
   Day,
@@ -98,7 +99,11 @@ type ClaroContextValue = {
   cycle: CycleState;
   setCycleEnabled: (enabled: boolean, now: Date) => void;
   logCycleStart: (entry: CycleEntry) => void;
+  /** Replaces the logged starts wholesale. Used by add, edit and delete. */
+  setCycleEntries: (entries: Record<string, CycleEntry>) => void;
   deleteCycleEntry: (id: string) => void;
+  /** An optional private note about a day. Never written anywhere else. */
+  writeCycleCheckIn: (dayId: ISODate, patch: Partial<CycleCheckIn>, now: Date) => void;
   deleteAllCycleData: () => void;
 
   sound: SoundPrefs;
@@ -416,6 +421,12 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const setCycleEntries = useCallback((entries: Record<string, CycleEntry>) => {
+    setSnap((prev) =>
+      prev ? { ...prev, state: { ...prev.state, cycle: { ...prev.state.cycle, entries } } } : prev,
+    );
+  }, []);
+
   const deleteCycleEntry = useCallback((id: string) => {
     setSnap((prev) => {
       if (!prev) return prev;
@@ -425,6 +436,36 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const writeCycleCheckIn = useCallback(
+    (dayId: ISODate, patch: Partial<CycleCheckIn>, now: Date) => {
+      setSnap((prev) => {
+        if (!prev) return prev;
+        const current = prev.state.cycle.checkIns[dayId] ?? {
+          dayId,
+          energy: null,
+          mood: null,
+          stress: null,
+          note: "",
+          updatedAt: now.toISOString(),
+        };
+        return {
+          ...prev,
+          state: {
+            ...prev.state,
+            cycle: {
+              ...prev.state.cycle,
+              checkIns: {
+                ...prev.state.cycle.checkIns,
+                [dayId]: { ...current, ...patch, dayId, updatedAt: now.toISOString() },
+              },
+            },
+          },
+        };
+      });
+    },
+    [],
+  );
+
   /** Removes every cycle record and the opt-in itself. */
   const deleteAllCycleData = useCallback(() => {
     setSnap((prev) =>
@@ -433,7 +474,8 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
             ...prev,
             state: {
               ...prev.state,
-              cycle: { settings: { enabled: false, optedInAt: null }, entries: {} },
+              // Everything goes: entries, private notes and the opt-in itself.
+            cycle: { settings: { enabled: false, optedInAt: null }, entries: {}, checkIns: {} },
             },
           }
         : prev,
@@ -535,7 +577,9 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       cycle: state.cycle,
       setCycleEnabled,
       logCycleStart,
+      setCycleEntries,
       deleteCycleEntry,
+      writeCycleCheckIn,
       deleteAllCycleData,
       sound: state.sound,
       setSound,
@@ -571,7 +615,9 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       updateMonthPlan,
       setCycleEnabled,
       logCycleStart,
+      setCycleEntries,
       deleteCycleEntry,
+      writeCycleCheckIn,
       deleteAllCycleData,
       setSound,
       addPreset,

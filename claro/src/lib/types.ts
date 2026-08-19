@@ -514,9 +514,42 @@ export type CycleSettings = { enabled: boolean; optedInAt: string | null };
 
 export type CycleEntry = { id: string; startDate: ISODate; loggedAt: string };
 
+/** Named low to high. A reading, never a rating. */
+export type EnergyLevel = 1 | 2 | 3 | 4 | 5;
+
+export const ENERGY_LEVELS: EnergyLevel[] = [1, 2, 3, 4, 5];
+
+export const ENERGY_LABELS: Record<EnergyLevel, string> = {
+  1: "Very low",
+  2: "Low",
+  3: "Middling",
+  4: "Good",
+  5: "High",
+};
+
+/**
+ * An optional private note about a day, kept inside the cycle record rather
+ * than on the day itself.
+ *
+ * It lives here deliberately: cycle information must stay separate from
+ * planning data, and "delete all cycle data" has to be able to remove every
+ * trace of it without touching the day's own reflection.
+ */
+export type CycleCheckIn = {
+  dayId: ISODate;
+  energy: EnergyLevel | null;
+  mood: MoodFace | null;
+  stress: StressLevel | null;
+  /** The user's own words. Never parsed, searched or interpreted. */
+  note: string;
+  updatedAt: string;
+};
+
 export type CycleState = {
   settings: CycleSettings;
   entries: Record<string, CycleEntry>;
+  /** Keyed by day id, so a day has at most one private note. */
+  checkIns: Record<string, CycleCheckIn>;
 };
 
 // -------------------------------------------------------------- 3-3-3 plan
@@ -660,6 +693,20 @@ export const SESSION_MODE_META: Record<
   light: { label: "Light and admin", hint: "Small jobs, email, tidying up" },
   creative: { label: "Creative flow", hint: "Drafting, sketching, thinking aloud" },
   reset: { label: "Reset", hint: "A pause between things" },
+};
+
+/**
+ * A starting order for each intention.
+ *
+ * This groups the picker so the list is easier to read. It is presentation
+ * only: every soundscape stays reachable under every mode, and Claro never
+ * selects one on the user's behalf. Nothing here claims an effect on anyone.
+ */
+export const SOUNDSCAPES_BY_MODE: Record<SessionMode, SoundscapeId[]> = {
+  deep: ["brown", "pink", "rain", "white", "pad"],
+  light: ["white", "pink", "rain", "brown", "pad"],
+  creative: ["pad", "rain", "pink", "brown", "white"],
+  reset: ["rain", "pad", "brown", "pink", "white"],
 };
 
 export const SOUNDSCAPE_META: Record<

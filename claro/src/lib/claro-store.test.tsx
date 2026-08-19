@@ -13,6 +13,7 @@ import {
 } from "./focus-session";
 import { addCapped } from "./mutations";
 import { dayMarks, summariseDay, summariseQuarter } from "./calendar";
+import { editStart, estimateNext } from "./cycle";
 import {
   carryItem,
   closeDay,
@@ -1303,5 +1304,238 @@ describe("closing a day never leaves work active twice", () => {
     const stored = loadState().days[D];
     const linked = stored.scheduleItems.find((s) => s.id === "s2")!;
     expect(resolveScheduleItem(linked, stored, {}, {}).done).toBe(true);
+  });
+});
+
+describe("cycle notes are private, opt-in, and fully deletable", () => {
+  it("collects and shows nothing until the user opts in", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    expect(api.current!.cycle.settings.enabled).toBe(false);
+    expect(api.current!.cycle.settings.optedInAt).toBeNull();
+    expect(api.current!.cycle.entries).toEqual({});
+    expect(api.current!.cycle.checkIns).toEqual({});
+  });
+
+  it("records when consent was given, once", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.setCycleEnabled(true, new Date("2026-08-19T09:00:00.000Z")));
+    const first = api.current!.cycle.settings.optedInAt;
+    expect(first).toBe("2026-08-19T09:00:00.000Z");
+
+    // Turning it off and on again does not rewrite when consent was first given.
+    act(() => api.current!.setCycleEnabled(false, new Date()));
+    act(() => api.current!.setCycleEnabled(true, new Date("2026-09-01T09:00:00.000Z")));
+    expect(api.current!.cycle.settings.optedInAt).toBe(first);
+  });
+
+  it("keeps logged dates and private notes across a reload", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.setCycleEnabled(true, new Date()));
+    act(() =>
+      api.current!.logCycleStart({ id: "e1", startDate: "2026-08-01", loggedAt: "x" }),
+    );
+    act(() => api.current!.writeCycleCheckIn("2026-08-19", { energy: 4 }, new Date()));
+    await flush();
+
+    const stored = loadState().cycle;
+    expect(stored.entries.e1.startDate).toBe("2026-08-01");
+    expect(stored.checkIns["2026-08-19"].energy).toBe(4);
+  });
+
+  it("shows no estimate until there is enough of the user's own history", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.setCycleEnabled(true, new Date()));
+    for (const [i, startDate] of ["2026-01-01", "2026-01-29"].entries()) {
+      act(() => api.current!.logCycleStart({ id: `e${i}`, startDate, loggedAt: "x" }));
+    }
+    expect(estimateNext(api.current!.cycle)).toBeNull();
+
+    act(() => api.current!.logCycleStart({ id: "e2", startDate: "2026-02-26", loggedAt: "x" }));
+    expect(estimateNext(api.current!.cycle)).toMatchObject({ typicalGap: 28, basedOn: 2 });
+  });
+
+  it("deletes every logged date, every note and the consent itself", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.setCycleEnabled(true, new Date()));
+    act(() => api.current!.logCycleStart({ id: "e1", startDate: "2026-08-01", loggedAt: "x" }));
+    act(() => api.current!.writeCycleCheckIn("2026-08-19", { mood: "good" }, new Date()));
+
+    act(() => api.current!.deleteAllCycleData());
+    await flush();
+
+    const stored = loadState().cycle;
+    expect(stored.entries).toEqual({});
+    expect(stored.checkIns).toEqual({});
+    expect(stored.settings).toEqual({ enabled: false, optedInAt: null });
+  });
+
+  it("leaves the day's own reflection untouched when cycle data is deleted", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() =>
+      api.current!.updateDay("2026-08-19", (day) =>
+        writeReview(day, { proudOf: "Stopped at a sensible hour" }, new Date()),
+      ),
+    );
+    act(() => api.current!.setCycleEnabled(true, new Date()));
+    act(() => api.current!.writeCycleCheckIn("2026-08-19", { energy: 2 }, new Date()));
+
+    act(() => api.current!.deleteAllCycleData());
+    await flush();
+
+    // Cycle data and planning data are separate records, so one cannot take
+    // the other with it.
+    expect(loadState().days["2026-08-19"].review?.proudOf).toBe("Stopped at a sensible hour");
+    expect(loadState().cycle.checkIns).toEqual({});
+  });
+
+  it("never changes a plan because of a note", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() =>
+      api.current!.updateDay("2026-08-19", (day) => ({
+        ...day,
+        priority1: { ...day.priority1, id: "p1", text: "Ship the store" },
+      })),
+    );
+    const before = api.current!.day("2026-08-19");
+
+    act(() => api.current!.setCycleEnabled(true, new Date()));
+    act(() => api.current!.writeCycleCheckIn("2026-08-19", { energy: 1, stress: 5 }, new Date()));
+
+    expect(api.current!.day("2026-08-19")).toEqual(before);
+    expect(api.current!.sound.soundscape).toBe("brown");
+  });
+});
+
+describe("cycle edits recalculate, and deletion stays isolated", () => {
+  const TODAY = "2026-08-19";
+
+  const seedStarts = (api: ReturnType<typeof harness>) =>
+    act(() => {
+      api.current!.setCycleEnabled(true, new Date());
+      api.current!.setCycleEntries({
+        e0: { id: "e0", startDate: "2026-06-01", loggedAt: "x" },
+        e1: { id: "e1", startDate: "2026-06-29", loggedAt: "x" },
+        e2: { id: "e2", startDate: "2026-07-27", loggedAt: "x" },
+      });
+    });
+
+  it("recalculates the estimate the moment an entry is edited", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seedStarts(api);
+
+    expect(estimateNext(api.current!.cycle)?.typicalGap).toBe(28);
+
+    act(() => {
+      const result = editStart(api.current!.cycle, "e2", "2026-08-03", TODAY);
+      if (result.ok) api.current!.setCycleEntries(result.entries);
+    });
+
+    expect(estimateNext(api.current!.cycle)?.typicalGap).toBe(32);
+  });
+
+  it("recalculates when an entry is deleted", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seedStarts(api);
+
+    act(() => api.current!.deleteCycleEntry("e2"));
+
+    // Two entries leave one gap, below the threshold to estimate at all.
+    expect(estimateNext(api.current!.cycle)).toBeNull();
+  });
+
+  it("keeps edits across a reload", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seedStarts(api);
+
+    act(() => {
+      const result = editStart(api.current!.cycle, "e0", "2026-06-02", TODAY);
+      if (result.ok) api.current!.setCycleEntries(result.entries);
+    });
+    await flush();
+
+    expect(loadState().cycle.entries.e0.startDate).toBe("2026-06-02");
+  });
+
+  it("deleting all cycle data leaves every other surface untouched", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    // Something on each surface that must survive.
+    act(() => {
+      api.current!.updateDay(TODAY, (day) => ({
+        ...day,
+        priority1: { ...day.priority1, id: "p1", text: "Ship the store", done: true },
+        notes: "A day worth keeping",
+      }));
+      api.current!.updateWeek("2026-W34", (w) => ({
+        ...w,
+        work: { ...w.work, goal: "Launch the beta" },
+      }));
+      api.current!.updateQuarter("2026-Q3", (q) => ({
+        ...q,
+        work: { ...q.work, mainQuest: "Take Claro to real users" },
+      }));
+      api.current!.addHabit({
+        id: "h1",
+        name: "Ten pages",
+        createdAt: "2026-01-01T09:00:00.000Z",
+        archivedAt: null,
+      });
+      api.current!.toggleHabitDone("h1", TODAY, new Date());
+      api.current!.updateMonthPlan("2026-08", (p) => ({ ...p, intention: "Fewer things" }));
+    });
+
+    seedStarts(api);
+    act(() => api.current!.writeCycleCheckIn(TODAY, { energy: 2, note: "A private note" }, new Date()));
+
+    act(() => api.current!.deleteAllCycleData());
+    await flush();
+
+    const state = loadState();
+    // Every trace of cycle data is gone.
+    expect(state.cycle).toEqual({
+      settings: { enabled: false, optedInAt: null },
+      entries: {},
+      checkIns: {},
+    });
+    // And nothing else moved.
+    expect(state.days[TODAY].priority1.text).toBe("Ship the store");
+    expect(state.days[TODAY].priority1.done).toBe(true);
+    expect(state.days[TODAY].notes).toBe("A day worth keeping");
+    expect(state.weeks["2026-W34"].work.goal).toBe("Launch the beta");
+    expect(state.quarters["2026-Q3"].work.mainQuest).toBe("Take Claro to real users");
+    expect(state.habits.h1.name).toBe("Ten pages");
+    expect(Object.keys(state.habitCompletions)).toHaveLength(1);
+    expect(state.monthPlans["2026-08"].intention).toBe("Fewer things");
+  });
+
+  it("keeps the free-text note private and unread", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.setCycleEnabled(true, new Date()));
+    act(() => api.current!.writeCycleCheckIn(TODAY, { note: "Slept badly" }, new Date()));
+    await flush();
+
+    expect(loadState().cycle.checkIns[TODAY].note).toBe("Slept badly");
+    // It lives in the cycle branch, never on the day.
+    expect(loadState().days[TODAY]?.notes ?? "").toBe("");
   });
 });

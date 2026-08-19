@@ -41,7 +41,7 @@ describe("blank records", () => {
       interruptions: {},
       habits: {},
       habitCompletions: {},
-      cycle: { settings: { enabled: false, optedInAt: null }, entries: {} },
+      cycle: { settings: { enabled: false, optedInAt: null }, entries: {}, checkIns: {} },
       sound: {
         volume: 0.4,
         muted: false,

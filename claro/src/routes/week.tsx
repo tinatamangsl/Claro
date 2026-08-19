@@ -5,6 +5,7 @@ import { AddItem } from "@/components/AddItem";
 import { AppShell } from "@/components/AppShell";
 import { EditableText } from "@/components/EditableText";
 import { FocusOn } from "@/components/FocusOn";
+import { CycleLink } from "@/components/cycle/CycleLink";
 import { SortableRows } from "@/components/SortableRows";
 import { PeriodHeader } from "@/components/PeriodHeader";
 import { useClaro } from "@/lib/claro-store";
@@ -75,6 +76,8 @@ function WeekView() {
           </Link>
         }
       />
+
+      <CycleLink />
 
       {/* The hierarchy made visible: this week answers to that quarter. */}
       <div className="surface-quiet relative overflow-hidden py-4 pl-6 pr-5 sm:pl-7">

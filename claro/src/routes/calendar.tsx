@@ -4,7 +4,6 @@ import { NotebookPen } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { PeriodHeader } from "@/components/PeriodHeader";
 import { Breadcrumbs } from "@/components/calendar/Breadcrumbs";
-import { CyclePanel } from "@/components/calendar/CyclePanel";
 import { Legend } from "@/components/calendar/Legend";
 import { MonthPlanPanel } from "@/components/calendar/MonthPlanPanel";
 import { HabitMonth } from "@/components/calendar/HabitMonth";
@@ -70,10 +69,6 @@ function CalendarView() {
     today,
     state,
     cycle,
-    setCycleEnabled,
-    logCycleStart,
-    deleteCycleEntry,
-    deleteAllCycleData,
     monthPlan,
     updateMonthPlan,
     day,
@@ -275,16 +270,22 @@ function CalendarView() {
               onWrite={(patch) => updateMonthPlan(monthId, (p) => ({ ...p, ...patch }))}
             />
 
-            <CyclePanel
-              cycle={cycle}
-              todayId={today}
-              onEnable={(enabled) => setCycleEnabled(enabled, new Date())}
-              onLogStart={(startDate) =>
-                logCycleStart({ id: newId(), startDate, loggedAt: new Date().toISOString() })
-              }
-              onDeleteEntry={deleteCycleEntry}
-              onDeleteAll={deleteAllCycleData}
-            />
+            <section>
+              <div className="flex items-baseline gap-2.5">
+                <h2 className="eyebrow">Cycle notes</h2>
+                <span className="text-[11px] text-muted-foreground">optional, private</span>
+              </div>
+              <div className="surface mt-3 p-4">
+                <p className="max-w-prose text-[0.88rem] leading-relaxed text-muted-foreground">
+                  {cycle.settings.enabled
+                    ? "Your logged dates and your estimate live in their own private page."
+                    : "If it is useful to you, Claro can keep a private note of when a period starts."}
+                </p>
+                <Link to="/cycle" className="btn btn-sm btn-quiet mt-3">
+                  {cycle.settings.enabled ? "Open cycle notes" : "Learn more"}
+                </Link>
+              </div>
+            </section>
           </div>
         </div>
       )}

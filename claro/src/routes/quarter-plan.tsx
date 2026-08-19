@@ -7,6 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { EditableText } from "@/components/EditableText";
 import { GoalTag } from "@/components/GoalTag";
 import { SortableRows } from "@/components/SortableRows";
+import { CycleLink } from "@/components/cycle/CycleLink";
 import { PlanPrompt } from "@/components/quarter/PlanPrompt";
 import { PlanStepper } from "@/components/quarter/PlanStepper";
 import { useClaro } from "@/lib/claro-store";
@@ -104,6 +105,7 @@ function PlanWorkspace() {
           Take these in any order, and leave anything blank that does not help. Everything you
           write is saved as you go and goes straight into this quarter.
         </p>
+        <CycleLink className="mt-3" />
       </header>
 
       <PlanStepper quarter={record} stage={stage} onGo={go} />

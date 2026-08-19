@@ -17,6 +17,7 @@ import {
   type SoundPrefs,
   type SoundPreset,
   type SoundscapeId,
+  type CycleCheckIn,
   type CycleEntry,
   type DailyReview,
   type ISODate,
@@ -60,7 +61,7 @@ export function emptyState(): ClaroState {
 }
 
 export function blankCycle(): CycleState {
-  return { settings: { enabled: false, optedInAt: null }, entries: {} };
+  return { settings: { enabled: false, optedInAt: null }, entries: {}, checkIns: {} };
 }
 
 export function blankSound(): SoundPrefs {
@@ -386,6 +387,8 @@ function readCycle(raw: unknown): CycleState {
       optedInAt: typeof c.settings?.optedInAt === "string" ? c.settings.optedInAt : null,
     },
     entries: isRecord<CycleEntry>(c.entries) ? c.entries : {},
+    // Additive: a store saved before check-ins existed simply arrives empty.
+    checkIns: isRecord<CycleCheckIn>(c.checkIns) ? c.checkIns : {},
   };
 }
 

@@ -2,6 +2,7 @@ import { Check, Pause, Play, Plus, Trash2, Volume2, VolumeX } from "lucide-react
 import { useState } from "react";
 
 import { useSoundSession } from "@/hooks/use-sound-session";
+import * as sound from "@/lib/sound";
 import { useClaro } from "@/lib/claro-store";
 import { newId } from "@/lib/id";
 import { cn } from "@/lib/utils";
@@ -9,6 +10,7 @@ import {
   SESSION_MODES,
   SESSION_MODE_META,
   SOUNDSCAPES,
+  SOUNDSCAPES_BY_MODE,
   SOUNDSCAPE_META,
   type SoundPreset,
 } from "@/lib/types";
@@ -37,6 +39,9 @@ export function SoundPanel({ compact }: { compact?: boolean }) {
   const { soundPresets, addPreset, deletePreset } = useClaro();
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
+  // Session only: the chosen file is never persisted, so this resets on reload.
+  const [localName, setLocalName] = useState<string | null>(() => sound.localFileName());
+  const [loop, setLoop] = useState(true);
 
   if (!supported) {
     return (
@@ -149,16 +154,26 @@ export function SoundPanel({ compact }: { compact?: boolean }) {
 
       {/* Soundscape */}
       <fieldset>
-        <legend className="eyebrow">Soundscape</legend>
+        <legend className="eyebrow">
+          Soundscape
+          {prefs.mode && (
+            <span className="ml-2 text-[10px] normal-case tracking-normal text-muted-foreground">
+              ordered for {SESSION_MODE_META[prefs.mode].label.toLowerCase()}
+            </span>
+          )}
+        </legend>
         <div className="mt-2 grid gap-1">
-          {SOUNDSCAPES.map((id) => {
+          {(prefs.mode ? SOUNDSCAPES_BY_MODE[prefs.mode] : SOUNDSCAPES).map((id) => {
             const selected = prefs.soundscape === id;
             return (
               <button
                 key={id}
                 type="button"
                 aria-pressed={selected}
-                onClick={() => chooseSoundscape(id)}
+                onClick={() => {
+                  setLocalName(null);
+                  chooseSoundscape(id);
+                }}
                 className={cn(
                   "flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors",
                   selected
@@ -191,9 +206,66 @@ export function SoundPanel({ compact }: { compact?: boolean }) {
           })}
         </div>
         <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-          Generated on this device. Nothing is streamed, stored or recorded.
+          Generated on this device. Nothing is streamed, stored or recorded. Choosing a mode
+          reorders this list as a starting point; it never picks one for you.
         </p>
       </fieldset>
+
+      {/* Your own audio, for private local testing. */}
+      <div className="border-t border-border/70 pt-3">
+        <h3 className="eyebrow">Play your own audio</h3>
+        {localName ? (
+          <div className="mt-2">
+            <p className="text-[0.82rem] leading-snug break-words">{localName}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={loop}
+                  onChange={(e) => {
+                    setLoop(e.target.checked);
+                    sound.setLoop(e.target.checked);
+                  }}
+                  className="accent-[var(--color-primary)]"
+                />
+                Loop
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  sound.stop();
+                  setLocalName(null);
+                }}
+                className="btn btn-sm btn-ghost"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        ) : (
+          <label className="mt-2 block">
+            <span className="sr-only">Choose an audio file from this device</span>
+            <input
+              type="file"
+              accept="audio/*"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const started = await sound.playLocalFile(file, prefs.volume, prefs.muted, loop);
+                if (started) setLocalName(file.name);
+                // Allow the same file to be chosen again after clearing.
+                e.target.value = "";
+              }}
+              className="w-full text-[0.78rem] text-muted-foreground file:mr-2 file:rounded-full file:border file:border-border file:bg-card file:px-2.5 file:py-1 file:text-[0.78rem] file:text-foreground"
+            />
+          </label>
+        )}
+        <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+          Only use audio you own or are allowed to use. Your file stays on this device for this
+          browser session. Claro does not upload it, copy it, or share it, and it stops when a
+          focus block ends.
+        </p>
+      </div>
 
       {/* End of session chime */}
       <label className="flex items-start gap-2">

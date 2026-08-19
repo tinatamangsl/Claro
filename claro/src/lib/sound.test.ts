@@ -310,3 +310,114 @@ describe("teardown", () => {
     expect(contexts).toHaveLength(2);
   });
 });
+
+describe("playing the user's own audio", () => {
+  /** A stand-in for the file the user picks, and the element that plays it. */
+  class FakeAudio {
+    src: string;
+    loop = false;
+    crossOrigin: string | null = null;
+    paused = false;
+    play = vi.fn(() => Promise.resolve());
+    pause = vi.fn(() => {
+      this.paused = true;
+    });
+    constructor(src: string) {
+      this.src = src;
+      audios.push(this);
+    }
+  }
+
+  let audios: FakeAudio[] = [];
+  let created = 0;
+  let revoked = 0;
+
+  beforeEach(() => {
+    audios = [];
+    created = 0;
+    revoked = 0;
+    (window as unknown as { Audio: unknown }).Audio = FakeAudio;
+    URL.createObjectURL = vi.fn(() => {
+      created += 1;
+      return `blob:fake-${created}`;
+    }) as never;
+    URL.revokeObjectURL = vi.fn(() => {
+      revoked += 1;
+    }) as never;
+    (FakeAudioContext.prototype as unknown as Record<string, unknown>).createMediaElementSource =
+      function () {
+        return new FakeNode();
+      };
+  });
+
+  const file = (name = "my-track.mp3") => new File(["x"], name, { type: "audio/mpeg" });
+
+  it("plays a chosen file through the one engine", async () => {
+    expect(await sound.playLocalFile(file(), 0.5, false)).toBe(true);
+
+    expect(sound.isPlaying()).toBe(true);
+    expect(sound.localFileName()).toBe("my-track.mp3");
+    expect(contexts).toHaveLength(1);
+  });
+
+  it("loops by default, and the loop can be turned off", async () => {
+    await sound.playLocalFile(file(), 0.5, false, true);
+    expect(audios.at(-1)?.loop).toBe(true);
+
+    sound.setLoop(false);
+    expect(audios.at(-1)?.loop).toBe(false);
+  });
+
+  it("replaces a generated soundscape rather than playing over it", async () => {
+    await sound.play("brown", 0.5, false);
+    const before = liveVoices().length;
+    expect(before).toBeGreaterThan(0);
+
+    await sound.playLocalFile(file(), 0.5, false);
+
+    // One engine, one voice: the soundscape is torn down as the file mounts.
+    expect(sound.currentSoundscape()).toBeNull();
+    expect(contexts).toHaveLength(1);
+  });
+
+  it("is replaced in turn when a soundscape is chosen again", async () => {
+    await sound.playLocalFile(file(), 0.5, false);
+    await sound.play("rain", 0.5, false);
+
+    expect(sound.localFileName()).toBeNull();
+    expect(sound.currentSoundscape()).toBe("rain");
+  });
+
+  it("stops the element on pause, not just the gain", async () => {
+    await sound.playLocalFile(file(), 0.5, false);
+    sound.pause();
+
+    expect(audios.at(-1)?.pause).toHaveBeenCalled();
+    expect(sound.isPlaying()).toBe(false);
+  });
+
+  it("releases the file handle when the engine is torn down", async () => {
+    await sound.playLocalFile(file(), 0.5, false);
+    expect(created).toBe(1);
+
+    sound.stop();
+
+    // The object URL is revoked, so nothing keeps a reference to the file.
+    expect(revoked).toBe(1);
+    expect(sound.localFileName()).toBeNull();
+  });
+
+  it("never leaves the device: no upload, no copy, only an object URL", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch" as never);
+    await sound.playLocalFile(file(), 0.5, false);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(audios.at(-1)?.src.startsWith("blob:")).toBe(true);
+  });
+
+  it("reports failure rather than throwing where there is no Web Audio", async () => {
+    delete (window as unknown as { AudioContext?: unknown }).AudioContext;
+
+    expect(await sound.playLocalFile(file(), 0.5, false)).toBe(false);
+  });
+});

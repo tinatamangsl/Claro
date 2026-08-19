@@ -31,6 +31,8 @@ type Engine = {
   master: GainNode;
   voice: Voice | null;
   soundscape: SoundscapeId | null;
+  /** Set while the user's own file is the source, instead of a soundscape. */
+  localName: string | null;
 };
 
 let engine: Engine | null = null;
@@ -282,7 +284,7 @@ function ensureEngine(): Engine | null {
   master.gain.value = 0;
   master.connect(context.destination);
 
-  engine = { context, master, voice: null, soundscape: null };
+  engine = { context, master, voice: null, soundscape: null, localName: null };
   return engine;
 }
 
@@ -290,6 +292,7 @@ function ensureEngine(): Engine | null {
 function level(volume: number, muted: boolean, id: SoundscapeId | null): number {
   if (muted) return 0;
   const clamped = Math.min(1, Math.max(0, volume));
+  // A file the user supplied is already mastered, so it takes no trim.
   return clamped * clamped * 0.5 * (id ? TRIM[id] : 1);
 }
 
@@ -308,7 +311,61 @@ function mountVoice(id: SoundscapeId) {
   voice.output.connect(engine.master);
   engine.voice = voice;
   engine.soundscape = id;
+  engine.localName = null;
 }
+
+/**
+ * The user's own audio file, played through the same engine.
+ *
+ * The file never leaves the device: it is read as an object URL, decoded by the
+ * browser, and routed into the one master gain, so every existing control and
+ * the stop-on-session-end behaviour apply to it unchanged. The URL is revoked
+ * when the voice is torn down, and nothing about it is persisted.
+ */
+function mountLocalFile(file: File, loop: boolean): Voice | null {
+  if (!engine) return null;
+
+  engine.voice?.stop();
+
+  const { context } = engine;
+  const url = URL.createObjectURL(file);
+  const element = new Audio(url);
+  element.loop = loop;
+  element.crossOrigin = "anonymous";
+
+  const output = context.createGain();
+  const source = context.createMediaElementSource(element);
+  source.connect(output);
+  output.connect(engine.master);
+
+  void element.play().catch(() => {
+    /* a browser may refuse until a further gesture; the controls still work */
+  });
+
+  const voice: Voice = {
+    output,
+    stop: () => {
+      element.pause();
+      try {
+        source.disconnect();
+        output.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+      // Releases the file handle. Nothing was ever uploaded or copied.
+      URL.revokeObjectURL(url);
+    },
+  };
+
+  engine.voice = voice;
+  engine.soundscape = null;
+  engine.localName = file.name;
+  localElement = element;
+  return voice;
+}
+
+/** The playing element, so loop and transport can reach it. */
+let localElement: HTMLAudioElement | null = null;
 
 /**
  * Starts the sound. Must be called from a user gesture: that is both a browser
@@ -346,9 +403,46 @@ export function select(soundscape: SoundscapeId, volume: number, muted: boolean)
   ramp(level(volume, muted, soundscape), 0.25);
 }
 
+/**
+ * Plays a file the user chose from their own device.
+ *
+ * Session only: the file reference lives in memory and is dropped when playback
+ * stops or the tab closes. Nothing is uploaded, copied into the app, or shared.
+ */
+export async function playLocalFile(
+  file: File,
+  volume: number,
+  muted: boolean,
+  loop = true,
+): Promise<boolean> {
+  const active = ensureEngine();
+  if (!active) return false;
+
+  try {
+    if (active.context.state === "suspended") await active.context.resume();
+  } catch {
+    return false;
+  }
+
+  if (!mountLocalFile(file, loop)) return false;
+  playing = true;
+  ramp(level(volume, muted, null));
+  return true;
+}
+
+export function setLoop(loop: boolean): void {
+  if (localElement) localElement.loop = loop;
+}
+
+export function localFileName(): string | null {
+  return engine?.localName ?? null;
+}
+
 export function pause(): void {
   playing = false;
   ramp(0);
+  // A media element keeps running behind a silent gain, so stop it properly.
+  localElement?.pause();
 }
 
 /** Applies a volume or mute change to a sound that is already running. */
@@ -416,6 +510,7 @@ export function stop(): void {
     /* already closed */
   }
   buffers.clear();
+  localElement = null;
   engine = null;
 }
 
