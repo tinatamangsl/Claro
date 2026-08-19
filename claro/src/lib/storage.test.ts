@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { blankPlan } from "./quarter-plan";
 import {
   STORAGE_KEY,
   blankDay,
@@ -629,5 +630,95 @@ describe("v5 → v6 schedule migration", () => {
       kind: "action",
       actionId: "a1",
     });
+  });
+});
+
+describe("v6 → v7 review migration", () => {
+  it("moves the old second answer across rather than dropping it", () => {
+    const v6 = {
+      ...emptyState(),
+      version: 6,
+      days: {
+        "2026-08-19": {
+          ...blankDay("2026-08-19"),
+          review: {
+            proudOf: "Stopped at a sensible hour",
+            helped: "Two quiet hours before anyone was awake",
+            mood: "good",
+            stress: 2,
+            updatedAt: "x",
+          },
+        } as never,
+      },
+    };
+
+    const review = migrate(v6).days["2026-08-19"].review;
+    expect(review?.proudOf).toBe("Stopped at a sensible hour");
+    expect(review?.betterTomorrow).toBe("Two quiet hours before anyone was awake");
+    expect(review?.mood).toBe("good");
+    expect(review?.stress).toBe(2);
+  });
+
+  it("leaves a day with no review alone", () => {
+    const v6 = { ...emptyState(), version: 6, days: { "2026-08-19": blankDay("2026-08-19") } };
+    expect(migrate(v6).days["2026-08-19"].review).toBeNull();
+  });
+
+  it("gives every day a closed marker of null", () => {
+    const v6 = { ...emptyState(), version: 6, days: { "2026-08-19": blankDay("2026-08-19") } };
+    expect(migrate(v6).days["2026-08-19"].closedAt).toBeNull();
+  });
+});
+
+describe("reading a plan saved before the workspace grew", () => {
+  it("adds the new sections as blanks, without a migration", () => {
+    const state = {
+      ...emptyState(),
+      quarters: {
+        "2026-Q3": {
+          id: "2026-Q3",
+          work: { mainQuest: "Take Claro to real users", sideQuests: [] },
+          life: { mainQuest: "", sideQuests: [] },
+          plan: {
+            startedAt: "2026-07-01T09:00:00.000Z",
+            completedAt: null,
+            reflection: { proudOf: "Shipped the beta", whatWorked: "", carryForward: "" },
+            direction: { mattersMost: "", meaningful: "", constraints: "" },
+          },
+        } as never,
+      },
+    };
+
+    const quarter = readQuarter(state, "2026-Q3");
+    expect(quarter.plan?.reflection.proudOf).toBe("Shipped the beta");
+    expect(quarter.plan?.foundation).toEqual({
+      theme: "",
+      outcome: "",
+      whyItMatters: "",
+      headline: "",
+    });
+    expect(quarter.plan?.focusWeeks).toHaveLength(12);
+    expect(quarter.plan?.clearestGoals).toEqual(["", "", ""]);
+    expect(quarter.work.mainQuestEvidence).toBe("");
+  });
+
+  it("pads a short focus list and trims an over-long one", () => {
+    const state = {
+      ...emptyState(),
+      quarters: {
+        "2026-Q3": {
+          ...blankQuarter("2026-Q3"),
+          plan: {
+            ...blankPlan(new Date("2026-07-01T09:00:00.000Z")),
+            focusWeeks: ["Ship the beta"],
+          },
+        },
+      },
+    };
+
+    const weeks = readQuarter(state, "2026-Q3").plan!.focusWeeks;
+    expect(weeks).toHaveLength(12);
+    expect(weeks[0]).toBe("Ship the beta");
+    expect(weeks[11]).toBe("");
   });
 });

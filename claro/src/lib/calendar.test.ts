@@ -711,7 +711,7 @@ describe("the legend says only what is true", () => {
     const written = stateWith({
       days: {
         "2026-08-03": dayRecord("2026-08-03", {
-          review: { proudOf: "Rested", helped: "", mood: null, stress: null, updatedAt: "x" },
+          review: { proudOf: "Rested", betterTomorrow: "", mood: null, stress: null, updatedAt: "x" },
         }),
       },
     });

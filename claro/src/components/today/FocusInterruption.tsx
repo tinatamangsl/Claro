@@ -85,7 +85,7 @@ export function FocusInterruption({
           onClick={onExit}
           className="btn btn-ghost"
         >
-          Back to Today
+          Back to Daily
         </button>
       </div>
     </div>

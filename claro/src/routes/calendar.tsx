@@ -32,7 +32,7 @@ import {
   type MonthId,
 } from "@/lib/calendar";
 import { formatQuarterMonths, formatQuarterShort } from "@/lib/dates";
-import { hasReflection } from "@/lib/daily-review";
+import { hasReflection } from "@/lib/day-close";
 import { activeHabits } from "@/lib/habits";
 import { newId } from "@/lib/id";
 import { cn } from "@/lib/utils";

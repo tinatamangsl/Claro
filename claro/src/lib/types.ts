@@ -1,6 +1,6 @@
 /** The Claro domain model. Everything here is plain data — no React, no dates library. */
 
-export const CLARO_SCHEMA_VERSION = 6;
+export const CLARO_SCHEMA_VERSION = 7;
 
 export const MAX_SIDE_QUESTS = 3;
 export const MAX_WEEK_ACTIONS = 3;
@@ -29,6 +29,8 @@ export type QuarterSide = {
   mainQuestWhy: string;
   /** What "enough" looks like, in the user's own words. Never a metric. */
   mainQuestEnough: string;
+  /** Optional evidence that progress is real. The user's own measure, if any. */
+  mainQuestEvidence: string;
   sideQuests: SideQuest[]; // capped at MAX_SIDE_QUESTS
 };
 
@@ -52,12 +54,46 @@ export type QuarterDirection = {
   constraints: string;
 };
 
+/** What this quarter is for, before it becomes a list of goals. */
+export type QuarterFoundation = {
+  theme: string;
+  outcome: string;
+  whyItMatters: string;
+  headline: string;
+};
+
+/** The conditions that make a quarter possible, rather than more things to do. */
+export type QuarterSystems = {
+  routines: string;
+  habitsToSupport: string;
+  simplify: string;
+  stopDoing: string;
+  weeklyRitual: string;
+};
+
+export type QuarterPeople = {
+  support: string;
+  mentor: string;
+  empower: string;
+  accountability: string;
+};
+
+/** Twelve weeks, each free to stay blank. A plan is never required to be full. */
+export const PLAN_WEEKS = 12;
+
 export type QuarterPlan = {
   startedAt: string;
   /** Set when the user marks the plan as settled. Editing it again is fine. */
   completedAt: string | null;
   reflection: QuarterReflection;
   direction: QuarterDirection;
+  foundation: QuarterFoundation;
+  /** Up to three, in the user's own words. Blank entries are normal. */
+  clearestGoals: string[];
+  systems: QuarterSystems;
+  people: QuarterPeople;
+  /** One intention per week, twelve entries, any of them blank. */
+  focusWeeks: string[];
 };
 
 export type Quarter = {
@@ -188,6 +224,11 @@ export type ScheduleItem = {
   link: ScheduleLink | null;
   /** Completion of a standalone block. Linked entries ignore this. */
   done: boolean;
+  /**
+   * The day a standalone block was carried into. Once set, the block is a
+   * historical record rather than open work, so it cannot be active twice.
+   */
+  carriedTo?: ISODate | null;
 };
 
 /**
@@ -252,6 +293,11 @@ export type Day = {
   notes: string;
   /** The end-of-day reflection. Null until the user writes one. */
   review: DailyReview | null;
+  /**
+   * When the user closed the day. Closing is always their action: it is what
+   * turns a list of unfinished things into decisions they have actually made.
+   */
+  closedAt: string | null;
 };
 
 /**
@@ -289,7 +335,8 @@ export const STRESS_LABELS: Record<StressLevel, string> = {
  */
 export type DailyReview = {
   proudOf: string;
-  helped: string;
+  /** One thing that could go better tomorrow. Never framed as a failure. */
+  betterTomorrow: string;
   mood: MoodFace | null;
   stress: StressLevel | null;
   updatedAt: string;

@@ -6,7 +6,7 @@
 import { addDays, addMonths, endOfMonth, format, startOfISOWeek, startOfMonth } from "date-fns";
 
 import { formatDayId, parseDayId, weekDayIds, weekOfDay } from "./dates";
-import { hasReflection } from "./daily-review";
+import { hasReflection } from "./day-close";
 import { goalKey, resolveGoal } from "./goals";
 import { countCompletions, isDoneOn } from "./habits";
 import { resolveSchedule } from "./schedule";

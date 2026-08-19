@@ -13,7 +13,14 @@ import {
 } from "./focus-session";
 import { addCapped } from "./mutations";
 import { dayMarks, summariseDay, summariseQuarter } from "./calendar";
-import { carryItem, openItems, writeReview } from "./daily-review";
+import {
+  carryItem,
+  closeDay,
+  completeItem,
+  letGoItem,
+  openItems,
+  writeReview,
+} from "./day-close";
 import { resolveGoal } from "./goals";
 import { clearPriority, reorderPriorities } from "./priorities";
 import { reopenPlan, settlePlan, startPlan } from "./quarter-plan";
@@ -505,7 +512,7 @@ describe("the private interruption log", () => {
   });
 });
 
-describe("carry-forward at load", () => {
+describe("nothing is carried automatically", () => {
   /** Yesterday relative to the machine's real today, so the test never drifts. */
   const yesterdayId = () => {
     const d = new Date();
@@ -534,31 +541,19 @@ describe("carry-forward at load", () => {
     };
   };
 
-  it("carries unfinished work forward the moment Claro is opened", async () => {
+  it("leaves yesterday's unfinished work exactly where the user left it", async () => {
     saveNow(unfinishedYesterday());
     const api = harness();
-
     await waitFor(() => expect(api.current?.ready).toBe(true));
 
-    const carriedInto = api.current!.state.days[yesterdayId()].priority1.carriedTo;
-    expect(carriedInto).not.toBeNull();
-    expect(api.current!.day(carriedInto!).priority1.text).toBe("Ship the store");
+    // Carrying is a decision made in "Close my day", never something the app
+    // does on the user's behalf while they were not looking.
+    expect(api.current!.state.days[yesterdayId()].priority1.carriedTo).toBeNull();
+    expect(api.current!.day(formatDayId(new Date())).priority1.text).toBe("");
   });
 
-  it("writes the carry to disk, so a decision about it cannot be undone by a reload", async () => {
-    saveNow(unfinishedYesterday());
-    harness();
-
-    await waitFor(() => expect(screen.getByTestId("ready").textContent).toBe("true"));
-
-    // Read straight off localStorage rather than from the live context: the
-    // point of the test is that the change survives the tab being closed.
-    expect(loadState().days[yesterdayId()].priority1.carriedTo).not.toBeNull();
-  });
-
-  it("writes nothing when there was nothing to carry", async () => {
-    const untouched = emptyState();
-    saveNow(untouched);
+  it("writes nothing to disk merely by being opened", async () => {
+    saveNow(emptyState());
     const spy = vi.spyOn(Storage.prototype, "setItem");
 
     harness();
@@ -1173,5 +1168,140 @@ describe("monthly plans and daily reflections persist", () => {
     // The destination receives it for review, not forced into a slot.
     expect(state.days["2026-08-20"].carriedForward.map((i) => i.text)).toEqual(["Ship the store"]);
     expect(state.days["2026-08-20"].priority1.text).toBe("");
+  });
+});
+
+describe("closing a day never leaves work active twice", () => {
+  const D = "2026-08-19";
+  const T = "2026-08-20";
+
+  const seed = (api: ReturnType<typeof harness>) =>
+    act(() => {
+      api.current!.updateDay(D, (d) => ({
+        ...d,
+        priority1: { ...d.priority1, id: "p1", text: "Ship the store" },
+        actions: [
+          { id: "a1", text: "Email the accountant", bucket: "task", done: false, createdAt: "x" },
+        ],
+        scheduleItems: [
+          { id: "s1", time: "13:00", text: "Lunch away from the desk", link: null, done: false },
+        ],
+      }));
+    });
+
+  const carry = (api: ReturnType<typeof harness>, index: number, to: string) => {
+    let carried: ReturnType<typeof carryItem>["carried"] = null;
+    act(() =>
+      api.current!.updateDay(D, (day) => {
+        const result = carryItem(day, openItems(day)[index], to);
+        carried = result.carried;
+        return result.day;
+      }),
+    );
+    if (carried) act(() => api.current!.updateDay(to, (day) => queueCarried(day, carried!)));
+  };
+
+  it("moves a priority to exactly one active place", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seed(api);
+
+    carry(api, 0, T);
+    await flush();
+
+    const state = loadState();
+    // Closed on the source, so it is no longer open work there.
+    expect(openItems(state.days[D]).some((i) => i.id === "p1")).toBe(false);
+    expect(state.days[D].priority1.carriedTo).toBe(T);
+    // And present exactly once on the destination.
+    expect(state.days[T].carriedForward.map((i) => i.text)).toEqual(["Ship the store"]);
+  });
+
+  it("cannot queue the same work twice, however often it is asked", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seed(api);
+
+    const carryById = (id: string) => {
+      let carried: ReturnType<typeof carryItem>["carried"] = null;
+      act(() =>
+        api.current!.updateDay(D, (day) => {
+          const item = openItems(day).find((i) => i.id === id);
+          if (!item) return day;
+          const result = carryItem(day, item, T);
+          carried = result.carried;
+          return result.day;
+        }),
+      );
+      if (carried) act(() => api.current!.updateDay(T, (day) => queueCarried(day, carried!)));
+    };
+
+    carryById("p1");
+    // The second attempt finds it closed, so there is nothing left to carry.
+    carryById("p1");
+    await flush();
+
+    expect(loadState().days[T].carriedForward).toHaveLength(1);
+    expect(loadState().days[T].carriedForward[0].id).toBe("p1");
+  });
+
+  it("schedules a standalone block onto a chosen later date", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seed(api);
+
+    carry(api, 2, "2026-08-25");
+    await flush();
+
+    const state = loadState();
+    expect(state.days[D].scheduleItems[0].carriedTo).toBe("2026-08-25");
+    expect(state.days["2026-08-25"].carriedForward.map((i) => i.text)).toEqual([
+      "Lunch away from the desk",
+    ]);
+    expect(openItems(state.days[D]).some((i) => i.kind === "schedule")).toBe(false);
+  });
+
+  it("keeps every decision across a reload", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seed(api);
+
+    carry(api, 0, T);
+    act(() =>
+      api.current!.updateDay(D, (day) => completeItem(day, openItems(day)[0])),
+    );
+    act(() => api.current!.updateDay(D, (day) => letGoItem(day, openItems(day)[0], new Date())));
+    act(() => api.current!.updateDay(D, (day) => closeDay(day, new Date())));
+    await flush();
+
+    const state = loadState();
+    expect(state.days[D].priority1.carriedTo).toBe(T);
+    expect(state.days[D].actions[0].done).toBe(true);
+    expect(state.days[D].scheduleItems[0].carriedTo).not.toBeNull();
+    expect(state.days[D].closedAt).not.toBeNull();
+    // Nothing is left open once every decision has been made.
+    expect(openItems(state.days[D])).toEqual([]);
+  });
+
+  it("leaves the linked schedule row reading its source correctly", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+    seed(api);
+
+    act(() =>
+      api.current!.updateDay(D, (d) => ({
+        ...d,
+        scheduleItems: [
+          ...d.scheduleItems,
+          { id: "s2", time: "09:00", text: "Ship the store", link: { kind: "priority", priorityId: "p1" }, done: false },
+        ],
+      })),
+    );
+    act(() => api.current!.updateDay(D, (day) => completeItem(day, openItems(day)[0])));
+    await flush();
+
+    const stored = loadState().days[D];
+    const linked = stored.scheduleItems.find((s) => s.id === "s2")!;
+    expect(resolveScheduleItem(linked, stored, {}, {}).done).toBe(true);
   });
 });

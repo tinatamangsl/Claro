@@ -215,7 +215,7 @@ describe("after a distraction", () => {
   it("leaves the session open when the user steps away to Today", () => {
     const spies = renderFocus({ session: paused(), now: at(11 * MINUTE) });
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Back to Today" })[1]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Back to Daily" })[1]);
 
     expect(spies.onExit).toHaveBeenCalled();
     expect(spies.onLeave).not.toHaveBeenCalled();
@@ -263,7 +263,7 @@ describe("when the block ends", () => {
   it("resolves the session when the user leaves a finished block", () => {
     const spies = renderFocus({ session: ended(), now: at(30 * MINUTE) });
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Back to Today" })[1]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Back to Daily" })[1]);
 
     expect(spies.onLeave).toHaveBeenCalled();
   });

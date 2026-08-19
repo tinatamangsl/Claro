@@ -114,7 +114,7 @@ function NotFoundComponent() {
         to="/today"
         className="btn btn-primary"
       >
-        Go to Today
+        Go to Daily
       </Link>
       <Link
         to="/quarter"

@@ -1,6 +1,8 @@
 import { newId } from "./id";
+import { blankPlan } from "./quarter-plan";
 import {
   CLARO_SCHEMA_VERSION,
+  PLAN_WEEKS,
   SESSION_MODES,
   SOUNDSCAPES,
   type ClaroState,
@@ -68,7 +70,13 @@ export function blankSound(): SoundPrefs {
 }
 
 export function blankQuarterSide(): QuarterSide {
-  return { mainQuest: "", mainQuestWhy: "", mainQuestEnough: "", sideQuests: [] };
+  return {
+    mainQuest: "",
+    mainQuestWhy: "",
+    mainQuestEnough: "",
+    mainQuestEvidence: "",
+    sideQuests: [],
+  };
 }
 
 /**
@@ -109,6 +117,7 @@ export function blankDay(id: ISODate): Day {
     mood: null,
     notes: "",
     review: null,
+    closedAt: null,
   };
 }
 
@@ -173,7 +182,13 @@ export function blankMonthPlan(id: string, now: Date): MonthPlan {
 }
 
 export function blankReview(now: Date): DailyReview {
-  return { proudOf: "", helped: "", mood: null, stress: null, updatedAt: now.toISOString() };
+  return {
+    proudOf: "",
+    betterTomorrow: "",
+    mood: null,
+    stress: null,
+    updatedAt: now.toISOString(),
+  };
 }
 
 /** Applied in order, so a v1 store passes through every step to the current shape. */
@@ -182,6 +197,35 @@ function migrateDays(days: Record<string, Day>, version: number): Record<string,
   if (version < 2) migrated = v1DaysToV2(migrated);
   if (version < 3) migrated = v2DaysToV3(migrated);
   if (version < 6) migrated = v5DaysToV6(migrated);
+  if (version < 7) migrated = v6DaysToV7(migrated);
+  return migrated;
+}
+
+/**
+ * v7 renames the review's second question. The old field held the same kind of
+ * answer, so it is moved across rather than dropped: a reflection someone wrote
+ * is not something to discard over a rename.
+ */
+function v6DaysToV7(days: Record<string, Day>): Record<string, Day> {
+  const migrated: Record<string, Day> = {};
+
+  for (const [id, day] of Object.entries(days)) {
+    const review = day.review as (DailyReview & { helped?: string }) | null;
+    migrated[id] = {
+      ...day,
+      closedAt: day.closedAt ?? null,
+      review: review
+        ? {
+            proudOf: review.proudOf ?? "",
+            betterTomorrow: review.betterTomorrow ?? review.helped ?? "",
+            mood: review.mood ?? null,
+            stress: review.stress ?? null,
+            updatedAt: review.updatedAt ?? "",
+          }
+        : null,
+    };
+  }
+
   return migrated;
 }
 
@@ -378,6 +422,33 @@ function isRecord<T>(value: unknown): value is Record<string, T> {
  * version defaults correctly on every previously-saved record without any
  * explicit migration step.
  */
+/**
+ * The plan's own read-through. A plan saved before the Foundation, Systems,
+ * People or focus-map sections existed gains them as blanks, which is why
+ * growing the workspace needed no migration.
+ */
+function readPlan(stored: Quarter["plan"]): Quarter["plan"] {
+  if (!stored) return null;
+  const blank = blankPlan(new Date(stored.startedAt));
+  return {
+    ...blank,
+    ...stored,
+    reflection: { ...blank.reflection, ...stored.reflection },
+    direction: { ...blank.direction, ...stored.direction },
+    foundation: { ...blank.foundation, ...stored.foundation },
+    systems: { ...blank.systems, ...stored.systems },
+    people: { ...blank.people, ...stored.people },
+    clearestGoals: normaliseList(stored.clearestGoals, 3),
+    focusWeeks: normaliseList(stored.focusWeeks, PLAN_WEEKS),
+  };
+}
+
+/** Pads or trims a list of strings to a fixed length, keeping what is there. */
+function normaliseList(value: unknown, length: number): string[] {
+  const list = Array.isArray(value) ? value : [];
+  return Array.from({ length }, (_, i) => (typeof list[i] === "string" ? list[i] : ""));
+}
+
 export function readQuarter(state: ClaroState, id: QuarterId): Quarter {
   const stored = state.quarters[id];
   if (!stored) return blankQuarter(id);
@@ -388,6 +459,7 @@ export function readQuarter(state: ClaroState, id: QuarterId): Quarter {
     id,
     work: { ...blank.work, ...stored.work },
     life: { ...blank.life, ...stored.life },
+    plan: readPlan(stored.plan),
   };
 }
 

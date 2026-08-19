@@ -113,13 +113,34 @@ describe("stage progress", () => {
     expect(stageProgress(quarter, "back").answered).toBe(0);
   });
 
-  it("measures the define stage by the two Main Quests only", () => {
+  it("measures the goals stage by the two Main Quests only", () => {
     const quarter: Quarter = {
       ...startPlan(q(), NOW),
       work: { ...blankQuarterSide(), mainQuest: "Take Claro to real users" },
     };
 
-    expect(stageProgress(quarter, "define")).toEqual({ answered: 1, of: 2 });
+    expect(stageProgress(quarter, "goals")).toEqual({ answered: 1, of: 2 });
+  });
+
+  it("counts the twelve weeks without requiring any of them", () => {
+    const quarter = startPlan(q(), NOW);
+    expect(stageProgress(quarter, "execution")).toEqual({ answered: 0, of: 12 });
+
+    const withOne: Quarter = {
+      ...quarter,
+      plan: {
+        ...quarter.plan!,
+        focusWeeks: quarter.plan!.focusWeeks.map((w, i) => (i === 0 ? "Ship the beta" : w)),
+      },
+    };
+    expect(stageProgress(withOne, "execution").answered).toBe(1);
+  });
+
+  it("counts each of the new sections", () => {
+    const quarter = startPlan(q(), NOW);
+    expect(stageProgress(quarter, "foundation")).toEqual({ answered: 0, of: 4 });
+    expect(stageProgress(quarter, "systems")).toEqual({ answered: 0, of: 5 });
+    expect(stageProgress(quarter, "people")).toEqual({ answered: 0, of: 4 });
   });
 
   it("reports the review stage as settled or not", () => {
@@ -182,19 +203,30 @@ describe("side quest limits", () => {
 });
 
 describe("moving between stages", () => {
-  it("runs looking back, direction, define, review", () => {
-    expect(PLAN_STAGES).toEqual(["back", "direction", "define", "review"]);
-    expect(nextStage("back")).toBe("direction");
+  it("runs looking back, foundation, goals, systems, people, twelve weeks, review", () => {
+    expect(PLAN_STAGES).toEqual([
+      "back",
+      "foundation",
+      "goals",
+      "systems",
+      "people",
+      "execution",
+      "review",
+    ]);
+    expect(nextStage("back")).toBe("foundation");
     expect(nextStage("review")).toBeNull();
     expect(previousStage("back")).toBeNull();
-    expect(previousStage("define")).toBe("direction");
+    expect(previousStage("goals")).toBe("foundation");
   });
 });
 
 describe("a blank plan", () => {
-  it("starts empty and unsettled", () => {
+  it("starts empty and unsettled, with room for twelve blank weeks", () => {
     const plan = blankPlan(NOW);
     expect(plan.completedAt).toBeNull();
-    expect(Object.values(plan.direction).every((v) => v === "")).toBe(true);
+    expect(Object.values(plan.foundation).every((v) => v === "")).toBe(true);
+    expect(plan.clearestGoals).toEqual(["", "", ""]);
+    expect(plan.focusWeeks).toHaveLength(12);
+    expect(plan.focusWeeks.every((w) => w === "")).toBe(true);
   });
 });

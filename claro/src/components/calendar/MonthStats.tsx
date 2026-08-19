@@ -32,7 +32,7 @@ export function HabitConsistencyList({ month }: { month: MonthSummary }) {
   if (month.perHabit.length === 0) {
     return (
       <p className="text-[0.82rem] leading-relaxed text-muted-foreground">
-        No habits yet. Add one on Today and it will show up here.
+        No habits yet. Add one on Daily and it will show up here.
       </p>
     );
   }

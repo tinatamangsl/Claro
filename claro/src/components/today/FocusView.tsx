@@ -100,7 +100,7 @@ export function FocusView(props: Props) {
           className="btn btn-sm btn-quiet"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Today
+          Back to Daily
         </button>
       </div>
 

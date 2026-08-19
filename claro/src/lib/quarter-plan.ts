@@ -11,15 +11,26 @@
  * own.
  */
 
-import { MAX_SIDE_QUESTS, type Quarter, type QuarterPlan } from "./types";
+import { MAX_SIDE_QUESTS, PLAN_WEEKS, type Quarter, type QuarterPlan } from "./types";
 
-export const PLAN_STAGES = ["back", "direction", "define", "review"] as const;
+export const PLAN_STAGES = [
+  "back",
+  "foundation",
+  "goals",
+  "systems",
+  "people",
+  "execution",
+  "review",
+] as const;
 export type PlanStage = (typeof PLAN_STAGES)[number];
 
 export const STAGE_META: Record<PlanStage, { label: string; hint: string }> = {
   back: { label: "Looking back", hint: "What the last quarter actually taught you" },
-  direction: { label: "Choosing direction", hint: "What this one is for" },
-  define: { label: "Defining the quarter", hint: "The quests you are committing to" },
+  foundation: { label: "Foundation", hint: "What this quarter is for, before it becomes goals" },
+  goals: { label: "Goals", hint: "The quests you are committing to" },
+  systems: { label: "Systems", hint: "The conditions that make it easier" },
+  people: { label: "People", hint: "Who is around this, and who you can lean on" },
+  execution: { label: "Twelve weeks", hint: "A calm focus map, blanks allowed" },
   review: { label: "Review", hint: "Read it back before you settle it" },
 };
 
@@ -29,6 +40,17 @@ export function blankPlan(now: Date): QuarterPlan {
     completedAt: null,
     reflection: { proudOf: "", whatWorked: "", carryForward: "" },
     direction: { mattersMost: "", meaningful: "", constraints: "" },
+    foundation: { theme: "", outcome: "", whyItMatters: "", headline: "" },
+    clearestGoals: ["", "", ""],
+    systems: {
+      routines: "",
+      habitsToSupport: "",
+      simplify: "",
+      stopDoing: "",
+      weeklyRitual: "",
+    },
+    people: { support: "", mentor: "", empower: "", accountability: "" },
+    focusWeeks: Array.from({ length: PLAN_WEEKS }, () => ""),
   };
 }
 
@@ -68,16 +90,34 @@ export function stageProgress(quarter: Quarter, stage: PlanStage): StageProgress
     return { answered: values.filter((v) => written(v ?? "")).length, of: 3 };
   }
 
-  if (stage === "direction") {
-    const d = plan?.direction;
-    const values = [d?.mattersMost, d?.meaningful, d?.constraints];
-    return { answered: values.filter((v) => written(v ?? "")).length, of: 3 };
+  if (stage === "foundation") {
+    const f = plan?.foundation;
+    const values = [f?.theme, f?.outcome, f?.whyItMatters, f?.headline];
+    return { answered: values.filter((v) => written(v ?? "")).length, of: 4 };
   }
 
-  if (stage === "define") {
+  if (stage === "goals") {
     // The two Main Quests are what defines a quarter; side quests are optional.
     const values = [quarter.work.mainQuest, quarter.life.mainQuest];
     return { answered: values.filter(written).length, of: 2 };
+  }
+
+  if (stage === "systems") {
+    const s = plan?.systems;
+    const values = [s?.routines, s?.habitsToSupport, s?.simplify, s?.stopDoing, s?.weeklyRitual];
+    return { answered: values.filter((v) => written(v ?? "")).length, of: 5 };
+  }
+
+  if (stage === "people") {
+    const p = plan?.people;
+    const values = [p?.support, p?.mentor, p?.empower, p?.accountability];
+    return { answered: values.filter((v) => written(v ?? "")).length, of: 4 };
+  }
+
+  if (stage === "execution") {
+    // Weeks may stay blank on purpose, so this counts rather than requires.
+    const weeks = plan?.focusWeeks ?? [];
+    return { answered: weeks.filter(written).length, of: PLAN_WEEKS };
   }
 
   return { answered: isSettled(quarter) ? 1 : 0, of: 1 };
@@ -94,9 +134,14 @@ export function hasAnything(quarter: Quarter): boolean {
     plan?.reflection.proudOf,
     plan?.reflection.whatWorked,
     plan?.reflection.carryForward,
-    plan?.direction.mattersMost,
-    plan?.direction.meaningful,
-    plan?.direction.constraints,
+    plan?.foundation.theme,
+    plan?.foundation.outcome,
+    plan?.foundation.whyItMatters,
+    plan?.foundation.headline,
+    ...(plan?.clearestGoals ?? []),
+    ...Object.values(plan?.systems ?? {}),
+    ...Object.values(plan?.people ?? {}),
+    ...(plan?.focusWeeks ?? []),
     quarter.work.mainQuest,
     quarter.work.mainQuestWhy,
     quarter.work.mainQuestEnough,

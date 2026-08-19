@@ -25,7 +25,7 @@ import {
   type SaveResult,
 } from "./storage";
 import { removeHabitCompletions, toggleCompletion } from "./habits";
-import { applyRollover, queueCarried, takeCarried } from "./rollover";
+import { queueCarried, takeCarried } from "./rollover";
 import type {
   ClaroState,
   CycleEntry,
@@ -139,36 +139,23 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   useEffect(() => {
-    // Carry-forward is applied at load, not on a schedule: the browser is
-    // usually shut at 10 PM, so "next time Claro is opened" is the only moment
-    // that can be relied on.
-    const now = new Date();
-    const loaded = loadState();
-    const rolled = applyRollover(loaded, now);
-    setSnap({ state: rolled, today: formatDayId(now) });
-
-    // The save effect below deliberately skips the first populated snapshot,
-    // since that is only what we read off disk. A carry-forward is the
-    // exception: it is a real change, and leaving it unwritten would mean the
-    // source day is never marked as carried — so letting something go in the
-    // review area would be undone by the very next load.
-    if (rolled !== loaded) saveNow(rolled);
+    /*
+     * Nothing is carried automatically any more.
+     *
+     * Unfinished work now moves only through "Close my day", where the user
+     * decides item by item. An automatic rollover would put the same work on
+     * two days at once, which is exactly the problem the close flow exists to
+     * fix, so it is deliberately not called here.
+     */
+    setSnap({ state: loadState(), today: formatDayId(new Date()) });
   }, []);
 
-  // A tab left open past midnight — or past 10 PM — should catch up on its own.
+  // A tab left open past midnight should roll over to the new day on its own.
   useEffect(() => {
     if (!snap) return;
     const tick = setInterval(() => {
-      setSnap((prev) => {
-        if (!prev) return prev;
-        const now = new Date();
-        const today = formatDayId(now);
-        const state = applyRollover(prev.state, now);
-        // `applyRollover` returns the same object when nothing moved, so an
-        // idle tab neither re-renders nor writes to disk.
-        if (state === prev.state && today === prev.today) return prev;
-        return { state, today };
-      });
+      const now = formatDayId(new Date());
+      setSnap((prev) => (prev && prev.today !== now ? { ...prev, today: now } : prev));
     }, 60_000);
     return () => clearInterval(tick);
   }, [snap !== null]);

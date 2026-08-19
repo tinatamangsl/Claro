@@ -31,6 +31,7 @@ import {
   DOMAINS,
   DOMAIN_META,
   MAX_SIDE_QUESTS,
+  PLAN_WEEKS,
   type Domain,
   type Quarter,
   type QuarterId,
@@ -134,35 +135,143 @@ function PlanWorkspace() {
         </section>
       )}
 
-      {stage === "direction" && (
+      {stage === "foundation" && (
         <section className="space-y-6">
-          <StageHeading stage="direction" />
+          <StageHeading stage="foundation" />
           <PlanPrompt
-            question="What matters most this quarter?"
-            value={plan?.direction.mattersMost ?? ""}
+            question="A word or theme for this quarter"
+            hint="One word is plenty."
+            value={plan?.foundation.theme ?? ""}
+            onCommit={(theme) => patch((c) => withFoundation(c, { theme }))}
+          />
+          <PlanPrompt
+            question="The outcome you want to create by the end of this quarter"
+            value={plan?.foundation.outcome ?? ""}
             placeholder="In your own words, before it becomes a goal."
-            onCommit={(mattersMost) => patch((c) => withDirection(c, { mattersMost }))}
+            onCommit={(outcome) => patch((c) => withFoundation(c, { outcome }))}
           />
           <PlanPrompt
-            question="What would make this quarter feel meaningful?"
-            value={plan?.direction.meaningful ?? ""}
-            onCommit={(meaningful) => patch((c) => withDirection(c, { meaningful }))}
+            question="Why this matters to you"
+            value={plan?.foundation.whyItMatters ?? ""}
+            onCommit={(whyItMatters) => patch((c) => withFoundation(c, { whyItMatters }))}
           />
           <PlanPrompt
-            question="What constraints, commitments or support should you plan around?"
-            hint="Time you do not have, and help you do."
-            value={plan?.direction.constraints ?? ""}
-            onCommit={(constraints) => patch((c) => withDirection(c, { constraints }))}
+            question="A headline you would be proud to write at the end of the quarter"
+            hint="One sentence, written as though it has already happened."
+            value={plan?.foundation.headline ?? ""}
+            onCommit={(headline) => patch((c) => withFoundation(c, { headline }))}
           />
         </section>
       )}
 
-      {stage === "define" && (
+      {stage === "goals" && (
         <section className="space-y-8">
-          <StageHeading stage="define" />
+          <StageHeading stage="goals" />
+
+          <div className="space-y-4">
+            <h3 className="text-[0.95rem]">Your three clearest goals for this quarter</h3>
+            {[0, 1, 2].map((i) => (
+              <PlanPrompt
+                key={i}
+                question={`Goal ${i + 1}`}
+                value={plan?.clearestGoals[i] ?? ""}
+                onCommit={(value) => patch((c) => withGoal(c, i, value))}
+              />
+            ))}
+          </div>
+
           {DOMAINS.map((domain) => (
             <DomainPlan key={domain} domain={domain} quarter={record} patch={patch} />
           ))}
+        </section>
+      )}
+
+      {stage === "systems" && (
+        <section className="space-y-6">
+          <StageHeading stage="systems" />
+          <PlanPrompt
+            question="Systems or routines that would make this quarter easier"
+            value={plan?.systems.routines ?? ""}
+            onCommit={(routines) => patch((c) => withSystems(c, { routines }))}
+          />
+          <PlanPrompt
+            question="Habits you want to support"
+            value={plan?.systems.habitsToSupport ?? ""}
+            onCommit={(habitsToSupport) => patch((c) => withSystems(c, { habitsToSupport }))}
+          />
+          <PlanPrompt
+            question="What you can automate, delegate or simplify"
+            value={plan?.systems.simplify ?? ""}
+            onCommit={(simplify) => patch((c) => withSystems(c, { simplify }))}
+          />
+          <PlanPrompt
+            question="What you will consciously stop doing"
+            hint="This one is usually the most useful."
+            value={plan?.systems.stopDoing ?? ""}
+            onCommit={(stopDoing) => patch((c) => withSystems(c, { stopDoing }))}
+          />
+          <PlanPrompt
+            question="A weekly ritual that keeps you connected to the plan"
+            value={plan?.systems.weeklyRitual ?? ""}
+            onCommit={(weeklyRitual) => patch((c) => withSystems(c, { weeklyRitual }))}
+          />
+        </section>
+      )}
+
+      {stage === "people" && (
+        <section className="space-y-6">
+          <StageHeading stage="people" />
+          <PlanPrompt
+            question="People, roles or support you may need"
+            value={plan?.people.support ?? ""}
+            onCommit={(support) => patch((c) => withPeople(c, { support }))}
+          />
+          <PlanPrompt
+            question="A mentor or advisor you can lean on"
+            value={plan?.people.mentor ?? ""}
+            onCommit={(mentor) => patch((c) => withPeople(c, { mentor }))}
+          />
+          <PlanPrompt
+            question="Someone you want to support or empower"
+            value={plan?.people.empower ?? ""}
+            onCommit={(empower) => patch((c) => withPeople(c, { empower }))}
+          />
+          <PlanPrompt
+            question="An accountability partner, if that helps you"
+            hint="Optional, and entirely up to you."
+            value={plan?.people.accountability ?? ""}
+            onCommit={(accountability) => patch((c) => withPeople(c, { accountability }))}
+          />
+        </section>
+      )}
+
+      {stage === "execution" && (
+        <section className="space-y-5">
+          <StageHeading stage="execution" />
+          <p className="max-w-prose text-[0.88rem] leading-relaxed text-muted-foreground">
+            One intention per week, if it helps. Weeks can stay blank, and you can change any
+            of them at any point in the quarter.
+          </p>
+
+          <ol className="space-y-2">
+            {Array.from({ length: PLAN_WEEKS }, (_, i) => (
+              <li key={i} className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-3">
+                <span className="tnum shrink-0 text-[11px] text-muted-foreground sm:mt-2.5 sm:w-14">
+                  Week {i + 1}
+                </span>
+                <span className="paper-panel ruled min-w-0 flex-1 px-3 pb-1">
+                  <EditableText
+                    value={plan?.focusWeeks[i] ?? ""}
+                    onCommit={(value) => patch((c) => withWeek(c, i, value))}
+                    wrap
+                    ariaLabel={`Focus for week ${i + 1}`}
+                    placeholder="Leave blank if you would rather decide later."
+                    className="ruled-text -ml-2 py-0"
+                  />
+                </span>
+              </li>
+            ))}
+          </ol>
         </section>
       )}
 
@@ -301,6 +410,15 @@ function DomainPlan({
         />
       </div>
 
+      <div className="mt-4">
+        <PlanPrompt
+          question="Evidence that progress is real"
+          hint="Optional. Your own measure, if a measure helps at all."
+          value={side.mainQuestEvidence}
+          onCommit={(mainQuestEvidence) => onSide((s) => ({ ...s, mainQuestEvidence }))}
+        />
+      </div>
+
       <div className="mt-6 border-t border-border/70 pt-4">
         <div className="flex items-baseline justify-between gap-3">
           <div className="flex items-baseline gap-2.5">
@@ -367,13 +485,55 @@ function PlanSummary({ quarter }: { quarter: Quarter }) {
         ]}
       />
       <SummaryGroup
-        heading="Direction"
+        heading="Foundation"
         entries={[
-          ["Matters most", plan?.direction.mattersMost],
-          ["Would feel meaningful", plan?.direction.meaningful],
-          ["Planning around", plan?.direction.constraints],
+          ["Theme", plan?.foundation.theme],
+          ["Outcome", plan?.foundation.outcome],
+          ["Why it matters", plan?.foundation.whyItMatters],
+          ["Headline", plan?.foundation.headline],
         ]}
       />
+      <SummaryGroup
+        heading="Clearest goals"
+        entries={(plan?.clearestGoals ?? []).map((g, i) => [`Goal ${i + 1}`, g])}
+      />
+      <SummaryGroup
+        heading="Systems"
+        entries={[
+          ["Routines", plan?.systems.routines],
+          ["Habits to support", plan?.systems.habitsToSupport],
+          ["Automate, delegate or simplify", plan?.systems.simplify],
+          ["Stopping", plan?.systems.stopDoing],
+          ["Weekly ritual", plan?.systems.weeklyRitual],
+        ]}
+      />
+      <SummaryGroup
+        heading="People"
+        entries={[
+          ["Support", plan?.people.support],
+          ["Mentor or advisor", plan?.people.mentor],
+          ["Someone to support", plan?.people.empower],
+          ["Accountability", plan?.people.accountability],
+        ]}
+      />
+
+      {(plan?.focusWeeks ?? []).some((w) => w.trim() !== "") && (
+        <div>
+          <h3 className="eyebrow">Twelve weeks</h3>
+          <ol className="mt-2 space-y-1.5">
+            {(plan?.focusWeeks ?? []).map((week, i) =>
+              week.trim() === "" ? null : (
+                <li key={i} className="flex items-start gap-3 text-[0.85rem] leading-snug">
+                  <span className="tnum w-14 shrink-0 text-[11px] text-muted-foreground">
+                    Week {i + 1}
+                  </span>
+                  <span className="min-w-0">{week}</span>
+                </li>
+              ),
+            )}
+          </ol>
+        </div>
+      )}
 
       {DOMAINS.map((domain) => {
         const side = quarter[domain];
@@ -392,6 +552,7 @@ function PlanSummary({ quarter }: { quarter: Quarter }) {
               entries={[
                 ["Why it matters", side.mainQuestWhy],
                 ["Enough looks like", side.mainQuestEnough],
+                ["Evidence of progress", side.mainQuestEvidence],
               ]}
             />
             {side.sideQuests.length > 0 && (
@@ -452,8 +613,36 @@ function withReflection(quarter: Quarter, patch: Partial<NonNullable<Quarter["pl
   return { ...quarter, plan: { ...plan, reflection: { ...plan.reflection, ...patch } } };
 }
 
-function withDirection(quarter: Quarter, patch: Partial<NonNullable<Quarter["plan"]>["direction"]>): Quarter {
+type Plan = NonNullable<Quarter["plan"]>;
+
+function withFoundation(quarter: Quarter, patch: Partial<Plan["foundation"]>): Quarter {
   const plan = quarter.plan;
   if (!plan) return quarter;
-  return { ...quarter, plan: { ...plan, direction: { ...plan.direction, ...patch } } };
+  return { ...quarter, plan: { ...plan, foundation: { ...plan.foundation, ...patch } } };
+}
+
+function withSystems(quarter: Quarter, patch: Partial<Plan["systems"]>): Quarter {
+  const plan = quarter.plan;
+  if (!plan) return quarter;
+  return { ...quarter, plan: { ...plan, systems: { ...plan.systems, ...patch } } };
+}
+
+function withPeople(quarter: Quarter, patch: Partial<Plan["people"]>): Quarter {
+  const plan = quarter.plan;
+  if (!plan) return quarter;
+  return { ...quarter, plan: { ...plan, people: { ...plan.people, ...patch } } };
+}
+
+function withGoal(quarter: Quarter, index: number, value: string): Quarter {
+  const plan = quarter.plan;
+  if (!plan) return quarter;
+  const clearestGoals = plan.clearestGoals.map((g, i) => (i === index ? value : g));
+  return { ...quarter, plan: { ...plan, clearestGoals } };
+}
+
+function withWeek(quarter: Quarter, index: number, value: string): Quarter {
+  const plan = quarter.plan;
+  if (!plan) return quarter;
+  const focusWeeks = plan.focusWeeks.map((w, i) => (i === index ? value : w));
+  return { ...quarter, plan: { ...plan, focusWeeks } };
 }

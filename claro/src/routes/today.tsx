@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { EditableText } from "@/components/EditableText";
@@ -46,15 +46,19 @@ import {
   type PriorityTarget,
 } from "@/lib/priorities";
 import { scheduleHabitToggle, toggleScheduleItem } from "@/lib/schedule";
-import { DailyReview } from "@/components/today/DailyReview";
+import { CloseDay } from "@/components/today/CloseDay";
 import {
   carryItem,
+  closeDay,
   completeItem,
+  isCloseEligible,
   letGoItem,
+  reopenDay,
+  tomorrowOf,
   writeReview,
   type Decision,
   type OpenItem,
-} from "@/lib/daily-review";
+} from "@/lib/day-close";
 import {
   keepCarriedAsAction,
   letGoCarried,
@@ -76,6 +80,7 @@ import type {
   PriorityKey,
   PriorityRank,
   SoundFeedbackResponse,
+  DailyReview as DailyReviewRecord,
 } from "@/lib/types";
 
 /** `?focus`, `?focus=1` and `?focus=true` all mean the same thing. */
@@ -97,7 +102,7 @@ export const Route = createFileRoute("/today")({
       <TodayView />
     </AppShell>
   ),
-  head: () => ({ meta: [{ title: "Today: Claro" }] }),
+  head: () => ({ meta: [{ title: "Daily: Claro" }] }),
 });
 
 function TodayView() {
@@ -132,6 +137,30 @@ function TodayView() {
   const quarterId = quarterOfDay(dayId);
   const parentWeek = week(weekId);
   const parentQuarter = quarter(quarterId);
+
+  /**
+   * Whether this day has passed its 9 PM. Recomputed on every render and on a
+   * slow tick, because a browser cannot be relied on to wake in the background:
+   * opening the app, navigating, or coming back to the tab is what asks.
+   */
+  const [clock, setClock] = useState<Date | null>(null);
+  useEffect(() => {
+    const read = () => setClock(new Date());
+    read();
+    const tick = setInterval(read, 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") read();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", read);
+    return () => {
+      clearInterval(tick);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", read);
+    };
+  }, []);
+
+  const [closing, setClosing] = useState(false);
 
   const focus = useFocusSession();
   const { session, now, openInterruption } = focus;
@@ -238,8 +267,11 @@ function TodayView() {
   };
 
   /**
-   * The user's decision about one unfinished thing. Nothing here happens on a
-   * schedule: each item moves, completes or goes only when they say so.
+   * The user's decision about one unfinished thing.
+   *
+   * Nothing happens on a schedule, and nothing is ever active in two places:
+   * carrying marks the original as carried in the same operation that places
+   * the single instance on the destination day.
    */
   const decideOpenItem = (item: OpenItem, decision: Decision, toDayId?: string) => {
     if (decision === "complete") {
@@ -247,7 +279,7 @@ function TodayView() {
       return;
     }
     if (decision === "letGo") {
-      updateDay(dayId, (current) => letGoItem(current, item));
+      updateDay(dayId, (current) => letGoItem(current, item, new Date()));
       return;
     }
 
@@ -308,6 +340,7 @@ function TodayView() {
     );
   }
 
+  const closeEligible = clock !== null && isCloseEligible(dayId, clock);
   const live = isSessionOpen(session) ? session : null;
 
   /** A reorder is an id sequence, resolved against live state. See `reorderPriorities`. */
@@ -455,13 +488,24 @@ function TodayView() {
               onDelete={deleteHabit}
             />
 
-            <DailyReview
+            <CloseDay
               day={record}
-              tomorrowId={shiftDayId(dayId, 1)}
-              onWrite={(patch) =>
+              eligible={closeEligible}
+              open={closing}
+              tomorrowId={tomorrowOf(dayId)}
+              onOpen={() => setClosing(true)}
+              onWrite={(patch: Partial<DailyReviewRecord>) =>
                 updateDay(dayId, (current) => writeReview(current, patch, new Date()))
               }
               onDecide={decideOpenItem}
+              onClose={() => {
+                updateDay(dayId, (current) => closeDay(current, new Date()));
+                setClosing(false);
+              }}
+              onReopen={() => {
+                updateDay(dayId, reopenDay);
+                setClosing(true);
+              }}
             />
           </div>
         </div>

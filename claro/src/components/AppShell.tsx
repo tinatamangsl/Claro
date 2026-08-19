@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 /** The whole of Claro's navigation. Three places, in hierarchy order reversed for daily use. */
 const NAV = [
-  { to: "/today", label: "Today" },
+  { to: "/today", label: "Daily" },
   { to: "/week", label: "Week" },
   { to: "/quarter", label: "Quarter" },
   { to: "/calendar", label: "Calendar" },
@@ -119,7 +119,7 @@ function AppFooter({ ready, today, page }: { ready: boolean; today: string; page
           <span aria-hidden className="text-muted-foreground/40">
             ·
           </span>
-          Quarter → Week → Day
+          Quarter → Week → Daily
         </span>
 
         {ready && today && (

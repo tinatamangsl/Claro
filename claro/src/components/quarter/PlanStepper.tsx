@@ -34,7 +34,7 @@ export function PlanStepper({
             onClick={() => onGo(option)}
             aria-current={active ? "step" : undefined}
             className={cn(
-              "surface flex min-w-0 flex-1 items-start gap-2.5 px-3 py-2.5 text-left transition-colors sm:flex-none sm:basis-[calc(25%-0.375rem)]",
+              "surface flex min-w-[8.5rem] flex-1 items-start gap-2.5 px-3 py-2.5 text-left transition-colors",
               active ? "border-gold/60 bg-gold/8" : "hover:border-foreground/35",
             )}
           >
