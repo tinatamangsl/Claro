@@ -35,7 +35,9 @@ import type {
   ISODate,
   Interruption,
   Quarter,
+  SoundFeedback,
   SoundPrefs,
+  SoundPreset,
   QuarterId,
   Week,
   WeekId,
@@ -95,6 +97,18 @@ type ClaroContextValue = {
 
   sound: SoundPrefs;
   setSound: (patch: Partial<SoundPrefs>) => void;
+
+  /**
+   * Named combinations the user saved. Applied only when they choose one:
+   * nothing switches a preset from a project, task, energy, calendar or cycle.
+   */
+  soundPresets: Record<string, SoundPreset>;
+  addPreset: (preset: SoundPreset) => void;
+  patchPreset: (id: string, patch: Partial<SoundPreset>) => void;
+  deletePreset: (id: string) => void;
+
+  /** Private answers to the post-session question. Nothing reads them back yet. */
+  recordSoundFeedback: (feedback: SoundFeedback) => void;
 
   resetAll: () => void;
 };
@@ -416,6 +430,59 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const addPreset = useCallback((preset: SoundPreset) => {
+    setSnap((prev) =>
+      prev
+        ? {
+            ...prev,
+            state: {
+              ...prev.state,
+              soundPresets: { ...prev.state.soundPresets, [preset.id]: preset },
+            },
+          }
+        : prev,
+    );
+  }, []);
+
+  const patchPreset = useCallback((id: string, patch: Partial<SoundPreset>) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      const current = prev.state.soundPresets[id];
+      if (!current) return prev;
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          // The id is never patched: it is the preset's identity.
+          soundPresets: { ...prev.state.soundPresets, [id]: { ...current, ...patch, id } },
+        },
+      };
+    });
+  }, []);
+
+  const deletePreset = useCallback((id: string) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      const soundPresets = { ...prev.state.soundPresets };
+      delete soundPresets[id];
+      return { ...prev, state: { ...prev.state, soundPresets } };
+    });
+  }, []);
+
+  const recordSoundFeedback = useCallback((feedback: SoundFeedback) => {
+    setSnap((prev) =>
+      prev
+        ? {
+            ...prev,
+            state: {
+              ...prev.state,
+              soundFeedback: { ...prev.state.soundFeedback, [feedback.id]: feedback },
+            },
+          }
+        : prev,
+    );
+  }, []);
+
   const setSound = useCallback((patch: Partial<SoundPrefs>) => {
     setSnap((prev) =>
       prev ? { ...prev, state: { ...prev.state, sound: { ...prev.state.sound, ...patch } } } : prev,
@@ -460,6 +527,11 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       deleteAllCycleData,
       sound: state.sound,
       setSound,
+      soundPresets: state.soundPresets,
+      addPreset,
+      patchPreset,
+      deletePreset,
+      recordSoundFeedback,
       resetAll,
     }),
     [
@@ -488,6 +560,10 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       deleteCycleEntry,
       deleteAllCycleData,
       setSound,
+      addPreset,
+      patchPreset,
+      deletePreset,
+      recordSoundFeedback,
       resetAll,
     ],
   );

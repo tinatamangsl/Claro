@@ -1,5 +1,5 @@
 import { ArrowLeft, CornerDownRight } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import { CheckToggle } from "@/components/CheckToggle";
 import { EditableText } from "@/components/EditableText";
@@ -16,6 +16,7 @@ import type {
   Priority,
   PriorityKey,
   Quarter,
+  SoundFeedbackResponse,
   Week,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,14 @@ type Props = {
   onLeave: () => void;
   onPark: (text: string) => void;
   onExit: () => void;
+  /** Only asked when the finished block actually had sound playing. */
+  askAboutSound: boolean;
+  onSoundFeedback: (response: SoundFeedbackResponse) => void;
+  /**
+   * The sound controls, passed in rather than imported, so the timer stays a
+   * presentational component and the route remains the composition root.
+   */
+  soundPanel?: ReactNode;
 };
 
 /**
@@ -109,6 +118,7 @@ export function FocusView(props: Props) {
               onResume={props.onResumeBlock}
               onEnd={props.onEnd}
               onPark={props.onPark}
+              soundPanel={props.soundPanel}
             />
           )}
 
@@ -128,6 +138,8 @@ export function FocusView(props: Props) {
           <FocusEnd
             session={session}
             canComplete={sessionRank !== null}
+            askAboutSound={props.askAboutSound}
+            onSoundFeedback={props.onSoundFeedback}
             onComplete={props.onComplete}
             onContinue={props.onContinue}
             onExit={props.onLeave}
@@ -259,7 +271,7 @@ function BlockChoices({ onStart }: { onStart: (plannedMs: number) => void }) {
         onClick={() => onStart(JUST_BEGIN_BLOCK_MS)}
         className="btn btn-quiet"
       >
-        Just begin — 5 minutes
+        Just begin, 5 minutes
       </button>
     </div>
   );

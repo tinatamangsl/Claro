@@ -104,7 +104,7 @@ export function CyclePanel({
           <span className="text-muted-foreground">Estimated next start</span>{" "}
           <span className="tnum font-medium">{formatDayDate(estimate.nextStart)}</span>
           <span className="mt-1 block text-[11px] text-muted-foreground">
-            An estimate only — your own median of {estimate.typicalGap} days, from{" "}
+            An estimate only, from your own median of {estimate.typicalGap} days across{" "}
             {estimate.basedOn} recorded {estimate.basedOn === 1 ? "gap" : "gaps"}. Cycles vary.
           </span>
         </p>

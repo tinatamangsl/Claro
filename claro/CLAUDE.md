@@ -172,11 +172,50 @@ session. The single path to a completed priority is the explicit choice on the e
 
 ## Ambient sound
 
-`lib/sound.ts` synthesises filtered brown noise through the Web Audio API: no audio file, no
-catalogue, no network request, nothing to license and nothing to track. The engine is a
-module-level singleton, so moving between routes cannot start a second sound. It is started only
-from a user gesture — that is the product's rule, not just the browser's. The stored preference is
-a volume and a mute, never "resume automatically".
+`lib/sound.ts` synthesises every soundscape through the Web Audio API: white, pink and brown
+noise, gentle rain (band-passed pink noise with a slow drift), a soft ambient pad (detuned sines
+through a lowpass), and a short optional chime. No audio file, no catalogue, no network request,
+nothing to license and nothing to track.
+
+**Real jazz, lo-fi or instrumental music is a separate decision, not a missing feature.** It would
+require original or properly licensed recordings, with the cost and obligation that carries.
+Until that decision is taken, generated audio is never described as jazz, lo-fi, or music.
+
+The engine is a module-level singleton with one voice mounted at a time: switching soundscape
+tears the old voice down as it mounts the new one, so two can never overlap. Playback starts only
+from a user gesture, which is the product's rule as much as the browser's. The stored preference
+is a volume, a mute, a soundscape, a mode and the chime flag, never "resume automatically".
+
+**Modes are labels, not treatments.** Deep focus, Light and admin, Creative flow and Reset name
+how someone intends to work. Nothing in the model, the engine or the copy may claim an effect on
+brainwaves, cognition, stress, productivity or hormones.
+
+### The sound lifecycle belongs to the block, and is owned once
+
+Sound stops when the *block ends*, not when the user later picks an outcome, and that is also the
+only moment the optional chime may sound. `useFocusSession` is instantiated by several components
+at once (the header control and the page), so the end-of-block side effect is guarded by a
+module-level `endedSessions` map. Without it the first instance to run would pause the sound and
+every later instance would conclude there had never been any, which silently hid the
+post-session question.
+
+The feedback answer is stored privately and read by nothing. There are no recommendations, no
+insights and no scoring built on it, and "Skip" is recorded as a real answer.
+
+## The 3-3-3 Method
+
+An existing planning framework popularised by Oliver Burkeman, credited where it is introduced and
+never presented as Claro's own idea: one meaningful project for a stretch of focused work, three
+shorter tasks, three maintenance activities.
+
+`lib/plan333.ts` is a composer, not a store. The meaningful project *is* priority 1, the tasks are
+`task` actions and the maintenance jobs are `quickTick` actions, so nothing is duplicated and a
+user editing Today the ordinary way is editing the same records. `Day.plan333` holds only a marker
+and the intended hours.
+
+The hours are adjustable and the shape is a starting point: a partial plan is a normal outcome,
+`scheduleFocusBlock` never overwrites an hour that already has something in it, and there is no
+score, reward or completion-pressure language anywhere in the flow.
 
 ## Private cycle notes
 

@@ -26,6 +26,19 @@ import {
 } from "@/lib/dates";
 import { parkDistraction, selectFocus } from "@/lib/focus";
 import { activeHabits, createHabit, reorderHabits } from "@/lib/habits";
+import { SoundPanel } from "@/components/SoundPanel";
+import { Plan333 } from "@/components/today/Plan333";
+import { newId } from "@/lib/id";
+import {
+  addMaintenance,
+  addTask,
+  clearPlan,
+  focusBlockMs,
+  meaningfulProject,
+  scheduleFocusBlock,
+  setFocusHours,
+  startPlan,
+} from "@/lib/plan333";
 import { writePriority } from "@/lib/priorities";
 import {
   keepCarriedAsAction,
@@ -46,6 +59,7 @@ import type {
   Priority,
   PriorityKey,
   PriorityRank,
+  SoundFeedbackResponse,
 } from "@/lib/types";
 
 /** `?focus`, `?focus=1` and `?focus=true` all mean the same thing. */
@@ -67,7 +81,7 @@ export const Route = createFileRoute("/today")({
       <TodayView />
     </AppShell>
   ),
-  head: () => ({ meta: [{ title: "Today — Claro" }] }),
+  head: () => ({ meta: [{ title: "Today: Claro" }] }),
 });
 
 function TodayView() {
@@ -89,6 +103,8 @@ function TodayView() {
     patchHabit,
     deleteHabit,
     toggleHabitDone,
+    sound: soundPrefs,
+    recordSoundFeedback,
   } = useClaro();
   const { d, focus: focusMode } = Route.useSearch();
   const navigate = useNavigate();
@@ -103,6 +119,24 @@ function TodayView() {
 
   const focus = useFocusSession();
   const { session, now, openInterruption } = focus;
+
+  /**
+   * Asked once, on the end screen, and only when the block that just finished
+   * actually had sound. Skipping is a real answer and is recorded as one.
+   */
+  const rateSound = (response: SoundFeedbackResponse) => {
+    if (session) {
+      recordSoundFeedback({
+        id: newId(),
+        focusSessionId: session.id,
+        response,
+        soundscape: soundPrefs.soundscape,
+        mode: soundPrefs.mode,
+        at: new Date().toISOString(),
+      });
+    }
+    focus.dismissSoundQuestion();
+  };
 
   const go = (id: ISODate) => navigate({ to: "/today", search: { d: id } });
   const patch = (p: Partial<Day>) => updateDay(dayId, (current) => ({ ...current, ...p }));
@@ -163,6 +197,20 @@ function TodayView() {
     leaveFocus();
   };
 
+  // ------------------------------------------------------------ 3-3-3 plan
+
+  const planDay = (recipe: (d: Day) => Day) => updateDay(dayId, recipe);
+
+  const focusOnProject = () => {
+    const project = meaningfulProject(record).trim();
+    if (!project) return;
+    focus.start(
+      { kind: "priority", dayId, rank: 1, title: project },
+      focusBlockMs(record),
+    );
+    enterFocus();
+  };
+
   // Returning to focus is about now — it isn't offered while browsing another day.
   if (focusMode && dayId === today) {
     return (
@@ -187,6 +235,9 @@ function TodayView() {
         onLeave={leaveFinishedBlock}
         onPark={(text) => patch({ actions: parkDistraction(record.actions, text, new Date()) })}
         onExit={leaveFocus}
+        askAboutSound={focus.endedWithSound}
+        onSoundFeedback={rateSound}
+        soundPanel={<SoundPanel compact />}
       />
     );
   }
@@ -247,6 +298,17 @@ function TodayView() {
               onFocus={dayId === today ? () => enterFocus() : undefined}
             />
           </section>
+
+          <Plan333
+            day={record}
+            onStart={() => planDay((d) => startPlan(d, new Date()))}
+            onClear={() => planDay(clearPlan)}
+            onSetHours={(hours) => planDay((d) => setFocusHours(d, hours))}
+            onAddTask={(text) => planDay((d) => addTask(d, text, new Date()))}
+            onAddMaintenance={(text) => planDay((d) => addMaintenance(d, text, new Date()))}
+            onSchedule={(fromTime) => planDay((d) => scheduleFocusBlock(d, fromTime))}
+            onFocus={focusOnProject}
+          />
 
           <CarriedForwardBlock
             day={record}
@@ -419,7 +481,7 @@ const STATUS_COPY: Record<FocusSession["phase"], string> = {
   running: "Focus session in progress",
   paused: "Focus session paused",
   interrupted: "Focus session paused",
-  returning: "Back in — five minutes",
+  returning: "Back in, five minutes",
   ended: "Focus block finished",
   closed: "",
 };

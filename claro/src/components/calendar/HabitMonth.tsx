@@ -53,7 +53,7 @@ export function HabitMonth({ monthId, habits, completions, todayId, cycle, onOpe
               onClick={() => onOpenDay(cell.dayId)}
               aria-label={
                 cell.inMonth && day
-                  ? `${formatDayLong(cell.dayId)} — ${day.done} of ${day.total} habits kept`
+                  ? `${formatDayLong(cell.dayId)}, ${day.done} of ${day.total} habits kept`
                   : formatDayLong(cell.dayId)
               }
               aria-current={cell.dayId === todayId ? "date" : undefined}

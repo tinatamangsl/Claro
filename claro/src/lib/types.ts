@@ -1,6 +1,6 @@
 /** The Claro domain model. Everything here is plain data — no React, no dates library. */
 
-export const CLARO_SCHEMA_VERSION = 4;
+export const CLARO_SCHEMA_VERSION = 5;
 
 export const MAX_SIDE_QUESTS = 3;
 export const MAX_WEEK_ACTIONS = 3;
@@ -174,6 +174,8 @@ export type Day = {
   nonNegotiables: NonNegotiable[]; // capped at MAX_NON_NEGOTIABLES
   /** Awaiting an explicit decision — never silently merged into the day. */
   carriedForward: CarriedItem[];
+  /** Set when the day was planned with the 3-3-3 framework. */
+  plan333: Plan333 | null;
   sleepHours: number | null;
   waterGlasses: number;
   steps: number | null;
@@ -345,10 +347,91 @@ export type CycleState = {
   entries: Record<string, CycleEntry>;
 };
 
+// -------------------------------------------------------------- 3-3-3 plan
+
+/**
+ * The 3-3-3 Method is an existing, widely used planning framework (popularised
+ * by Oliver Burkeman): one meaningful project for a stretch of focused work,
+ * three shorter tasks, three maintenance activities. Claro did not invent it
+ * and does not claim to.
+ *
+ * The record is only a marker that the day was planned this way, plus the hours
+ * the user intended. The work itself lives in the day's existing priorities and
+ * action buckets, so nothing is duplicated and nothing is enforced.
+ */
+export type Plan333 = {
+  startedAt: string;
+  /** Intended hours on the meaningful project. Adaptable, never enforced. */
+  focusHours: number;
+};
+
+export const PLAN_333_DEFAULT_HOURS = 3;
+
 // ------------------------------------------------------------------ sound
 
-/** Remembered between sessions — but playback is always user-started. */
-export type SoundPrefs = { volume: number; muted: boolean };
+/**
+ * Every soundscape is generated in the browser from noise and oscillators.
+ * There is no audio file, no stream and nothing licensed.
+ *
+ * Real jazz, lo-fi or instrumental music is deliberately absent: it would need
+ * original or properly licensed recordings, which is a separate decision with
+ * its own costs and obligations. Generated audio is never described as either.
+ */
+export type SoundscapeId = "white" | "pink" | "brown" | "rain" | "pad";
+
+export const SOUNDSCAPES: SoundscapeId[] = ["white", "pink", "brown", "rain", "pad"];
+
+/**
+ * A label the user picks for how they intend to work. It is a preference and a
+ * name, nothing more: a mode does not change brainwaves, cognition, stress,
+ * hormones or output, and Claro must never suggest that it does.
+ */
+export type SessionMode = "deep" | "light" | "creative" | "reset";
+
+export const SESSION_MODES: SessionMode[] = ["deep", "light", "creative", "reset"];
+
+/** Remembered between sessions, but playback is always user-started. */
+export type SoundPrefs = {
+  volume: number;
+  muted: boolean;
+  soundscape: SoundscapeId;
+  /** Null until the user picks one for this session. */
+  mode: SessionMode | null;
+  /** A short chime when a block finishes. Off unless the user turns it on. */
+  endChime: boolean;
+};
+
+/**
+ * A saved combination the user named themselves. Private, local, and applied
+ * only when they choose it: nothing switches presets automatically from a
+ * project, a task, an energy reading, a calendar or cycle data.
+ */
+export type SoundPreset = {
+  id: string;
+  name: string;
+  mode: SessionMode;
+  soundscape: SoundscapeId;
+  volume: number;
+  /** Optional block length in minutes. Null means "leave the timer alone". */
+  focusMinutes: number | null;
+  createdAt: string;
+};
+
+export type SoundFeedbackResponse = "helpful" | "notForMe" | "skipped";
+
+/**
+ * One private answer to "did this sound support your focus?", kept so the
+ * question can be looked at later. Nothing reads it back yet: there are no
+ * recommendations, no insights and no scoring built on it.
+ */
+export type SoundFeedback = {
+  id: string;
+  focusSessionId: string;
+  response: SoundFeedbackResponse;
+  soundscape: SoundscapeId;
+  mode: SessionMode | null;
+  at: string;
+};
 
 // ------------------------------------------------------------------ store
 
@@ -365,6 +448,8 @@ export type ClaroState = {
   habitCompletions: Record<string, HabitCompletion>;
   cycle: CycleState;
   sound: SoundPrefs;
+  soundPresets: Record<string, SoundPreset>;
+  soundFeedback: Record<string, SoundFeedback>;
 };
 
 // ------------------------------------------------------------ presentation
@@ -387,6 +472,31 @@ export const BUCKET_META: Record<
 export const DOMAIN_META: Record<Domain, { label: string }> = {
   work: { label: "Work" },
   life: { label: "Life" },
+};
+
+/**
+ * Names only. Each description says what the user might be doing, never what
+ * the sound or the mode will do to them.
+ */
+export const SESSION_MODE_META: Record<
+  SessionMode,
+  { label: string; hint: string }
+> = {
+  deep: { label: "Deep focus", hint: "One thing, for a long stretch" },
+  light: { label: "Light and admin", hint: "Small jobs, email, tidying up" },
+  creative: { label: "Creative flow", hint: "Drafting, sketching, thinking aloud" },
+  reset: { label: "Reset", hint: "A pause between things" },
+};
+
+export const SOUNDSCAPE_META: Record<
+  SoundscapeId,
+  { label: string; hint: string }
+> = {
+  white: { label: "White noise", hint: "Even and bright" },
+  pink: { label: "Pink noise", hint: "Softer than white" },
+  brown: { label: "Brown noise", hint: "Deep and low" },
+  rain: { label: "Gentle rain", hint: "Steady, with movement" },
+  pad: { label: "Soft ambient pad", hint: "Slow, warm tones" },
 };
 
 export const MOOD_LABELS: Record<Mood, string> = {

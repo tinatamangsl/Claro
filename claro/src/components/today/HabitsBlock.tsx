@@ -171,7 +171,7 @@ export function HabitsBlock({
 
           {active.length === 0 && (
             <p className="py-3 text-[0.85rem] text-muted-foreground">
-              A habit is something you do for yourself — ten pages, a walk, five quiet minutes.
+              A habit is something you do for yourself. Ten pages, a walk, five quiet minutes.
             </p>
           )}
         </div>

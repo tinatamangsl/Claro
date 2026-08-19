@@ -1,19 +1,31 @@
-import type { FocusSession } from "@/lib/types";
+import { SoundFeedback } from "@/components/today/SoundFeedback";
+import type { FocusSession, SoundFeedbackResponse } from "@/lib/types";
 
 type Props = {
   session: FocusSession;
-  /** False when the session wasn't tied to a priority — nothing to complete. */
+  /** False when the session was not tied to a priority, so there is nothing to complete. */
   canComplete: boolean;
+  /** Only asked when the block actually had sound to have an opinion about. */
+  askAboutSound: boolean;
+  onSoundFeedback: (response: SoundFeedbackResponse) => void;
   onComplete: () => void;
   onContinue: () => void;
   onExit: () => void;
 };
 
 /**
- * The end of a block. Completing the priority is always an explicit choice —
+ * The end of a block. Completing the priority is always an explicit choice:
  * finishing a timer is not evidence that the work is done.
  */
-export function FocusEnd({ session, canComplete, onComplete, onContinue, onExit }: Props) {
+export function FocusEnd({
+  session,
+  canComplete,
+  askAboutSound,
+  onSoundFeedback,
+  onComplete,
+  onContinue,
+  onExit,
+}: Props) {
   return (
     <div className="paper-page p-6 sm:p-8">
       <span className="eyebrow">Block finished</span>
@@ -50,6 +62,8 @@ export function FocusEnd({ session, canComplete, onComplete, onContinue, onExit 
           Back to Today
         </button>
       </div>
+
+      {askAboutSound && <SoundFeedback onRespond={onSoundFeedback} />}
     </div>
   );
 }

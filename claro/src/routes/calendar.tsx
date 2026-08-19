@@ -29,7 +29,7 @@ export const Route = createFileRoute("/calendar")({
       <CalendarView />
     </AppShell>
   ),
-  head: () => ({ meta: [{ title: "Month — Claro" }] }),
+  head: () => ({ meta: [{ title: "Month: Claro" }] }),
 });
 
 function CalendarView() {
@@ -60,7 +60,7 @@ function CalendarView() {
         title={formatMonthLong(monthId)}
         subtitle={
           habits.length === 0
-            ? "No habits yet — add one on Today and it will show up here."
+            ? "No habits yet. Add one on Today and it will show up here."
             : `${daysKept} of ${daysInMonth} days with something kept`
         }
         onPrev={() => go(shiftMonthId(monthId, -1))}

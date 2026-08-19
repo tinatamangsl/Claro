@@ -221,7 +221,7 @@ function GoalPicker({
         <option value="">No linked goal</option>
         {options.map((option) => (
           <option key={option.key} value={option.key}>
-            {GOAL_CATEGORY_META[option.category].label} — {option.title}
+            {GOAL_CATEGORY_META[option.category].label}: {option.title}
           </option>
         ))}
       </select>

@@ -24,7 +24,7 @@ export function FocusControl({ className }: { className?: string }) {
       search={{ focus: true }}
       aria-label={
         live
-          ? `Resume focus — ${formatRemaining(left)} left on ${live.target?.title || "this block"}`
+          ? `Resume focus, ${formatRemaining(left)} left on ${live.target?.title || "this block"}`
           : "Start a focus block"
       }
       className={cn(

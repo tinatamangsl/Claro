@@ -29,7 +29,7 @@ export const Route = createFileRoute("/quarter")({
       <QuarterView />
     </AppShell>
   ),
-  head: () => ({ meta: [{ title: "Quarter — Claro" }] }),
+  head: () => ({ meta: [{ title: "Quarter: Claro" }] }),
 });
 
 function QuarterView() {
@@ -62,7 +62,7 @@ function QuarterView() {
           What life are you trying to create?
         </p>
         <p className="mt-3 text-[0.95rem] leading-relaxed text-muted-foreground">
-          Name one thing that matters most in each half of it — everything below the quarter
+          Name one thing that matters most in each half of it. Everything below the quarter
           should serve these.
         </p>
       </div>
@@ -178,7 +178,7 @@ function QuarterColumn({
           <AddItem
             label="Add a side quest"
             disabled={atCap}
-            disabledHint={`Three is the limit — that's the point.`}
+            disabledHint={`Three is the limit. That is the point.`}
             onAdd={(text) =>
               patch((s) => ({
                 ...s,

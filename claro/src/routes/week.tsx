@@ -35,7 +35,7 @@ export const Route = createFileRoute("/week")({
       <WeekView />
     </AppShell>
   ),
-  head: () => ({ meta: [{ title: "Week — Claro" }] }),
+  head: () => ({ meta: [{ title: "Week: Claro" }] }),
 });
 
 function WeekView() {

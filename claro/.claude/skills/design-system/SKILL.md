@@ -96,6 +96,10 @@ which is why UI primitives here are hand-rolled.
 
 ## Copy voice
 
+**No em dashes and no double hyphens in user-facing copy.** Use a comma, a colon or a full stop.
+This covers visible text, placeholders, `aria-label`s, `<title>`s and empty states. Source
+comments are exempt.
+
 Short, plain, calm, and never scolding. The caps explain themselves rather than erroring:
 
 > "Three is the limit — that's the point."

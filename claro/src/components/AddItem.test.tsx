@@ -94,11 +94,11 @@ describe("AddItem", () => {
         label="Add a thing"
         onAdd={vi.fn()}
         disabled
-        disabledHint="Three is the limit — that's the point."
+        disabledHint="Three is the limit. That is the point."
       />,
     );
 
     expect(screen.queryByRole("button", { name: "Add a thing" })).toBeNull();
-    expect(screen.getByText("Three is the limit — that's the point.")).toBeDefined();
+    expect(screen.getByText("Three is the limit. That is the point.")).toBeDefined();
   });
 });

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { AddItem } from "@/components/AddItem";
 import { formatRemaining, mainElapsedMs, returnRemainingMs } from "@/lib/focus-session";
 import type { FocusLadder } from "@/lib/focus";
@@ -14,6 +16,8 @@ type Props = {
   onResume: () => void;
   onEnd: () => void;
   onPark: (text: string) => void;
+  /** The sound controls, when the route supplies them. */
+  soundPanel?: ReactNode;
 };
 
 /**
@@ -30,6 +34,7 @@ export function FocusTimer({
   onResume,
   onEnd,
   onPark,
+  soundPanel,
 }: Props) {
   const returning = session.phase === "returning";
   const paused = session.phase === "paused";
@@ -137,6 +142,10 @@ export function FocusTimer({
           End block
         </button>
       </div>
+
+      {soundPanel && (
+        <div className="mt-6 border-t border-subtle pt-5">{soundPanel}</div>
+      )}
 
       <div className="mt-6 border-t border-subtle pt-5">
         <AddItem

@@ -43,7 +43,7 @@ export function FocusInterruption({
       </p>
 
       <fieldset className="mt-6">
-        <legend className="eyebrow">If it helps — what pulled you away? Optional.</legend>
+        <legend className="eyebrow">If it helps, what pulled you away? Optional.</legend>
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           {INTERRUPTION_REASONS.map((reason) => {
             const active = selectedReason === reason;
@@ -71,7 +71,7 @@ export function FocusInterruption({
           onClick={onReturnBlock}
           className="btn btn-primary"
         >
-          Back in — 5 minutes
+          Back in, 5 minutes
         </button>
         <button
           type="button"

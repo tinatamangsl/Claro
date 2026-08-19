@@ -41,7 +41,15 @@ describe("blank records", () => {
       habits: {},
       habitCompletions: {},
       cycle: { settings: { enabled: false, optedInAt: null }, entries: {} },
-      sound: { volume: 0.4, muted: false },
+      sound: {
+        volume: 0.4,
+        muted: false,
+        soundscape: "brown",
+        mode: null,
+        endChime: false,
+      },
+      soundPresets: {},
+      soundFeedback: {},
     });
   });
 

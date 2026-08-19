@@ -30,7 +30,7 @@ export function WellbeingBlock({ day, onPatch, className }: Props) {
           <Stepper
             value={day.sleepHours ?? 0}
             onChange={(v) => onPatch({ sleepHours: v === 0 ? null : v })}
-            display={day.sleepHours === null ? "—" : `${day.sleepHours}`}
+            display={day.sleepHours === null ? "·" : `${day.sleepHours}`}
             label="hours of sleep"
           />
         </Field>
@@ -62,7 +62,7 @@ export function WellbeingBlock({ day, onPatch, className }: Props) {
             step={100}
             aria-label="Steps today"
             value={day.steps ?? ""}
-            placeholder="—"
+            placeholder="·"
             onChange={(e) => {
               const raw = e.target.value;
               onPatch({ steps: raw === "" ? null : Math.max(0, Number(raw)) });
@@ -77,7 +77,7 @@ export function WellbeingBlock({ day, onPatch, className }: Props) {
               <button
                 key={m}
                 type="button"
-                aria-label={`Mood ${m} — ${MOOD_LABELS[m]}`}
+                aria-label={`Mood ${m}, ${MOOD_LABELS[m]}`}
                 aria-pressed={day.mood === m}
                 onClick={() => onPatch({ mood: day.mood === m ? null : m })}
                 className={cn(

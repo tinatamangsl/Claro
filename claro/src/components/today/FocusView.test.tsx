@@ -44,6 +44,8 @@ const runningSession = (plannedMs = FOCUS_BLOCK_MS): FocusSession =>
   });
 
 const handlers = () => ({
+  askAboutSound: false,
+  onSoundFeedback: vi.fn(),
   onPatchPriority: vi.fn(),
   onStart: vi.fn(),
   onDistracted: vi.fn(),
@@ -92,7 +94,7 @@ describe("starting a block", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start 25 minutes" }));
     expect(spies.onStart).toHaveBeenCalledWith(FOCUS_BLOCK_MS);
 
-    fireEvent.click(screen.getByRole("button", { name: "Just begin — 5 minutes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Just begin, 5 minutes" }));
     expect(spies.onStart).toHaveBeenCalledWith(JUST_BEGIN_BLOCK_MS);
   });
 
@@ -203,7 +205,7 @@ describe("after a distraction", () => {
   it("offers the five-minute way back in, and an immediate resume", () => {
     const spies = renderFocus({ session: paused(), now: at(11 * MINUTE) });
 
-    fireEvent.click(screen.getByRole("button", { name: "Back in — 5 minutes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back in, 5 minutes" }));
     expect(spies.onReturnBlock).toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Resume the block now" }));

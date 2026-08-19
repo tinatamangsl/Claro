@@ -1,6 +1,8 @@
 import { newId } from "./id";
 import {
   CLARO_SCHEMA_VERSION,
+  SESSION_MODES,
+  SOUNDSCAPES,
   type ClaroState,
   type Day,
   type CycleState,
@@ -8,7 +10,11 @@ import {
   type Habit,
   type HabitCompletion,
   type Interruption,
+  type SessionMode,
+  type SoundFeedback,
   type SoundPrefs,
+  type SoundPreset,
+  type SoundscapeId,
   type CycleEntry,
   type ISODate,
   type Priority,
@@ -42,6 +48,8 @@ export function emptyState(): ClaroState {
     habitCompletions: {},
     cycle: blankCycle(),
     sound: blankSound(),
+    soundPresets: {},
+    soundFeedback: {},
   };
 }
 
@@ -50,7 +58,9 @@ export function blankCycle(): CycleState {
 }
 
 export function blankSound(): SoundPrefs {
-  return { volume: 0.4, muted: false };
+  // Brown is the gentlest default, and `endChime` is off because a sound the
+  // user did not ask for is the one thing this feature must never do.
+  return { volume: 0.4, muted: false, soundscape: "brown", mode: null, endChime: false };
 }
 
 export function blankQuarter(id: QuarterId): Quarter {
@@ -83,6 +93,7 @@ export function blankDay(id: ISODate): Day {
     actions: [],
     nonNegotiables: [],
     carriedForward: [],
+    plan333: null,
     sleepHours: null,
     waterGlasses: 0,
     steps: null,
@@ -132,6 +143,10 @@ export function migrate(raw: unknown): ClaroState {
       : {},
     cycle: readCycle(candidate.cycle),
     sound: readSound(candidate.sound),
+    soundPresets: isRecord<SoundPreset>(candidate.soundPresets) ? candidate.soundPresets : {},
+    soundFeedback: isRecord<SoundFeedback>(candidate.soundFeedback)
+      ? candidate.soundFeedback
+      : {},
   };
 }
 
@@ -269,12 +284,28 @@ function readCycle(raw: unknown): CycleState {
   };
 }
 
+/**
+ * Read through the blank template, so a store saved before soundscapes existed
+ * keeps its volume and mute and simply gains the new defaults.
+ */
 function readSound(raw: unknown): SoundPrefs {
   const blank = blankSound();
   if (!raw || typeof raw !== "object") return blank;
+
   const s = raw as Partial<SoundPrefs>;
-  const volume = typeof s.volume === "number" && s.volume >= 0 && s.volume <= 1 ? s.volume : blank.volume;
-  return { volume, muted: s.muted === true };
+  const volume =
+    typeof s.volume === "number" && s.volume >= 0 && s.volume <= 1 ? s.volume : blank.volume;
+
+  return {
+    volume,
+    muted: s.muted === true,
+    soundscape: SOUNDSCAPES.includes(s.soundscape as SoundscapeId)
+      ? (s.soundscape as SoundscapeId)
+      : blank.soundscape,
+    mode: SESSION_MODES.includes(s.mode as SessionMode) ? (s.mode as SessionMode) : null,
+    // Anything other than an explicit true stays off.
+    endChime: s.endChime === true,
+  };
 }
 
 function isRecord<T>(value: unknown): value is Record<string, T> {

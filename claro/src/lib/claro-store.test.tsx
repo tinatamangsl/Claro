@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ClaroProvider, useClaro } from "./claro-store";
 import { STORAGE_KEY, blankDay, emptyState, loadState, saveNow } from "./storage";
 import { formatDayId } from "./dates";
-import { FOCUS_BLOCK_MS, MAX_SIDE_QUESTS } from "./types";
+import { FOCUS_BLOCK_MS, MAX_SIDE_QUESTS, type SoundPreset } from "./types";
 import {
   closeSession,
   createInterruption,
@@ -631,5 +631,139 @@ describe("one canonical focus session, whatever started it", () => {
     // choice on the end screen may do that.
     expect(api.current!.day("2026-08-19").priority1.done).toBe(false);
     expect(api.current!.activeSession).toBeNull();
+  });
+});
+
+describe("sound presets and feedback", () => {
+  const preset = (patch: Partial<SoundPreset> = {}): SoundPreset => ({
+    id: "p1",
+    name: "Founder deep work",
+    mode: "deep",
+    soundscape: "brown",
+    volume: 0.4,
+    focusMinutes: 50,
+    createdAt: "2026-08-19T09:00:00.000Z",
+    ...patch,
+  });
+
+  it("keeps the sound preferences a user set", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.setSound({ soundscape: "rain", volume: 0.7, endChime: true }));
+    await flush();
+
+    // Read off disk: the point is that it survives the tab closing.
+    const stored = loadState().sound;
+    expect(stored.soundscape).toBe("rain");
+    expect(stored.volume).toBe(0.7);
+    expect(stored.endChime).toBe(true);
+  });
+
+  it("has the chime off until it is explicitly turned on", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    expect(api.current!.sound.endChime).toBe(false);
+  });
+
+  it("saves a preset under a stable id", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.addPreset(preset()));
+
+    expect(api.current!.soundPresets.p1).toMatchObject({
+      name: "Founder deep work",
+      mode: "deep",
+      soundscape: "brown",
+      focusMinutes: 50,
+    });
+  });
+
+  it("edits a preset without changing its identity", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.addPreset(preset()));
+    act(() => api.current!.patchPreset("p1", { name: "Admin reset", soundscape: "pink" }));
+
+    expect(api.current!.soundPresets.p1.id).toBe("p1");
+    expect(api.current!.soundPresets.p1.name).toBe("Admin reset");
+    expect(api.current!.soundPresets.p1.soundscape).toBe("pink");
+    // Untouched fields survive the patch.
+    expect(api.current!.soundPresets.p1.focusMinutes).toBe(50);
+  });
+
+  it("ignores an edit to a preset that is not there", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.patchPreset("gone", { name: "Nope" }));
+
+    expect(api.current!.soundPresets).toEqual({});
+  });
+
+  it("deletes a preset and leaves the others alone", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => {
+      api.current!.addPreset(preset());
+      api.current!.addPreset(preset({ id: "p2", name: "Creative planning" }));
+    });
+    act(() => api.current!.deletePreset("p1"));
+
+    expect(api.current!.soundPresets.p1).toBeUndefined();
+    expect(api.current!.soundPresets.p2.name).toBe("Creative planning");
+  });
+
+  it("keeps presets across a reload", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.addPreset(preset()));
+    await flush();
+
+    expect(loadState().soundPresets.p1.name).toBe("Founder deep work");
+  });
+
+  it("records a private answer to the post-session question", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() =>
+      api.current!.recordSoundFeedback({
+        id: "f1",
+        focusSessionId: "s1",
+        response: "helpful",
+        soundscape: "rain",
+        mode: "deep",
+        at: "2026-08-19T10:00:00.000Z",
+      }),
+    );
+
+    expect(api.current!.state.soundFeedback.f1).toMatchObject({
+      focusSessionId: "s1",
+      response: "helpful",
+    });
+  });
+
+  it("records a skip as an answer in its own right", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() =>
+      api.current!.recordSoundFeedback({
+        id: "f2",
+        focusSessionId: "s1",
+        response: "skipped",
+        soundscape: "pad",
+        mode: null,
+        at: "2026-08-19T10:00:00.000Z",
+      }),
+    );
+
+    expect(api.current!.state.soundFeedback.f2.response).toBe("skipped");
   });
 });
