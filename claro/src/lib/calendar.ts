@@ -6,6 +6,7 @@
 import { addDays, addMonths, endOfMonth, format, startOfISOWeek, startOfMonth } from "date-fns";
 
 import { formatDayId, parseDayId, weekDayIds, weekOfDay } from "./dates";
+import { hasReflection } from "./daily-review";
 import { goalKey, resolveGoal } from "./goals";
 import { countCompletions, isDoneOn } from "./habits";
 import { resolveSchedule } from "./schedule";
@@ -22,6 +23,7 @@ import {
   type ISODate,
   type Quarter,
   type QuarterId,
+  type WeekId,
 } from "./types";
 
 /** "2026-08" */
@@ -443,4 +445,99 @@ export function formatFocusTotal(ms: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+}
+
+// -------------------------------------------------------- the drill path
+
+/**
+ * One date anchors the whole calendar. Year, quarter, month and week are all
+ * derived from it, so moving between views never loses where you were: zooming
+ * out and back in returns you to the same day.
+ */
+export type Anchor = {
+  dayId: ISODate;
+  monthId: MonthId;
+  quarterId: QuarterId;
+  weekId: WeekId;
+  year: number;
+};
+
+export function anchorOf(dayId: ISODate): Anchor {
+  const monthId = monthOfDay(dayId);
+  return {
+    dayId,
+    monthId,
+    quarterId: quarterOfMonth(monthId),
+    weekId: weekOfDay(dayId),
+    year: yearOfMonth(monthId),
+  };
+}
+
+/** The first day of a month, used when drilling from a coarser view. */
+export function firstDayOfMonth(id: MonthId): ISODate {
+  return `${id}-01`;
+}
+
+export function firstDayOfQuarter(id: QuarterId): ISODate {
+  return firstDayOfMonth(monthsOfQuarter(id)[0]);
+}
+
+/**
+ * The days of a month grouped into the ISO weeks that contain them, so a month
+ * can offer "open this week" without inventing its own week boundaries.
+ */
+export function weeksOfMonth(id: MonthId): WeekId[] {
+  const seen = new Set<WeekId>();
+  for (const dayId of monthDayIds(id)) seen.add(weekOfDay(dayId));
+  return [...seen];
+}
+
+export type Crumb = { label: string; view: "year" | "quarter" | "month" | "week" | "day" };
+
+/**
+ * The path from year down to day, for the breadcrumb. Every level is a real
+ * destination: the last two leave Calendar for Week and Today, which are where
+ * planning and execution actually live.
+ */
+export function drillPath(anchor: Anchor): Crumb[] {
+  return [
+    { label: String(anchor.year), view: "year" },
+    { label: `Q${anchor.quarterId.split("-Q")[1]}`, view: "quarter" },
+    { label: format(parseMonthId(anchor.monthId), "MMMM"), view: "month" },
+    { label: `Week ${Number(anchor.weekId.split("-W")[1])}`, view: "week" },
+    { label: format(parseDayId(anchor.dayId), "EEEE d"), view: "day" },
+  ];
+}
+
+// ------------------------------------------------------------- legend
+
+/**
+ * What a day's marks actually mean. Each is backed by a canonical record and
+ * nothing is inferred: a mark appears only when the thing it names exists.
+ */
+export type DayMarks = {
+  habitKept: boolean;
+  commitmentCompleted: boolean;
+  focusRecorded: boolean;
+  reflectionCaptured: boolean;
+};
+
+export const MARK_LABELS = {
+  habitKept: "Habit kept",
+  commitmentCompleted: "Commitment completed",
+  focusRecorded: "Focus time recorded",
+  reflectionCaptured: "Reflection captured",
+} as const;
+
+export function dayMarks(state: ClaroState, summary: DaySummary): DayMarks {
+  return {
+    habitKept: summary.habitsDone > 0,
+    // A completed priority, action or linked schedule row all count as one
+    // thing finished; the schedule row resolves to its original, so a linked
+    // completion is never counted twice.
+    commitmentCompleted:
+      summary.prioritiesDone > 0 || summary.actionsDone > 0 || summary.scheduleDone > 0,
+    focusRecorded: summary.focusMs > 0,
+    reflectionCaptured: hasReflection(readDay(state, summary.dayId)),
+  };
 }

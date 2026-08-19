@@ -250,6 +250,62 @@ export type Day = {
   steps: number | null;
   mood: Mood | null;
   notes: string;
+  /** The end-of-day reflection. Null until the user writes one. */
+  review: DailyReview | null;
+};
+
+/**
+ * Mood as a face rather than a number. A scale of digits invites scoring;
+ * these are just words for how the day felt, and none of them is a failure.
+ */
+export type MoodFace = "hard" | "low" | "steady" | "good" | "bright";
+
+export const MOOD_FACES: MoodFace[] = ["hard", "low", "steady", "good", "bright"];
+
+export const MOOD_FACE_META: Record<MoodFace, { emoji: string; label: string }> = {
+  hard: { emoji: "😔", label: "Hard going" },
+  low: { emoji: "😕", label: "A bit flat" },
+  steady: { emoji: "😐", label: "Steady" },
+  good: { emoji: "🙂", label: "Good" },
+  bright: { emoji: "😄", label: "Bright" },
+};
+
+/** Labelled low to high, so the number is never the point. */
+export type StressLevel = 1 | 2 | 3 | 4 | 5;
+
+export const STRESS_LEVELS: StressLevel[] = [1, 2, 3, 4, 5];
+
+export const STRESS_LABELS: Record<StressLevel, string> = {
+  1: "Very low",
+  2: "Low",
+  3: "Moderate",
+  4: "High",
+  5: "Very high",
+};
+
+/**
+ * A short end-of-day note. Optional in every part: a day with only a mood on it
+ * is a perfectly good entry, and nothing counts or scores what is written here.
+ */
+export type DailyReview = {
+  proudOf: string;
+  helped: string;
+  mood: MoodFace | null;
+  stress: StressLevel | null;
+  updatedAt: string;
+};
+
+/**
+ * A calm monthly intention. Deliberately small: three pieces of writing, not a
+ * second quarterly plan and not a task list.
+ */
+export type MonthPlan = {
+  /** "2026-08". The month is the record's identity. */
+  id: string;
+  intention: string;
+  mattersThisMonth: string;
+  reflection: string;
+  createdAt: string;
 };
 
 // ---------------------------------------------------------------- focus
@@ -519,6 +575,8 @@ export type ClaroState = {
   sound: SoundPrefs;
   soundPresets: Record<string, SoundPreset>;
   soundFeedback: Record<string, SoundFeedback>;
+  /** Keyed by month id, so a month's intention has one canonical record. */
+  monthPlans: Record<string, MonthPlan>;
 };
 
 // ------------------------------------------------------------ presentation

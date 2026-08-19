@@ -85,7 +85,7 @@ export function ScheduleBlock({
         <span className="text-[10px] text-muted-foreground">5 AM to 10 PM</span>
       </div>
 
-      <div className="paper-panel mt-2 min-h-0 flex-1 divide-y divide-subtle">
+      <div className="paper-panel schedule mt-2 min-h-0 flex-1 overflow-hidden">
         <SortAnnouncer message={sortable.announcement} />
 
         {SCHEDULE_HOURS.map((time) => {
@@ -97,21 +97,17 @@ export function ScheduleBlock({
             <div
               key={time}
               ref={sortable.groupRef(time)}
-              className={cn("group flex items-stretch", dragging && "bg-gold/8")}
+              data-filled={row ? "true" : "false"}
+              className={cn("schedule-row group", dragging && "bg-gold/8")}
             >
-              <span className="tnum flex w-[3.25rem] shrink-0 items-center justify-end border-r border-gold/25 pr-2 text-[10px] text-muted-foreground">
-                {hour}
-              </span>
+              <span className="schedule-time">{hour}</span>
 
               {row ? (
-                <span
-                  ref={sortable.itemRef(row.item.id)}
-                  className="flex min-w-0 flex-1 items-start gap-1"
-                >
+                <span ref={sortable.itemRef(row.item.id)} className="schedule-body">
                   <DragHandle
                     {...sortable.handleProps(row.item)}
                     dragging={dragging}
-                    className="mt-[3px] ml-1"
+                    className="mt-[1px]"
                   />
                   <ScheduleRow
                     row={row}
@@ -122,13 +118,15 @@ export function ScheduleBlock({
                   />
                 </span>
               ) : (
-                <EditableText
-                  value=""
-                  onCommit={(text) => writeBlock(time, text)}
-                  wrap
-                  ariaLabel={`Schedule at ${hour}`}
-                  className="min-w-0 flex-1 py-0 pl-2 text-[0.78rem] leading-snug"
-                />
+                <span className="schedule-body">
+                  <EditableText
+                    value=""
+                    onCommit={(text) => writeBlock(time, text)}
+                    wrap
+                    ariaLabel={`Schedule at ${hour}`}
+                    className="-ml-2 min-w-0 flex-1 py-0 text-[0.8rem] leading-snug"
+                  />
+                </span>
               )}
             </div>
           );
@@ -161,10 +159,10 @@ function ScheduleRow({
    */
   if (!available) {
     return (
-      <span className="flex min-w-0 flex-1 items-start gap-1.5 py-0.5 pl-1">
+      <span className="flex min-w-0 flex-1 items-start gap-1.5">
         <Link2Off aria-hidden className="mt-[3px] h-3 w-3 shrink-0 text-muted-foreground/70" />
         <span className="min-w-0 flex-1">
-          <span className="block text-[0.78rem] leading-snug text-muted-foreground">
+          <span className="block text-[0.8rem] leading-snug text-muted-foreground">
             {title || "Untitled"}
           </span>
           <span className="block text-[10px] text-muted-foreground/80">
@@ -175,7 +173,7 @@ function ScheduleRow({
           type="button"
           onClick={onRemove}
           aria-label={`Remove the ${hour} row`}
-          className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+          className="-mt-0.5 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
         >
           <X aria-hidden className="h-3.5 w-3.5" />
         </button>
@@ -186,8 +184,8 @@ function ScheduleRow({
   const linked = kind !== "block";
 
   return (
-    <span className="flex min-w-0 flex-1 items-start gap-1.5 py-0.5">
-      <span className="mt-[2px]">
+    <span className="flex min-w-0 flex-1 items-start gap-1.5">
+      <span className="mt-[1px]">
         <CheckToggle
           checked={done}
           onChange={onToggle}
@@ -209,7 +207,7 @@ function ScheduleRow({
           />
           <span
             className={cn(
-              "min-w-0 flex-1 text-[0.78rem] leading-snug",
+              "min-w-0 flex-1 text-[0.8rem] leading-snug",
               done && "strike-done text-muted-foreground",
             )}
             title={`This is the ${KIND_LABEL[kind]}'s own title. Edit it where it lives.`}
@@ -225,7 +223,7 @@ function ScheduleRow({
           wrap
           ariaLabel={`Schedule at ${hour}`}
           className={cn(
-            "min-w-0 flex-1 py-0 pl-1 text-[0.78rem] leading-snug",
+            "-ml-2 min-w-0 flex-1 py-0 text-[0.8rem] leading-snug",
             done && "strike-done text-muted-foreground",
           )}
         />
@@ -244,7 +242,7 @@ function ScheduleRow({
             ? `Remove ${title || KIND_LABEL[kind]} from ${hour}, keeping the ${KIND_LABEL[kind]}`
             : `Remove the ${hour} time block`
         }
-        className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+        className="-mt-0.5 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
       >
         <X aria-hidden className="h-3.5 w-3.5" />
       </button>

@@ -1,8 +1,12 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { NotebookPen } from "lucide-react";
 
 import { AppShell } from "@/components/AppShell";
 import { PeriodHeader } from "@/components/PeriodHeader";
+import { Breadcrumbs } from "@/components/calendar/Breadcrumbs";
 import { CyclePanel } from "@/components/calendar/CyclePanel";
+import { Legend } from "@/components/calendar/Legend";
+import { MonthPlanPanel } from "@/components/calendar/MonthPlanPanel";
 import { HabitMonth } from "@/components/calendar/HabitMonth";
 import { HabitConsistencyList, MonthStats } from "@/components/calendar/MonthStats";
 import { GoalProgressList } from "@/components/calendar/GoalProgressList";
@@ -10,6 +14,10 @@ import { QuarterReview } from "@/components/calendar/QuarterReview";
 import { YearReview } from "@/components/calendar/YearReview";
 import { useClaro } from "@/lib/claro-store";
 import {
+  anchorOf,
+  drillPath,
+  firstDayOfMonth,
+  firstDayOfQuarter,
   formatMonthLong,
   monthOfDay,
   monthsOfQuarter,
@@ -18,10 +26,13 @@ import {
   summariseMonth,
   summariseQuarter,
   summariseYear,
+  weeksOfMonth,
   yearOfMonth,
+  type Crumb,
   type MonthId,
 } from "@/lib/calendar";
 import { formatQuarterMonths, formatQuarterShort } from "@/lib/dates";
+import { hasReflection } from "@/lib/daily-review";
 import { activeHabits } from "@/lib/habits";
 import { newId } from "@/lib/id";
 import { cn } from "@/lib/utils";
@@ -38,10 +49,11 @@ const VIEW_LABEL: Record<View, string> = {
 };
 
 export const Route = createFileRoute("/calendar")({
-  validateSearch: (search: Record<string, unknown>): { m?: string; v?: View } => {
+  validateSearch: (search: Record<string, unknown>): { d?: string; v?: View } => {
+    // One date anchors every view, so drilling in and out never loses the day.
     // Every key genuinely optional, or `search` becomes required on every Link.
-    const next: { m?: string; v?: View } = {};
-    if (typeof search.m === "string" && /^\d{4}-\d{2}$/.test(search.m)) next.m = search.m;
+    const next: { d?: string; v?: View } = {};
+    if (typeof search.d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(search.d)) next.d = search.d;
     if (VIEWS.includes(search.v as View)) next.v = search.v as View;
     return next;
   },
@@ -62,22 +74,39 @@ function CalendarView() {
     logCycleStart,
     deleteCycleEntry,
     deleteAllCycleData,
+    monthPlan,
+    updateMonthPlan,
+    day,
   } = useClaro();
-  const { m, v } = Route.useSearch();
+  const { d, v } = Route.useSearch();
   const navigate = useNavigate();
 
   /**
-   * One anchor month drives all three views, so switching view never loses
-   * where you were and drilling down is just a change of view.
+   * One anchored day drives every view. Year, quarter, month and week are all
+   * derived from it, so zooming out and back in returns you to the same day.
    */
+  const anchor = anchorOf(d ?? today);
   const currentMonth = monthOfDay(today);
-  const monthId: MonthId = m ?? currentMonth;
+  const monthId: MonthId = anchor.monthId;
   const view: View = v ?? "month";
-  const quarterId = quarterOfMonth(monthId);
-  const year = yearOfMonth(monthId);
+  const quarterId = anchor.quarterId;
+  const year = anchor.year;
 
-  const go = (next: { m?: MonthId; v?: View }) =>
-    navigate({ to: "/calendar", search: { m: next.m ?? monthId, v: next.v ?? view } });
+  const go = (next: { d?: string; v?: View }) =>
+    navigate({ to: "/calendar", search: { d: next.d ?? anchor.dayId, v: next.v ?? view } });
+
+  /** The two innermost crumbs leave Calendar for where the work actually is. */
+  const drill = (target: Crumb["view"]) => {
+    if (target === "week") {
+      navigate({ to: "/week", search: { w: anchor.weekId } });
+      return;
+    }
+    if (target === "day") {
+      navigate({ to: "/today", search: { d: anchor.dayId } });
+      return;
+    }
+    go({ v: target });
+  };
 
   const habits = activeHabits(state.habits);
 
@@ -93,35 +122,35 @@ function CalendarView() {
           subtitle: month.empty
             ? "Nothing recorded yet. Days fill in here as you use Claro."
             : `${month.daysWithHabit} of ${month.daysInMonth} days with a habit kept`,
-          prev: () => go({ m: shiftMonthId(monthId, -1) }),
-          next: () => go({ m: shiftMonthId(monthId, 1) }),
+          prev: () => go({ d: firstDayOfMonth(shiftMonthId(monthId, -1)) }),
+          next: () => go({ d: firstDayOfMonth(shiftMonthId(monthId, 1)) }),
           prevLabel: "Previous month",
           nextLabel: "Next month",
           atNow: monthId === currentMonth,
-          toNow: () => go({ m: currentMonth }),
+          toNow: () => go({ d: today }),
           nowLabel: "This month",
         }
       : view === "quarter"
         ? {
             title: formatQuarterShort(quarterId),
             subtitle: formatQuarterMonths(quarterId),
-            prev: () => go({ m: shiftMonthId(monthsOfQuarter(quarterId)[0], -3) }),
-            next: () => go({ m: shiftMonthId(monthsOfQuarter(quarterId)[0], 3) }),
+            prev: () => go({ d: firstDayOfMonth(shiftMonthId(monthsOfQuarter(quarterId)[0], -3)) }),
+            next: () => go({ d: firstDayOfMonth(shiftMonthId(monthsOfQuarter(quarterId)[0], 3)) }),
             prevLabel: "Previous quarter",
             nextLabel: "Next quarter",
             atNow: quarterId === quarterOfMonth(currentMonth),
-            toNow: () => go({ m: currentMonth }),
+            toNow: () => go({ d: today }),
             nowLabel: "This quarter",
           }
         : {
             title: String(year),
             subtitle: yearSummary.empty ? "Nothing recorded yet" : "Twelve months at a glance",
-            prev: () => go({ m: shiftMonthId(monthId, -12) }),
-            next: () => go({ m: shiftMonthId(monthId, 12) }),
+            prev: () => go({ d: firstDayOfMonth(shiftMonthId(monthId, -12)) }),
+            next: () => go({ d: firstDayOfMonth(shiftMonthId(monthId, 12)) }),
             prevLabel: "Previous year",
             nextLabel: "Next year",
             atNow: year === yearOfMonth(currentMonth),
-            toNow: () => go({ m: currentMonth }),
+            toNow: () => go({ d: today }),
             nowLabel: "This year",
           };
 
@@ -137,6 +166,12 @@ function CalendarView() {
         nextLabel={header.nextLabel}
         onToday={header.atNow ? undefined : header.toNow}
         todayLabel={header.nowLabel}
+      />
+
+      <Breadcrumbs
+        crumbs={drillPath(anchor)}
+        current={view === "month" ? "month" : view}
+        onGo={drill}
       />
 
       {/* The view switcher. Month is where the detail lives. */}
@@ -180,25 +215,28 @@ function CalendarView() {
                   todayId={today}
                   cycle={cycle.settings.enabled ? cycle : null}
                   summary={month}
-                  onOpenDay={(dayId: ISODate) =>
-                    navigate({ to: "/today", search: { d: dayId } })
-                  }
+                  reflectionOn={(dayId) => hasReflection(day(dayId))}
+                  onOpenDay={(dayId: ISODate) => navigate({ to: "/today", search: { d: dayId } })}
                 />
               </div>
-              <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <span aria-hidden className="h-1.5 w-1 rounded-full bg-positive" />
-                  habits kept
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span aria-hidden className="h-1 w-1 rounded-full bg-foreground/40" />
-                  something completed
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-gold" />
-                  focus block
-                </span>
-              </p>
+              <div className="mt-2">
+                <Legend />
+              </div>
+
+              {/* The weeks this month touches, straight to the Week planner. */}
+              <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] text-muted-foreground">Open a week</span>
+                {weeksOfMonth(monthId).map((weekId) => (
+                  <button
+                    key={weekId}
+                    type="button"
+                    onClick={() => navigate({ to: "/week", search: { w: weekId } })}
+                    className="btn btn-sm btn-quiet"
+                  >
+                    Week {Number(weekId.split("-W")[1])}
+                  </button>
+                ))}
+              </div>
             </section>
 
             <section>
@@ -231,6 +269,12 @@ function CalendarView() {
               </div>
             </section>
 
+            <MonthPlanPanel
+              monthId={monthId}
+              plan={monthPlan(monthId)}
+              onWrite={(patch) => updateMonthPlan(monthId, (p) => ({ ...p, ...patch }))}
+            />
+
             <CyclePanel
               cycle={cycle}
               todayId={today}
@@ -246,11 +290,26 @@ function CalendarView() {
       )}
 
       {view === "quarter" && (
-        <QuarterReview
-          summary={quarter}
-          currentMonth={currentMonth}
-          onOpenMonth={(id) => go({ m: id, v: "month" })}
-        />
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="max-w-prose text-[0.88rem] leading-relaxed text-muted-foreground">
+              A look back at what you made space for. Planning happens in its own workspace.
+            </p>
+            <Link
+              to="/quarter-plan"
+              search={{ q: quarterId }}
+              className="btn btn-sm btn-primary shrink-0 gap-1.5"
+            >
+              <NotebookPen aria-hidden className="h-3.5 w-3.5" />
+              Plan this quarter
+            </Link>
+          </div>
+            <QuarterReview
+            summary={quarter}
+            currentMonth={currentMonth}
+            onOpenMonth={(id) => go({ d: firstDayOfMonth(id), v: "month" })}
+          />
+        </>
       )}
 
       {view === "year" && (
@@ -258,8 +317,8 @@ function CalendarView() {
           summary={yearSummary}
           currentMonth={yearOfMonth(currentMonth) === year ? currentMonth : null}
           selectedQuarter={quarterId}
-          onOpenMonth={(id) => go({ m: id, v: "month" })}
-          onOpenQuarter={(id) => go({ m: monthsOfQuarter(id)[0], v: "quarter" })}
+          onOpenMonth={(id) => go({ d: firstDayOfMonth(id), v: "month" })}
+          onOpenQuarter={(id) => go({ d: firstDayOfQuarter(id), v: "quarter" })}
         />
       )}
     </div>

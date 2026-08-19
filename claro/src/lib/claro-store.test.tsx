@@ -12,10 +12,12 @@ import {
   startFocusSession,
 } from "./focus-session";
 import { addCapped } from "./mutations";
-import { summariseQuarter } from "./calendar";
+import { dayMarks, summariseDay, summariseQuarter } from "./calendar";
+import { carryItem, openItems, writeReview } from "./daily-review";
 import { resolveGoal } from "./goals";
 import { clearPriority, reorderPriorities } from "./priorities";
 import { reopenPlan, settlePlan, startPlan } from "./quarter-plan";
+import { queueCarried } from "./rollover";
 import { resolveScheduleItem, toggleScheduleItem } from "./schedule";
 
 beforeEach(() => {
@@ -1087,5 +1089,89 @@ describe("quarterly planning writes into the canonical quarter", () => {
     await flush();
 
     expect(loadState().quarters[quarterId].work.sideQuests).toHaveLength(1);
+  });
+});
+
+describe("monthly plans and daily reflections persist", () => {
+  it("materialises a month plan only when something is written", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    // Reading a month that has never been planned stores nothing.
+    expect(api.current!.monthPlan("2026-08").intention).toBe("");
+    expect(api.current!.state.monthPlans).toEqual({});
+
+    act(() =>
+      api.current!.updateMonthPlan("2026-08", (p) => ({ ...p, intention: "Fewer, deeper things" })),
+    );
+    await flush();
+
+    expect(loadState().monthPlans["2026-08"].intention).toBe("Fewer, deeper things");
+  });
+
+  it("keeps a month plan under one record across edits", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.updateMonthPlan("2026-08", (p) => ({ ...p, intention: "Ship it" })));
+    act(() =>
+      api.current!.updateMonthPlan("2026-08", (p) => ({ ...p, reflection: "Went better than I feared" })),
+    );
+    await flush();
+
+    const stored = loadState().monthPlans;
+    expect(Object.keys(stored)).toEqual(["2026-08"]);
+    expect(stored["2026-08"].intention).toBe("Ship it");
+    expect(stored["2026-08"].reflection).toBe("Went better than I feared");
+  });
+
+  it("keeps a daily reflection by date, and shows it on the calendar", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() =>
+      api.current!.updateDay("2026-08-19", (day) =>
+        writeReview(day, { proudOf: "Stopped at a sensible hour", mood: "good" }, new Date()),
+      ),
+    );
+    await flush();
+
+    const state = loadState();
+    expect(state.days["2026-08-19"].review?.proudOf).toBe("Stopped at a sensible hour");
+    expect(dayMarks(state, summariseDay(state, "2026-08-19", [])).reflectionCaptured).toBe(true);
+    // A different day is untouched.
+    expect(dayMarks(state, summariseDay(state, "2026-08-18", [])).reflectionCaptured).toBe(false);
+  });
+
+  it("moves a carried item into the chosen day's review queue, and nowhere else", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() =>
+      api.current!.updateDay("2026-08-19", (day) => ({
+        ...day,
+        priority1: { ...day.priority1, id: "p1", text: "Ship the store" },
+      })),
+    );
+
+    let carried: ReturnType<typeof carryItem>["carried"] = null;
+    act(() =>
+      api.current!.updateDay("2026-08-19", (day) => {
+        const item = openItems(day)[0];
+        const result = carryItem(day, item, "2026-08-20");
+        carried = result.carried;
+        return result.day;
+      }),
+    );
+    act(() => api.current!.updateDay("2026-08-20", (day) => queueCarried(day, carried!)));
+    await flush();
+
+    const state = loadState();
+    // The source keeps its record, marked so the rollover will not act again.
+    expect(state.days["2026-08-19"].priority1.text).toBe("Ship the store");
+    expect(state.days["2026-08-19"].priority1.carriedTo).toBe("2026-08-20");
+    // The destination receives it for review, not forced into a slot.
+    expect(state.days["2026-08-20"].carriedForward.map((i) => i.text)).toEqual(["Ship the store"]);
+    expect(state.days["2026-08-20"].priority1.text).toBe("");
   });
 });

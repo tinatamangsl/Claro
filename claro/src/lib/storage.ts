@@ -16,7 +16,9 @@ import {
   type SoundPreset,
   type SoundscapeId,
   type CycleEntry,
+  type DailyReview,
   type ISODate,
+  type MonthPlan,
   type Priority,
   type Quarter,
   type QuarterId,
@@ -51,6 +53,7 @@ export function emptyState(): ClaroState {
     sound: blankSound(),
     soundPresets: {},
     soundFeedback: {},
+    monthPlans: {},
   };
 }
 
@@ -105,6 +108,7 @@ export function blankDay(id: ISODate): Day {
     steps: null,
     mood: null,
     notes: "",
+    review: null,
   };
 }
 
@@ -153,7 +157,23 @@ export function migrate(raw: unknown): ClaroState {
     soundFeedback: isRecord<SoundFeedback>(candidate.soundFeedback)
       ? candidate.soundFeedback
       : {},
+    // Additive: a store saved before monthly plans existed simply arrives empty.
+    monthPlans: isRecord<MonthPlan>(candidate.monthPlans) ? candidate.monthPlans : {},
   };
+}
+
+export function blankMonthPlan(id: string, now: Date): MonthPlan {
+  return {
+    id,
+    intention: "",
+    mattersThisMonth: "",
+    reflection: "",
+    createdAt: now.toISOString(),
+  };
+}
+
+export function blankReview(now: Date): DailyReview {
+  return { proudOf: "", helped: "", mood: null, stress: null, updatedAt: now.toISOString() };
 }
 
 /** Applied in order, so a v1 store passes through every step to the current shape. */

@@ -11,6 +11,7 @@ import {
 
 import { formatDayId } from "./dates";
 import {
+  blankMonthPlan,
   clearState,
   emptyState,
   flushSave,
@@ -34,6 +35,7 @@ import type {
   FocusSession,
   ISODate,
   Interruption,
+  MonthPlan,
   Quarter,
   SoundFeedback,
   SoundPrefs,
@@ -87,6 +89,10 @@ type ClaroContextValue = {
   /** Deletes the habit and its history together — no orphaned completions. */
   deleteHabit: (id: string) => void;
   toggleHabitDone: (habitId: string, dayId: ISODate, now: Date) => void;
+
+  /** A month's calm intention. One record per month, created on first write. */
+  monthPlan: (id: string) => MonthPlan;
+  updateMonthPlan: (id: string, recipe: (p: MonthPlan) => MonthPlan) => void;
 
   /** Private cycle awareness, kept apart from planning and focus records. */
   cycle: CycleState;
@@ -369,6 +375,23 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  /** Read returns a blank plan; only a write materialises one. */
+  const monthPlan = useCallback(
+    (id: string) => state.monthPlans[id] ?? blankMonthPlan(id, new Date(0)),
+    [state],
+  );
+
+  const updateMonthPlan = useCallback((id: string, recipe: (p: MonthPlan) => MonthPlan) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      const current = prev.state.monthPlans[id] ?? blankMonthPlan(id, new Date());
+      return {
+        ...prev,
+        state: { ...prev.state, monthPlans: { ...prev.state.monthPlans, [id]: recipe(current) } },
+      };
+    });
+  }, []);
+
   const setCycleEnabled = useCallback((enabled: boolean, now: Date) => {
     setSnap((prev) => {
       if (!prev) return prev;
@@ -520,6 +543,8 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       patchHabit,
       deleteHabit,
       toggleHabitDone,
+      monthPlan,
+      updateMonthPlan,
       cycle: state.cycle,
       setCycleEnabled,
       logCycleStart,
@@ -555,6 +580,8 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       patchHabit,
       deleteHabit,
       toggleHabitDone,
+      monthPlan,
+      updateMonthPlan,
       setCycleEnabled,
       logCycleStart,
       deleteCycleEntry,

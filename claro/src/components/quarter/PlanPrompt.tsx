@@ -28,7 +28,7 @@ export function PlanPrompt({
             {hint}
           </span>
         )}
-        <div className="paper-panel rule-lines mt-2 px-3 py-2">
+        <div className="paper-panel ruled mt-2 px-3 pb-2">
           <EditableText
             value={value}
             onCommit={onCommit}
@@ -36,7 +36,7 @@ export function PlanPrompt({
             rows={3}
             ariaLabel={question}
             placeholder={placeholder}
-            className="-ml-2 text-[0.9rem] leading-[26px]"
+            className="ruled-text -ml-2 py-0"
           />
         </div>
       </label>

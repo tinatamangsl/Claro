@@ -50,6 +50,7 @@ describe("blank records", () => {
       },
       soundPresets: {},
       soundFeedback: {},
+      monthPlans: {},
     });
   });
 

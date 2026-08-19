@@ -19,7 +19,15 @@ import {
   summariseYear,
   yearOfMonth,
   formatFocusTotal,
+  anchorOf,
+  dayMarks,
+  drillPath,
+  firstDayOfMonth,
+  firstDayOfQuarter,
+  weeksOfMonth,
+  MARK_LABELS,
 } from "./calendar";
+import { weekOfDay } from "./dates";
 import { blankDay, blankPriority, blankQuarter, blankQuarterSide, emptyState } from "./storage";
 import {
   habitCompletionId,
@@ -597,5 +605,127 @@ describe("year boundaries", () => {
 
   it("handles a leap year February", () => {
     expect(summariseMonth(emptyState(), "2028-02", habits).daysInMonth).toBe(29);
+  });
+});
+
+describe("the drill path", () => {
+  it("derives every level from one anchored day", () => {
+    const anchor = anchorOf("2026-08-19");
+
+    expect(anchor).toEqual({
+      dayId: "2026-08-19",
+      monthId: "2026-08",
+      quarterId: "2026-Q3",
+      weekId: "2026-W34",
+      year: 2026,
+    });
+  });
+
+  it("reads year, quarter, month, week, day in that order", () => {
+    expect(drillPath(anchorOf("2026-08-19")).map((c) => [c.view, c.label])).toEqual([
+      ["year", "2026"],
+      ["quarter", "Q3"],
+      ["month", "August"],
+      ["week", "Week 34"],
+      ["day", "Wednesday 19"],
+    ]);
+  });
+
+  it("keeps the day when zooming out and back in", () => {
+    // Drilling out changes the view, never the anchor.
+    const anchor = anchorOf("2026-08-19");
+    expect(anchorOf(anchor.dayId).monthId).toBe("2026-08");
+    expect(anchorOf(anchor.dayId).dayId).toBe("2026-08-19");
+  });
+
+  it("lands on the first day when drilling in from a coarser view", () => {
+    expect(firstDayOfMonth("2026-08")).toBe("2026-08-01");
+    expect(firstDayOfQuarter("2026-Q3")).toBe("2026-07-01");
+  });
+
+  it("crosses a year boundary intact", () => {
+    const anchor = anchorOf("2027-01-01");
+    expect(anchor.year).toBe(2027);
+    expect(anchor.quarterId).toBe("2027-Q1");
+    // 1 January 2027 falls in the ISO week that started in 2026.
+    expect(anchor.weekId).toBe("2026-W53");
+  });
+
+  it("lists the ISO weeks a month touches, without inventing boundaries", () => {
+    const weeks = weeksOfMonth("2026-08");
+
+    expect(weeks[0]).toBe(weekOfDay("2026-08-01"));
+    expect(weeks.at(-1)).toBe(weekOfDay("2026-08-31"));
+    expect(new Set(weeks).size).toBe(weeks.length);
+  });
+});
+
+describe("the legend says only what is true", () => {
+  const habits = [habit("a")];
+
+  const marksFor = (state: ClaroState, dayId: string) =>
+    dayMarks(state, summariseDay(state, dayId, habits));
+
+  it("shows nothing at all on an empty day", () => {
+    expect(marksFor(emptyState(), "2026-08-03")).toEqual({
+      habitKept: false,
+      commitmentCompleted: false,
+      focusRecorded: false,
+      reflectionCaptured: false,
+    });
+  });
+
+  it("marks a habit only when one was kept", () => {
+    const state = stateWith({ habitCompletions: done(["a", "2026-08-03"]) });
+    expect(marksFor(state, "2026-08-03").habitKept).toBe(true);
+  });
+
+  it("counts a completed priority, action or linked schedule row as one commitment", () => {
+    const viaPriority = stateWith({
+      days: { "2026-08-03": dayRecord("2026-08-03", { priority1: written("p1", "Ship it", true) }) },
+    });
+    const viaAction = stateWith({
+      days: {
+        "2026-08-03": dayRecord("2026-08-03", {
+          actions: [{ id: "a1", text: "Email", bucket: "task", done: true, createdAt: "x" }],
+        }),
+      },
+    });
+
+    expect(marksFor(viaPriority, "2026-08-03").commitmentCompleted).toBe(true);
+    expect(marksFor(viaAction, "2026-08-03").commitmentCompleted).toBe(true);
+  });
+
+  it("marks focus only when settled minutes exist", () => {
+    const none = stateWith({ focusSessions: { f: focusSession("2026-08-03", 0) } });
+    const some = stateWith({ focusSessions: { f: focusSession("2026-08-03", 25) } });
+
+    expect(marksFor(none, "2026-08-03").focusRecorded).toBe(false);
+    expect(marksFor(some, "2026-08-03").focusRecorded).toBe(true);
+  });
+
+  it("marks a reflection only once something is written in it", () => {
+    const empty = stateWith({
+      days: { "2026-08-03": dayRecord("2026-08-03", { review: null }) },
+    });
+    const written = stateWith({
+      days: {
+        "2026-08-03": dayRecord("2026-08-03", {
+          review: { proudOf: "Rested", helped: "", mood: null, stress: null, updatedAt: "x" },
+        }),
+      },
+    });
+
+    expect(marksFor(empty, "2026-08-03").reflectionCaptured).toBe(false);
+    expect(marksFor(written, "2026-08-03").reflectionCaptured).toBe(true);
+  });
+
+  it("names each mark in the user's language", () => {
+    expect(MARK_LABELS).toEqual({
+      habitKept: "Habit kept",
+      commitmentCompleted: "Commitment completed",
+      focusRecorded: "Focus time recorded",
+      reflectionCaptured: "Reflection captured",
+    });
   });
 });

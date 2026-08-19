@@ -46,10 +46,20 @@ import {
   type PriorityTarget,
 } from "@/lib/priorities";
 import { scheduleHabitToggle, toggleScheduleItem } from "@/lib/schedule";
+import { DailyReview } from "@/components/today/DailyReview";
+import {
+  carryItem,
+  completeItem,
+  letGoItem,
+  writeReview,
+  type Decision,
+  type OpenItem,
+} from "@/lib/daily-review";
 import {
   keepCarriedAsAction,
   letGoCarried,
   promoteCarried,
+  queueCarried,
 } from "@/lib/rollover";
 import {
   formatRemaining,
@@ -227,6 +237,35 @@ function TodayView() {
     updateDay(dayId, (current) => toggleScheduleItem(current, itemId));
   };
 
+  /**
+   * The user's decision about one unfinished thing. Nothing here happens on a
+   * schedule: each item moves, completes or goes only when they say so.
+   */
+  const decideOpenItem = (item: OpenItem, decision: Decision, toDayId?: string) => {
+    if (decision === "complete") {
+      updateDay(dayId, (current) => completeItem(current, item));
+      return;
+    }
+    if (decision === "letGo") {
+      updateDay(dayId, (current) => letGoItem(current, item));
+      return;
+    }
+
+    const target = toDayId ?? shiftDayId(dayId, 1);
+    if (target === dayId) return;
+
+    // The source keeps its record and is marked as carried, so the automatic
+    // rollover will not pick it up again. The destination receives it in its
+    // review queue rather than having it forced into a slot.
+    let carried: ReturnType<typeof carryItem>["carried"] = null;
+    updateDay(dayId, (current) => {
+      const result = carryItem(current, item, target);
+      carried = result.carried;
+      return result.day;
+    });
+    if (carried) updateDay(target, (current) => queueCarried(current, carried!));
+  };
+
   // ------------------------------------------------------------ 3-3-3 plan
 
   const planDay = (recipe: (d: Day) => Day) => updateDay(dayId, recipe);
@@ -366,7 +405,7 @@ function TodayView() {
                 <span className="text-[10px] text-muted-foreground">anything worth keeping</span>
               </div>
               {/* A writing surface, so the page's rules earn their place here. */}
-              <div className="paper-panel rule-lines mt-2 px-3 py-2">
+              <div className="paper-panel ruled mt-2 px-3 pb-2">
                 <EditableText
                   value={record.notes}
                   onCommit={(notes) => patch({ notes })}
@@ -374,7 +413,7 @@ function TodayView() {
                   rows={3}
                   ariaLabel="Notes for today"
                   placeholder="How did today actually go?"
-                  className="-ml-2 text-[0.88rem] leading-[26px]"
+                  className="ruled-text -ml-2 py-0"
                 />
               </div>
             </section>
@@ -414,6 +453,15 @@ function TodayView() {
               }
               onRestore={(habitId) => patchHabit(habitId, { archivedAt: null })}
               onDelete={deleteHabit}
+            />
+
+            <DailyReview
+              day={record}
+              tomorrowId={shiftDayId(dayId, 1)}
+              onWrite={(patch) =>
+                updateDay(dayId, (current) => writeReview(current, patch, new Date()))
+              }
+              onDecide={decideOpenItem}
             />
           </div>
         </div>

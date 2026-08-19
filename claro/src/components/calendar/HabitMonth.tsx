@@ -22,6 +22,8 @@ type Props = {
   cycle: CycleState | null;
   /** One summary per day, from the shared aggregation. */
   summary: MonthSummary;
+  /** Whether that day carries a written reflection. */
+  reflectionOn: (dayId: ISODate) => boolean;
   onOpenDay: (dayId: ISODate) => void;
 };
 
@@ -39,11 +41,15 @@ export function HabitMonth({
   todayId,
   cycle,
   summary,
+  reflectionOn,
   onOpenDay,
 }: Props) {
   const active = activeHabits(habits);
   const byDay = monthCompletions(active, completions, monthId);
   const summaries = new Map(summary.days.map((d) => [d.dayId, d]));
+  const reflections = new Set(
+    summary.days.filter((d) => reflectionOn(d.dayId)).map((d) => d.dayId),
+  );
 
   return (
     <div>
@@ -65,6 +71,9 @@ export function HabitMonth({
           const started = cycle ? isLoggedStart(cycle, cell.dayId) : false;
           const completedCount =
             (stats?.prioritiesDone ?? 0) + (stats?.actionsDone ?? 0) + (stats?.scheduleDone ?? 0);
+          // Backed by the day's own record, so the legend never promises a mark
+          // that is not there.
+          const reflected = reflections.has(cell.dayId);
 
           return (
             <button
@@ -78,6 +87,7 @@ export function HabitMonth({
                       `${day.done} of ${day.total} habits kept`,
                       `${completedCount} things completed`,
                       stats.focusMs > 0 ? `${formatFocusTotal(stats.focusMs)} focused` : null,
+                      reflected ? "reflection captured" : null,
                     ]
                       .filter(Boolean)
                       .join(", ")
@@ -116,6 +126,13 @@ export function HabitMonth({
                 <span
                   aria-hidden
                   className="absolute right-1 bottom-[3px] h-1.5 w-1.5 rounded-full bg-gold"
+                />
+              )}
+              {/* A written reflection: an outline, so it reads apart from a fill. */}
+              {cell.inMonth && reflected && (
+                <span
+                  aria-hidden
+                  className="absolute bottom-[3px] left-1 h-1.5 w-1.5 rounded-full border border-primary"
                 />
               )}
               {started && (
