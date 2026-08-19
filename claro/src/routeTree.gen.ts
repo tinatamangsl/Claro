@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as QuarterRouteImport } from './routes/quarter'
+import { Route as QuarterPlanRouteImport } from './routes/quarter-plan'
 import { Route as TodayRouteImport } from './routes/today'
 import { Route as WeekRouteImport } from './routes/week'
 
@@ -30,6 +31,11 @@ const QuarterRoute = QuarterRouteImport.update({
   path: '/quarter',
   getParentRoute: () => rootRouteImport,
 } as any)
+const QuarterPlanRoute = QuarterPlanRouteImport.update({
+  id: '/quarter-plan',
+  path: '/quarter-plan',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TodayRoute = TodayRouteImport.update({
   id: '/today',
   path: '/today',
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/quarter': typeof QuarterRoute
+  '/quarter-plan': typeof QuarterPlanRoute
   '/today': typeof TodayRoute
   '/week': typeof WeekRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/quarter': typeof QuarterRoute
+  '/quarter-plan': typeof QuarterPlanRoute
   '/today': typeof TodayRoute
   '/week': typeof WeekRoute
 }
@@ -60,21 +68,31 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/quarter': typeof QuarterRoute
+  '/quarter-plan': typeof QuarterPlanRoute
   '/today': typeof TodayRoute
   '/week': typeof WeekRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/calendar' | '/quarter' | '/today' | '/week'
+  fullPaths:
+    '/' | '/calendar' | '/quarter' | '/quarter-plan' | '/today' | '/week'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/calendar' | '/quarter' | '/today' | '/week'
-  id: '__root__' | '/' | '/calendar' | '/quarter' | '/today' | '/week'
+  to: '/' | '/calendar' | '/quarter' | '/quarter-plan' | '/today' | '/week'
+  id:
+    | '__root__'
+    | '/'
+    | '/calendar'
+    | '/quarter'
+    | '/quarter-plan'
+    | '/today'
+    | '/week'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CalendarRoute: typeof CalendarRoute
   QuarterRoute: typeof QuarterRoute
+  QuarterPlanRoute: typeof QuarterPlanRoute
   TodayRoute: typeof TodayRoute
   WeekRoute: typeof WeekRoute
 }
@@ -102,6 +120,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof QuarterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/quarter-plan': {
+      id: '/quarter-plan'
+      path: '/quarter-plan'
+      fullPath: '/quarter-plan'
+      preLoaderRoute: typeof QuarterPlanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/today': {
       id: '/today'
       path: '/today'
@@ -123,6 +148,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CalendarRoute: CalendarRoute,
   QuarterRoute: QuarterRoute,
+  QuarterPlanRoute: QuarterPlanRoute,
   TodayRoute: TodayRoute,
   WeekRoute: WeekRoute,
 }

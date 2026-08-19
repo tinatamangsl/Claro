@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrioritiesBlock } from "./PrioritiesBlock";
-import { blankDay, blankPriority, blankQuarter } from "@/lib/storage";
+import { blankDay, blankPriority, blankQuarter, blankQuarterSide } from "@/lib/storage";
 import type { Day, Priority, Quarter } from "@/lib/types";
 
 const p = (text: string, patch: Partial<Priority> = {}): Priority => ({
@@ -15,10 +15,7 @@ const p = (text: string, patch: Partial<Priority> = {}): Priority => ({
 
 const quarter = (): Quarter => ({
   ...blankQuarter("2026-Q3"),
-  work: {
-    mainQuest: "Take Claro to real users",
-    sideQuests: [{ id: "s1", text: "Write the launch note", done: false }],
-  },
+  work: { ...blankQuarterSide(), mainQuest: "Take Claro to real users", sideQuests: [{ id: "s1", text: "Write the launch note", done: false }] },
 });
 
 const dayWith = (patch: Partial<Day>): Day => ({ ...blankDay("2026-08-19"), ...patch });

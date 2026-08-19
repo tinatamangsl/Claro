@@ -20,7 +20,7 @@ import {
   yearOfMonth,
   formatFocusTotal,
 } from "./calendar";
-import { blankDay, blankPriority, emptyState } from "./storage";
+import { blankDay, blankPriority, blankQuarter, blankQuarterSide, emptyState } from "./storage";
 import {
   habitCompletionId,
   type ClaroState,
@@ -337,12 +337,13 @@ describe("summarising a quarter", () => {
     const state = stateWith({
       quarters: {
         "2026-Q3": {
-          id: "2026-Q3",
+          ...blankQuarter("2026-Q3"),
           work: {
+            ...blankQuarterSide(),
             mainQuest: "Take Claro to real users",
             sideQuests: [{ id: "s1", text: "Write the launch note", done: false }],
           },
-          life: { mainQuest: "Get properly strong again", sideQuests: [] },
+          life: { ...blankQuarterSide(), mainQuest: "Get properly strong again" },
         },
       },
       days: {

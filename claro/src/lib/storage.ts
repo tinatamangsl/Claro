@@ -20,6 +20,7 @@ import {
   type Priority,
   type Quarter,
   type QuarterId,
+  type QuarterSide,
   type Week,
   type WeekId,
 } from "./types";
@@ -63,12 +64,17 @@ export function blankSound(): SoundPrefs {
   return { volume: 0.4, muted: false, soundscape: "brown", mode: null, endChime: false };
 }
 
+export function blankQuarterSide(): QuarterSide {
+  return { mainQuest: "", mainQuestWhy: "", mainQuestEnough: "", sideQuests: [] };
+}
+
+/**
+ * The planning fields are additive, so `readQuarter` supplies them to every
+ * quarter saved before they existed. That is why this needed no migration and
+ * no version bump: nothing already on disk changes shape.
+ */
 export function blankQuarter(id: QuarterId): Quarter {
-  return {
-    id,
-    work: { mainQuest: "", sideQuests: [] },
-    life: { mainQuest: "", sideQuests: [] },
-  };
+  return { id, work: blankQuarterSide(), life: blankQuarterSide(), plan: null };
 }
 
 export function blankWeek(id: WeekId): Week {

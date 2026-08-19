@@ -1,4 +1,5 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { NotebookPen } from "lucide-react";
 
 import { AddItem } from "@/components/AddItem";
 import { AppShell } from "@/components/AppShell";
@@ -7,7 +8,13 @@ import { FocusOn } from "@/components/FocusOn";
 import { SortableRows } from "@/components/SortableRows";
 import { PeriodHeader } from "@/components/PeriodHeader";
 import { useClaro } from "@/lib/claro-store";
-import { formatQuarterMonths, formatQuarterShort, quarterOfDay, shiftQuarterId } from "@/lib/dates";
+import {
+  formatDayDate,
+  formatQuarterMonths,
+  formatQuarterShort,
+  quarterOfDay,
+  shiftQuarterId,
+} from "@/lib/dates";
 import { newId } from "@/lib/id";
 import { addCapped, removeById, toggleById, updateById } from "@/lib/mutations";
 import {
@@ -57,15 +64,36 @@ function QuarterView() {
         todayLabel="This quarter"
       />
 
-      <div className="max-w-2xl">
-        <p className="display text-[1.6rem] leading-[1.25] sm:text-[1.9rem]">
-          What life are you trying to create?
-        </p>
-        <p className="mt-3 text-[0.95rem] leading-relaxed text-muted-foreground">
-          Name one thing that matters most in each half of it. Everything below the quarter
-          should serve these.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
+        <div className="max-w-2xl">
+          <p className="display text-[1.6rem] leading-[1.25] sm:text-[1.9rem]">
+            What life are you trying to create?
+          </p>
+          <p className="mt-3 text-[0.95rem] leading-relaxed text-muted-foreground">
+            Name one thing that matters most in each half of it. Everything below the quarter
+            should serve these.
+          </p>
+        </div>
+
+        {/*
+          The workspace is a separate page rather than a modal, and it writes
+          into this same quarter, so opening it never replaces what is here.
+        */}
+        <Link
+          to="/quarter-plan"
+          search={{ q: quarterId }}
+          className="btn btn-primary shrink-0 gap-1.5"
+        >
+          <NotebookPen aria-hidden className="h-3.5 w-3.5" />
+          {record.plan ? "Open the plan" : "Plan this quarter"}
+        </Link>
       </div>
+
+      {record.plan?.completedAt && (
+        <p className="text-[0.85rem] text-muted-foreground">
+          Planned on {formatDayDate(record.plan.completedAt.slice(0, 10))}. Reopen it any time.
+        </p>
+      )}
 
       <div className="grid items-stretch gap-8 md:grid-cols-2">
         {DOMAINS.map((domain) => (

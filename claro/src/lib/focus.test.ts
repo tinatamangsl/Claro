@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { focusLadder, parkDistraction, selectFocus } from "./focus";
-import { blankDay, blankPriority, blankQuarter, blankWeek } from "./storage";
+import { blankDay, blankPriority, blankQuarter, blankWeek, blankQuarterSide } from "./storage";
 import type { ActionItem, Day, Priority, Quarter, Week } from "./types";
 
 const NOW = new Date("2026-08-18T09:30:00.000Z");
@@ -171,7 +171,7 @@ describe("focusLadder — why this thing matters", () => {
   });
   const quarter = (mainQuest: string): Quarter => ({
     ...blankQuarter("2026-Q3"),
-    work: { mainQuest, sideQuests: [] },
+    work: { ...blankQuarterSide(), mainQuest },
   });
 
   it("stays silent when the priority is not linked to a domain", () => {
@@ -208,7 +208,7 @@ describe("focusLadder — why this thing matters", () => {
 
   it("reads the life side when that is what the priority links to", () => {
     const w: Week = { ...blankWeek("2026-W34"), life: { goal: "Three runs", actions: [] } };
-    const q: Quarter = { ...blankQuarter("2026-Q3"), life: { mainQuest: "Get strong", sideQuests: [] } };
+    const q: Quarter = { ...blankQuarter("2026-Q3"), life: { ...blankQuarterSide(), mainQuest: "Get strong", sideQuests: [] } };
 
     expect(focusLadder(p({ text: "Run", done: false, goal: { category: "lifeMain" } }), w, q)).toEqual({
       domainLabel: "Life Main Quest",

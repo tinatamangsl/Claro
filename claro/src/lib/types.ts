@@ -25,13 +25,47 @@ export type SideQuest = { id: string; text: string; done: boolean };
 
 export type QuarterSide = {
   mainQuest: string;
+  /** Why this quest matters. Written during planning, read on Quarter. */
+  mainQuestWhy: string;
+  /** What "enough" looks like, in the user's own words. Never a metric. */
+  mainQuestEnough: string;
   sideQuests: SideQuest[]; // capped at MAX_SIDE_QUESTS
+};
+
+/**
+ * The thinking behind a quarter, kept alongside the quarter it belongs to.
+ *
+ * The planning workspace writes straight into these records and into the
+ * quests themselves. There is deliberately no draft copy: a second version of
+ * a goal that has to be synchronised back is exactly how goals get duplicated
+ * and reflections get lost.
+ */
+export type QuarterReflection = {
+  proudOf: string;
+  whatWorked: string;
+  carryForward: string;
+};
+
+export type QuarterDirection = {
+  mattersMost: string;
+  meaningful: string;
+  constraints: string;
+};
+
+export type QuarterPlan = {
+  startedAt: string;
+  /** Set when the user marks the plan as settled. Editing it again is fine. */
+  completedAt: string | null;
+  reflection: QuarterReflection;
+  direction: QuarterDirection;
 };
 
 export type Quarter = {
   id: QuarterId;
   work: QuarterSide;
   life: QuarterSide;
+  /** Null until the planning workspace is opened for this quarter. */
+  plan: QuarterPlan | null;
 };
 
 // ------------------------------------------------------------------- week

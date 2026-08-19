@@ -12,7 +12,10 @@ import {
   startFocusSession,
 } from "./focus-session";
 import { addCapped } from "./mutations";
+import { summariseQuarter } from "./calendar";
+import { resolveGoal } from "./goals";
 import { clearPriority, reorderPriorities } from "./priorities";
+import { reopenPlan, settlePlan, startPlan } from "./quarter-plan";
 import { resolveScheduleItem, toggleScheduleItem } from "./schedule";
 
 beforeEach(() => {
@@ -956,5 +959,133 @@ describe("priority order survives a refresh", () => {
     expect(stored.priority1.text).toBe("Cloud Cycle session");
     expect(stored.priority1.done).toBe(true);
     expect(stored.priority3.text).toBe("Plan Claro");
+  });
+});
+
+describe("quarterly planning writes into the canonical quarter", () => {
+  const quarterId = "2026-Q3";
+
+  it("adds planning fields to a quarter saved before they existed", async () => {
+    // A quarter as an earlier build wrote it, with no planning fields at all.
+    saveNow({
+      ...emptyState(),
+      quarters: {
+        [quarterId]: {
+          id: quarterId,
+          work: { mainQuest: "Take Claro to real users", sideQuests: [] },
+          life: { mainQuest: "", sideQuests: [] },
+        } as never,
+      },
+    });
+
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    const read = api.current!.quarter(quarterId);
+    expect(read.work.mainQuest).toBe("Take Claro to real users");
+    expect(read.work.mainQuestWhy).toBe("");
+    expect(read.work.mainQuestEnough).toBe("");
+    expect(read.plan).toBeNull();
+  });
+
+  it("saves a plan and its quests into one record, with no duplicate goal", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.updateQuarter(quarterId, (q) => startPlan(q, new Date())));
+    act(() =>
+      api.current!.updateQuarter(quarterId, (q) => ({
+        ...q,
+        plan: { ...q.plan!, reflection: { ...q.plan!.reflection, proudOf: "Shipped the beta" } },
+        work: { ...q.work, mainQuest: "Take Claro to real users", mainQuestWhy: "It is the one thing" },
+      })),
+    );
+    await flush();
+
+    const stored = loadState().quarters[quarterId];
+    expect(stored.work.mainQuest).toBe("Take Claro to real users");
+    expect(stored.work.mainQuestWhy).toBe("It is the one thing");
+    expect(stored.plan?.reflection.proudOf).toBe("Shipped the beta");
+    // One quarter record, not a plan record beside it.
+    expect(Object.keys(loadState().quarters)).toEqual([quarterId]);
+  });
+
+  it("survives a reload, reflections and quests together", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.updateQuarter(quarterId, (q) => startPlan(q, new Date())));
+    act(() =>
+      api.current!.updateQuarter(quarterId, (q) => ({
+        ...q,
+        plan: { ...q.plan!, direction: { ...q.plan!.direction, mattersMost: "Fewer things" } },
+        life: { ...q.life, mainQuest: "Get properly strong again" },
+      })),
+    );
+    act(() => api.current!.updateQuarter(quarterId, (q) => settlePlan(q, new Date())));
+    await flush();
+
+    const reloaded = loadState().quarters[quarterId];
+    expect(reloaded.plan?.direction.mattersMost).toBe("Fewer things");
+    expect(reloaded.life.mainQuest).toBe("Get properly strong again");
+    expect(reloaded.plan?.completedAt).not.toBeNull();
+  });
+
+  it("makes the planned quest immediately linkable from Today", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() =>
+      api.current!.updateQuarter(quarterId, (q) => ({
+        ...q,
+        work: { ...q.work, mainQuest: "Take Claro to real users" },
+      })),
+    );
+
+    // Today resolves a goal link through the same quarter record.
+    const linked = resolveGoal({ category: "workMain" }, api.current!.quarter(quarterId));
+    expect(linked?.title).toBe("Take Claro to real users");
+  });
+
+  it("counts a planned goal in the calendar's quarter review", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() =>
+      api.current!.updateQuarter(quarterId, (q) => ({
+        ...q,
+        work: { ...q.work, mainQuest: "Take Claro to real users" },
+      })),
+    );
+    act(() =>
+      api.current!.updateDay("2026-08-03", (d) => ({
+        ...d,
+        priority1: { ...d.priority1, id: "p1", text: "Ship it", done: true, goal: { category: "workMain" } },
+      })),
+    );
+
+    const goals = summariseQuarter(api.current!.state, quarterId, []).goals;
+    expect(goals).toEqual([
+      { key: "workMain", category: "workMain", title: "Take Claro to real users", linked: 1, done: 1 },
+    ]);
+  });
+
+  it("does not duplicate side quests when the plan is reopened and settled again", async () => {
+    const api = harness();
+    await waitFor(() => expect(api.current?.ready).toBe(true));
+
+    act(() => api.current!.updateQuarter(quarterId, (q) => startPlan(q, new Date())));
+    act(() =>
+      api.current!.updateQuarter(quarterId, (q) => ({
+        ...q,
+        work: { ...q.work, sideQuests: [{ id: "s1", text: "Write the launch note", done: false }] },
+      })),
+    );
+    act(() => api.current!.updateQuarter(quarterId, (q) => settlePlan(q, new Date())));
+    act(() => api.current!.updateQuarter(quarterId, reopenPlan));
+    act(() => api.current!.updateQuarter(quarterId, (q) => settlePlan(q, new Date())));
+    await flush();
+
+    expect(loadState().quarters[quarterId].work.sideQuests).toHaveLength(1);
   });
 });
