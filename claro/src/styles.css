@@ -818,3 +818,89 @@
     opacity: 0;
   }
 }
+
+/*
+ * The cycle calendar.
+ *
+ * One rule governs the colours: a confirmed day the user logged is *solid*, and
+ * an estimated day is a *tint with a dashed edge*. They are never the same
+ * weight, never the same shape, and a day can only ever be one of them, so a
+ * glance can tell recorded fact from arithmetic without reading the legend.
+ *
+ * A logged period is drawn as one continuous band rather than seven separate
+ * pills. `--cycle-gap` is half the grid gap, so the band reaches into the gutter
+ * on each side and closes it; only the true first and last days are rounded.
+ */
+@layer utilities {
+  .cycle-grid {
+    --cycle-gap: 0.125rem;
+  }
+
+  .cycle-band {
+    position: absolute;
+    /* A highlighter stroke through the row, not a filled cell. */
+    top: 50%;
+    height: 1.85rem;
+    transform: translateY(-50%);
+    left: calc(var(--cycle-gap) * -1);
+    right: calc(var(--cycle-gap) * -1);
+    background-color: color-mix(in srgb, var(--primary) 32%, transparent);
+  }
+
+  .cycle-band-start {
+    left: 0;
+    border-start-start-radius: 999px;
+    border-end-start-radius: 999px;
+  }
+
+  .cycle-band-end {
+    right: 0;
+    border-start-end-radius: 999px;
+    border-end-end-radius: 999px;
+  }
+
+  /* An unfinished period stops at today, and its open edge says so. */
+  .cycle-band-open {
+    right: 0;
+    border-inline-end: 2px dotted color-mix(in srgb, var(--primary) 70%, transparent);
+  }
+
+  /*
+   * Estimated days: lighter, dashed, and deliberately not the period colour at
+   * a lower opacity, which would read as "a bit of a period".
+   */
+  .cycle-estimate {
+    position: absolute;
+    top: 50%;
+    height: 1.85rem;
+    transform: translateY(-50%);
+    left: calc(var(--cycle-gap) * -1);
+    right: calc(var(--cycle-gap) * -1);
+    border-block: 1px dashed color-mix(in srgb, var(--foreground) 28%, transparent);
+    background-color: color-mix(in srgb, var(--foreground) 6%, transparent);
+  }
+
+  .cycle-estimate-start {
+    left: 0;
+    border-inline-start: 1px dashed color-mix(in srgb, var(--foreground) 28%, transparent);
+    border-start-start-radius: 0.5rem;
+    border-end-start-radius: 0.5rem;
+  }
+
+  .cycle-estimate-end {
+    right: 0;
+    border-inline-end: 1px dashed color-mix(in srgb, var(--foreground) 28%, transparent);
+    border-start-end-radius: 0.5rem;
+    border-end-end-radius: 0.5rem;
+  }
+
+  /* The key sample squares, so the legend cannot drift from the calendar. */
+  .cycle-key-period {
+    background-color: color-mix(in srgb, var(--primary) 32%, transparent);
+  }
+
+  .cycle-key-estimate {
+    border: 1px dashed color-mix(in srgb, var(--foreground) 28%, transparent);
+    background-color: color-mix(in srgb, var(--foreground) 6%, transparent);
+  }
+}

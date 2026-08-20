@@ -1,27 +1,30 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, Lock, Trash2, X } from "lucide-react";
+import { ArrowLeft, BookOpen, Lock, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { useClaro } from "@/lib/claro-store";
 import { EditableText } from "@/components/EditableText";
+import { CycleCalendar } from "@/components/cycle/CycleCalendar";
 import { CycleGlance } from "@/components/cycle/CycleGlance";
-import { StartHistory } from "@/components/cycle/StartHistory";
+import { PeriodHistory } from "@/components/cycle/PeriodHistory";
 import {
-  LOG_REFUSAL,
-  MIN_ENTRIES_FOR_ESTIMATE,
-  addStart,
+  addPeriod,
   checkInOn,
-  estimateNext,
+  describeRefusal,
+  durationOf,
+  endPeriod,
   hasAnyCycleData,
+  ongoingPeriod,
   recentCheckIns,
-  sortedEntries,
+  type LogResult,
 } from "@/lib/cycle";
 import { observations } from "@/lib/cycle-timeline";
-import { formatDayDate, formatDayLong, formatDayShort } from "@/lib/dates";
+import { SUPPORTIVE_PROMPTS, SUPPORT_NOTE } from "@/lib/cycle-guide";
+import { formatDayShort } from "@/lib/dates";
 import { newId } from "@/lib/id";
 import { cn } from "@/lib/utils";
-import type { CycleEntry, CycleState } from "@/lib/types";
+import type { CycleEntry, CycleState, ISODate } from "@/lib/types";
 import {
   ENERGY_LABELS,
   ENERGY_LEVELS,
@@ -43,7 +46,15 @@ export const Route = createFileRoute("/cycle")({
   head: () => ({ meta: [{ title: "Cycle notes: Claro" }] }),
 });
 
-function CycleNotes() {
+/**
+ * Cycle at a glance.
+ *
+ * The order on this page is the product decision. What Claro estimated comes
+ * first but quietly, because it is arithmetic; the loudest thing is the action
+ * that records what actually happened. Everything below is the user's own data
+ * read back to them, and nothing on the page changes a plan.
+ */
+export function CycleNotes() {
   const {
     today,
     cycle,
@@ -71,34 +82,27 @@ function CycleNotes() {
             Back to Calendar
           </Link>
         </div>
-        <h1 className="display mt-3 text-[2.4rem] sm:text-[2.9rem]">Cycle notes</h1>
+        <h1 className="display mt-3 text-[2.4rem] sm:text-[2.9rem]">Cycle at a glance</h1>
         <p className="mt-2 max-w-prose text-[0.92rem] leading-relaxed text-muted-foreground">
-          A place to record when a period starts and, if you want to, how a day felt. Claro keeps
-          this separate from your planning and never shares it.
+          A place to record when a period starts and ends and, if you want to, how a day felt. Claro
+          keeps this separate from your planning and never shares it.
         </p>
       </header>
 
-      {/* 1. The main action, never behind anything. */}
-      <LogStart cycle={cycle} todayId={today} onReplace={setCycleEntries} />
+      {/* 1. What Claro estimated, stated quietly and always labelled. */}
+      <CycleGlance cycle={cycle} todayId={today} />
 
-      {/* 2. The private timeline. */}
-      <section>
-        <h2 className="eyebrow">Cycle at a glance</h2>
-        <div className="mt-3">
-          <CycleGlance cycle={cycle} todayId={today} />
-        </div>
-      </section>
+      {/* 2. The action, and the loudest thing on the page. */}
+      <LogPeriod cycle={cycle} todayId={today} onReplace={setCycleEntries} />
 
-      {/* 3 and 4. The estimate, then the starts it was worked out from. */}
-      <Estimate cycle={cycle} />
-
+      {/* 3. The calendar, where a range is drawn and edited. */}
       <section>
         <div className="flex items-baseline gap-2.5">
-          <h2 className="eyebrow">Your logged starts</h2>
-          <span className="text-[11px] text-muted-foreground">edit any of them</span>
+          <h2 className="eyebrow">Your cycle calendar</h2>
+          <span className="text-[11px] text-muted-foreground">tap any day</span>
         </div>
         <div className="mt-3">
-          <StartHistory
+          <CycleCalendar
             cycle={cycle}
             todayId={today}
             onReplace={setCycleEntries}
@@ -107,7 +111,23 @@ function CycleNotes() {
         </div>
       </section>
 
-      {/* 5. Optional reflections, and what the user's own notes show. */}
+      {/* 4. Every logged period, editable start and end. */}
+      <section>
+        <div className="flex items-baseline gap-2.5">
+          <h2 className="eyebrow">Your logged periods</h2>
+          <span className="text-[11px] text-muted-foreground">edit any of them</span>
+        </div>
+        <div className="mt-3">
+          <PeriodHistory
+            cycle={cycle}
+            todayId={today}
+            onReplace={setCycleEntries}
+            onDelete={deleteCycleEntry}
+          />
+        </div>
+      </section>
+
+      {/* 5. The user's own notes, and what they show. */}
       <Patterns cycle={cycle} />
 
       <CheckIn
@@ -116,6 +136,19 @@ function CycleNotes() {
         recent={recentCheckIns(cycle)}
         onWrite={(patch) => writeCycleCheckIn(today, patch, new Date())}
       />
+
+      <PlanningPrompts />
+
+      {/* 6. A quiet way through to the guidance, never in place of the actions. */}
+      <section className="border-t border-border/70 pt-6">
+        <Link
+          to="/cycle-guide"
+          className="inline-flex items-center gap-1.5 text-[0.88rem] text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+        >
+          <BookOpen aria-hidden className="h-3.5 w-3.5" />
+          Understanding your menstrual cycle: guidance and sources
+        </Link>
+      </section>
 
       <DeleteAll
         enabled={hasAnyCycleData(cycle)}
@@ -137,8 +170,8 @@ function OptIn({ onEnable }: { onEnable: () => void }) {
 
       <div className="surface mt-8 p-6">
         <p className="max-w-prose text-[0.95rem] leading-relaxed">
-          If it is useful to you, Claro can keep a private note of when your period starts, and
-          show a rough estimate of the next one worked out from your own entries only.
+          If it is useful to you, Claro can keep a private record of when your periods start and
+          end, and show a rough estimate of the next one worked out from your own entries only.
         </p>
 
         <ul className="mt-5 space-y-2 text-[0.88rem] leading-relaxed text-muted-foreground">
@@ -167,68 +200,132 @@ function OptIn({ onEnable }: { onEnable: () => void }) {
   );
 }
 
-function LogStart({
+/**
+ * Recording a period, in the three ways it actually happens: it started today,
+ * it ended today, or it happened a while ago and is being entered from memory.
+ */
+function LogPeriod({
   cycle,
   todayId,
   onReplace,
 }: {
   cycle: CycleState;
-  todayId: string;
+  todayId: ISODate;
   onReplace: (entries: Record<string, CycleEntry>) => void;
 }) {
-  const [date, setDate] = useState(todayId);
+  const [start, setStart] = useState(todayId);
+  const [end, setEnd] = useState("");
   const [refusal, setRefusal] = useState<string | null>(null);
 
-  const log = (startDate: string) => {
-    const result = addStart(cycle, startDate, newId(), new Date(), todayId);
+  const ongoing = ongoingPeriod(cycle);
+
+  const apply = (result: LogResult) => {
     if (!result.ok) {
-      setRefusal(LOG_REFUSAL[result.reason]);
-      return;
+      setRefusal(describeRefusal(result, cycle, todayId));
+      return false;
     }
     onReplace(result.entries);
     setRefusal(null);
+    return true;
   };
 
   return (
-    <section className="surface p-5">
-      <h2 className="display text-[1.35rem] leading-tight">Log a period start</h2>
+    <section className="surface-raised p-5">
+      <h2 className="display text-[1.5rem] leading-tight">Log a period start</h2>
       <p className="mt-1 text-[0.85rem] text-muted-foreground">
-        Today, or any date in the past you remember.
+        Today, or any dates in the past you remember. Add the end date whenever you know it.
       </p>
 
-      <div className="mt-4 flex flex-wrap items-end gap-3">
-        <button type="button" onClick={() => log(todayId)} className="btn btn-primary">
-          It started today
-        </button>
-
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (date) log(date);
-          }}
-        >
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-muted-foreground">Or another date</span>
-            <input
-              type="date"
-              value={date}
-              max={todayId}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setRefusal(null);
-              }}
-              className="tnum rounded-md border border-border bg-card px-2.5 py-1.5 text-[0.88rem]"
-            />
-          </label>
-          <button type="submit" className="btn btn-sm btn-quiet">
-            Add this date
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        {ongoing ? (
+          <>
+            <button
+              type="button"
+              onClick={() => apply(endPeriod(cycle, ongoing.id, todayId, todayId))}
+              className="btn btn-primary"
+            >
+              My period ended today
+            </button>
+            <span className="text-[0.85rem] text-muted-foreground">
+              Ongoing since {formatDayShort(ongoing.startDate)},{" "}
+              <span className="tnum">{durationOf(cycle, ongoing, todayId)}</span> days so far.
+            </span>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() =>
+              apply(
+                addPeriod(cycle, { startDate: todayId, endDate: null }, newId(), new Date(), todayId),
+              )
+            }
+            className="btn btn-primary"
+          >
+            My period started today
           </button>
-        </form>
+        )}
       </div>
 
+      {/* Manual historical entry: a whole past range in one go. */}
+      <form
+        className="mt-5 flex flex-wrap items-end gap-3 border-t border-border/70 pt-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const saved = apply(
+            addPeriod(
+              cycle,
+              { startDate: start, endDate: end === "" ? null : end },
+              newId(),
+              new Date(),
+              todayId,
+            ),
+          );
+          if (saved) {
+            setStart(todayId);
+            setEnd("");
+          }
+        }}
+      >
+        <span className="w-full text-[11px] text-muted-foreground">Add a past period</span>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-muted-foreground">Started</span>
+          <input
+            type="date"
+            value={start}
+            max={todayId}
+            aria-label="Start date of a past period"
+            onChange={(e) => {
+              setStart(e.target.value);
+              setRefusal(null);
+            }}
+            className="tnum rounded-md border border-border bg-card px-2.5 py-1.5 text-[0.88rem]"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-muted-foreground">Ended, if it has</span>
+          <input
+            type="date"
+            value={end}
+            max={todayId}
+            min={start}
+            aria-label="End date of a past period"
+            onChange={(e) => {
+              setEnd(e.target.value);
+              setRefusal(null);
+            }}
+            className="tnum rounded-md border border-border bg-card px-2.5 py-1.5 text-[0.88rem]"
+          />
+        </label>
+
+        <button type="submit" className="btn btn-sm btn-quiet">
+          Add this period
+        </button>
+      </form>
+
       {refusal && (
-        <p role="alert" className="mt-3 text-[0.85rem] text-muted-foreground">
+        <p role="alert" className="mt-3 text-[0.85rem] leading-relaxed text-muted-foreground">
           {refusal}
         </p>
       )}
@@ -253,53 +350,49 @@ function Patterns({ cycle }: { cycle: CycleState }) {
 
       <ul className="surface mt-3 space-y-2.5 p-4">
         {found.map((observation) => (
-          <li key={`${observation.band}:${observation.text}`} className="text-[0.88rem] leading-relaxed">
+          <li
+            key={`${observation.band}:${observation.text}`}
+            className="text-[0.88rem] leading-relaxed"
+          >
             {observation.text}
           </li>
         ))}
       </ul>
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-        This is your own pattern, not a recommendation. Claro does not suggest what to do about it.
+        This is a personal observation from your own notes, not medical advice and not a prediction.
+        Claro does not suggest what to do about it.
       </p>
     </section>
   );
 }
 
-/** Only ever the user's own median gap, and only once there is enough of it. */
-function Estimate({ cycle }: { cycle: ReturnType<typeof useClaro>["cycle"] }) {
-  const estimate = estimateNext(cycle);
-  const logged = sortedEntries(cycle).length;
-
+/**
+ * Questions, and only questions.
+ *
+ * Nothing here writes anything. The point is that the decision about a plan
+ * stays with the person, which it cannot do if the app has already made it.
+ */
+function PlanningPrompts() {
   return (
     <section>
-      <h2 className="eyebrow">Your estimate</h2>
-      <div className="surface mt-3 p-4">
-        {estimate ? (
-          <>
-            <p className="text-[0.92rem]">
-              <span className="text-muted-foreground">Next start, around </span>
-              <span className="tnum font-medium">{formatDayDate(estimate.nextStart)}</span>
-            </p>
-            <p className="mt-1.5 text-[0.85rem] leading-relaxed text-muted-foreground">
-              Worked out from your own median of {estimate.typicalGap} days, across{" "}
-              {estimate.basedOn} recorded {estimate.basedOn === 1 ? "gap" : "gaps"}.
-            </p>
-            <p className="mt-3 rounded-md bg-muted/60 px-3 py-2 text-[0.82rem] leading-relaxed text-muted-foreground">
-              This is an estimate, not medical advice. Cycles vary, and a number worked out from a
-              handful of dates will sometimes be wrong.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="text-[0.9rem] leading-relaxed">
-              Not enough of your own history yet.
-            </p>
-            <p className="mt-1.5 text-[0.85rem] leading-relaxed text-muted-foreground">
-              After {MIN_ENTRIES_FOR_ESTIMATE} logged dates, Claro can show a rough estimate worked
-              out from the gaps between them. You have logged {logged} so far.
-            </p>
-          </>
-        )}
+      <div className="flex items-baseline gap-2.5">
+        <h2 className="eyebrow">If you want to plan around this</h2>
+        <span className="text-[11px] text-muted-foreground">your call, always</span>
+      </div>
+
+      <div className="surface-quiet mt-3 p-4">
+        <ul className="space-y-2">
+          {SUPPORTIVE_PROMPTS.map((prompt) => (
+            <li key={prompt} className="flex items-start gap-2 text-[0.88rem] leading-relaxed">
+              <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gold" />
+              {prompt}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+          Claro does not change your day, week, quarter, habits, goals, focus sessions or sound
+          because of anything on this page. {SUPPORT_NOTE}
+        </p>
       </div>
     </section>
   );
@@ -312,7 +405,7 @@ function CheckIn({
   recent,
   onWrite,
 }: {
-  todayId: string;
+  todayId: ISODate;
   note: ReturnType<typeof checkInOn>;
   recent: ReturnType<typeof recentCheckIns>;
   onWrite: (patch: Partial<ReturnType<typeof checkInOn>>) => void;
@@ -488,7 +581,8 @@ function DeleteAll({
         {confirming ? (
           <div className="surface flex flex-wrap items-center gap-3 border-destructive/40 p-4">
             <p className="min-w-0 flex-1 text-[0.88rem] leading-relaxed">
-              Delete every logged date and every private note? This cannot be undone.
+              Delete every logged period and every private note? This cannot be undone. Your
+              planning, habits, goals and focus records are not touched.
             </p>
             <button
               type="button"

@@ -5,6 +5,7 @@ import {
   CYCLE_BANDS,
   MIN_NOTES_FOR_PATTERN,
   MIN_NOTES_IN_BAND,
+  notesInBand,
   observations,
   positionOn,
   summariseNote,
@@ -16,7 +17,7 @@ import type { CycleCheckIn, CycleState, ISODate } from "./types";
 const withStarts = (...starts: ISODate[]): CycleState => ({
   settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
   entries: Object.fromEntries(
-    starts.map((startDate, i) => [`e${i}`, { id: `e${i}`, startDate, loggedAt: "x" }]),
+    starts.map((startDate, i) => [`e${i}`, { id: `e${i}`, startDate, endDate: null, loggedAt: "x" }]),
   ),
   checkIns: {},
 });
@@ -179,5 +180,53 @@ describe("summarising one note", () => {
       "Energy low, Stress high",
     );
     expect(summariseNote(note("2026-08-01"))).toBe("");
+  });
+});
+
+describe("looking up your own notes from this point before", () => {
+  const REGULAR_NOTES = () =>
+    withNotes(
+      REGULAR(),
+      // Day 2 of two different cycles, so both fall in the same band.
+      note("2026-06-02", { energy: 2, note: "Slept badly" }),
+      note("2026-06-30", { energy: 3, note: "Steadier" }),
+      // Deliberately far into another band.
+      note("2026-07-20", { energy: 5, note: "Great day" }),
+    );
+
+  it("returns the notes from the same band, most recent first", () => {
+    const found = notesInBand(REGULAR_NOTES(), "2026-07-28");
+
+    expect(found.map((n) => n.dayId)).toEqual(["2026-06-30", "2026-06-02"]);
+  });
+
+  it("leaves out the cycle being asked about, so it really is past cycles", () => {
+    // 30 June is day 2 of the cycle that began on the 29th, and so is the day
+    // being asked about here. Only the earlier cycle's note comes back.
+    const found = notesInBand(REGULAR_NOTES(), "2026-06-30");
+
+    expect(found.map((n) => n.dayId)).toEqual(["2026-06-02"]);
+  });
+
+  it("excludes a note from the current cycle even on a different day of it", () => {
+    const cycle = withNotes(
+      REGULAR(),
+      note("2026-07-28", { energy: 2, note: "This cycle" }),
+      note("2026-06-30", { energy: 3, note: "Last cycle" }),
+    );
+
+    const found = notesInBand(cycle, "2026-07-29");
+
+    expect(found.map((n) => n.note)).toEqual(["Last cycle"]);
+  });
+
+  it("returns nothing when there is no position to compare against", () => {
+    expect(notesInBand(blankCycle(), "2026-07-28")).toEqual([]);
+  });
+
+  it("ignores empty notes, which are not something the user recorded", () => {
+    const cycle = withNotes(REGULAR(), note("2026-06-02"));
+
+    expect(notesInBand(cycle, "2026-07-28")).toEqual([]);
   });
 });

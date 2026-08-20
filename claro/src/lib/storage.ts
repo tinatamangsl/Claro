@@ -377,6 +377,32 @@ function v3SessionsToV4(
   return migrated;
 }
 
+/**
+ * Reads logged periods through their current shape.
+ *
+ * A period saved before ranges existed has a start and no end. It arrives here
+ * with `endDate: null`, which is the truth about it: the end was never
+ * recorded. Nothing is invented to fill the gap — an end date is a fact about
+ * someone's body, and Claro only ever holds the ones they typed in.
+ */
+function readCycleEntries(raw: unknown): Record<string, CycleEntry> {
+  if (!isRecord<CycleEntry>(raw)) return {};
+
+  const entries: Record<string, CycleEntry> = {};
+  for (const [id, value] of Object.entries(raw)) {
+    if (!value || typeof value !== "object") continue;
+    const entry = value as Partial<CycleEntry>;
+    if (typeof entry.startDate !== "string") continue;
+    entries[id] = {
+      id: typeof entry.id === "string" ? entry.id : id,
+      startDate: entry.startDate,
+      endDate: typeof entry.endDate === "string" ? entry.endDate : null,
+      loggedAt: typeof entry.loggedAt === "string" ? entry.loggedAt : "",
+    };
+  }
+  return entries;
+}
+
 function readCycle(raw: unknown): CycleState {
   const blank = blankCycle();
   if (!raw || typeof raw !== "object") return blank;
@@ -386,7 +412,7 @@ function readCycle(raw: unknown): CycleState {
       enabled: c.settings?.enabled === true,
       optedInAt: typeof c.settings?.optedInAt === "string" ? c.settings.optedInAt : null,
     },
-    entries: isRecord<CycleEntry>(c.entries) ? c.entries : {},
+    entries: readCycleEntries(c.entries),
     // Additive: a store saved before check-ins existed simply arrives empty.
     checkIns: isRecord<CycleCheckIn>(c.checkIns) ? c.checkIns : {},
   };

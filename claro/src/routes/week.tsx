@@ -5,7 +5,7 @@ import { AddItem } from "@/components/AddItem";
 import { AppShell } from "@/components/AppShell";
 import { EditableText } from "@/components/EditableText";
 import { FocusOn } from "@/components/FocusOn";
-import { CycleLink } from "@/components/cycle/CycleLink";
+import { CycleWeekCard } from "@/components/cycle/CycleWeekCard";
 import { SortableRows } from "@/components/SortableRows";
 import { PeriodHeader } from "@/components/PeriodHeader";
 import { useClaro } from "@/lib/claro-store";
@@ -77,8 +77,6 @@ function WeekView() {
         }
       />
 
-      <CycleLink />
-
       {/* The hierarchy made visible: this week answers to that quarter. */}
       <div className="surface-quiet relative overflow-hidden py-4 pl-6 pr-5 sm:pl-7">
         <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-gold/70" />
@@ -105,6 +103,12 @@ function WeekView() {
           ))}
         </div>
       </div>
+
+      {/*
+        Below the hierarchy on purpose: private, small and inert. It reports,
+        it never adjusts the week, and weekly planning still leads the page.
+      */}
+      <CycleWeekCard className="sm:max-w-md" />
 
       <div className="grid items-stretch gap-8 md:grid-cols-2">
         {DOMAINS.map((domain) => (

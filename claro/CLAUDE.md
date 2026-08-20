@@ -73,7 +73,9 @@ src/lib/rollover.ts     the 10 PM carry-forward rule and the review-area decisio
 src/lib/reorder.ts      pure list movement — every drag and every keyboard nudge goes through it
 src/lib/schedule.ts     moving a schedule entry between hours, and the swap when one is taken
 src/lib/calendar.ts     month grid + habit aggregation (counts only, never a streak)
-src/lib/cycle.ts        private cycle estimates, from the user's own history and nothing else
+src/lib/cycle.ts        logged period ranges, and estimates from the user's own history alone
+src/lib/cycle-calendar.ts   what each calendar day is: logged, estimated, or neither
+src/lib/cycle-guide.ts  the learning page's content and its cited sources
 src/lib/sound.ts        the single generated-ambient-sound engine
 src/hooks/use-sortable.ts   pointer + keyboard reordering, group-aware
 src/hooks/use-focus-session.ts  the one canonical session, shared by every route
@@ -263,6 +265,50 @@ estimate with the number of gaps it drew on. Implausible gaps are excluded as li
 Out of bounds, permanently: any medical, fertility, contraception, pregnancy, diagnostic,
 nutrition, supplement or symptom-treatment interpretation, and any suggestion that a phase should
 change what someone works on.
+
+### A period is a range, and its end is never guessed
+
+`CycleEntry` is `{ startDate, endDate }` where **`endDate: null` means no end has been recorded**.
+An end date is a fact only the person living it can supply, so nothing in the codebase fills one
+in. Null has two honest readings, told apart by whether anything was logged after it:
+
+- the **newest** open period is *ongoing*, confirmed from its start up to today and no further;
+- an **older** open period simply had no end recorded, and is confirmed only for its first day.
+
+That second case is what a store saved before ranges existed migrates into (schema v8). Treating
+every legacy entry as ongoing would have had one of them swallow every day since, which is why the
+distinction exists at all rather than being a nicety.
+
+**Cycle length and period duration are different numbers and are never mixed.** `estimateNext`
+reads start dates only; `durationHistory` reads completed ranges only. Wherever both appear they
+are labelled apart, and `CYCLE_LENGTH_NOTE` says which is which. Length is shown in weeks and days
+for reading, while days stay the stored unit.
+
+**Two periods may not cover the same day.** `overlapping` refuses it and returns the colliding
+entry so the refusal can name the dates it clashed with. Silently keeping both would corrupt every
+duration and every gap drawn from them.
+
+**Confirmed and estimated can never be the same day.** `cycle-calendar.ts` marks a day as
+`estimated` only where `period` is false, so a colour means exactly one thing. Visually they are
+not the same treatment at different opacities: a logged period is a solid amber band drawn
+continuously across the whole range, and the estimate is a dashed, unfilled outline. The band
+reaches into the grid gutter to close it, which is why the grid carries `px-0.5`.
+
+### Understanding your menstrual cycle: the guide
+
+A separate route at `/cycle-guide`, reached by a quiet link from Cycle notes and never in place of
+the actions. `lib/cycle-guide.ts` holds the content and the sources.
+
+**Every source was read off the page it cites**, and the links were checked as resolving. Titles,
+organisations, publication and review dates come from the source itself; `author` and `published`
+may be `null` because many institutional pages have neither, but they may never be *missing* —
+`missingSourceFields` treats `undefined` as a failure, because an explicit null records that
+somebody looked. Never add a citation, a credential, a date or a finding from memory.
+
+The copy rules are enforced by tests rather than by good intentions: no fertile window, no
+pregnancy likelihood and no ovulation prediction except as an explicit refusal; nothing about what
+a phase makes someone; no comparison between bodies; no 28-day default; and no verdict that a
+period or a cycle is normal, abnormal, short, long, heavy or light. Guidance is questions only.
 
 ## Design decisions and why
 

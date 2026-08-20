@@ -170,3 +170,34 @@ export function summariseNote(note: CycleCheckIn): string {
     .filter(Boolean)
     .join(", ");
 }
+
+/**
+ * The user's own past notes that fall in the same band as a given day.
+ *
+ * This is a lookup, not an insight. It answers "what did I write around this
+ * point before?" and leaves every conclusion to the person reading it. Empty
+ * whenever there is no position to compare against, which is the honest answer
+ * rather than a list of unrelated notes.
+ */
+export function notesInBand(cycle: CycleState, dayId: ISODate, limit = 5): CycleCheckIn[] {
+  const here = positionOn(cycle, dayId);
+  if (!here) return [];
+
+  return Object.values(cycle.checkIns)
+    .filter(
+      (note) =>
+        note.energy !== null ||
+        note.mood !== null ||
+        note.stress !== null ||
+        note.note.trim() !== "",
+    )
+    .filter((note) => {
+      const there = positionOn(cycle, note.dayId);
+      if (!there || there.band !== here.band) return false;
+      // Past cycles only. A note from three days ago is not history, and
+      // calling it that would misdescribe what the user is looking at.
+      return there.since !== here.since;
+    })
+    .sort((a, b) => b.dayId.localeCompare(a.dayId))
+    .slice(0, limit);
+}

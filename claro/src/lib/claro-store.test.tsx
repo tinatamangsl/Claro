@@ -13,7 +13,7 @@ import {
 } from "./focus-session";
 import { addCapped } from "./mutations";
 import { dayMarks, summariseDay, summariseQuarter } from "./calendar";
-import { editStart, estimateNext } from "./cycle";
+import { editPeriod, estimateNext } from "./cycle";
 import {
   carryItem,
   closeDay,
@@ -1338,7 +1338,7 @@ describe("cycle notes are private, opt-in, and fully deletable", () => {
 
     act(() => api.current!.setCycleEnabled(true, new Date()));
     act(() =>
-      api.current!.logCycleStart({ id: "e1", startDate: "2026-08-01", loggedAt: "x" }),
+      api.current!.logCycleStart({ id: "e1", startDate: "2026-08-01", endDate: null, loggedAt: "x" }),
     );
     act(() => api.current!.writeCycleCheckIn("2026-08-19", { energy: 4 }, new Date()));
     await flush();
@@ -1354,11 +1354,11 @@ describe("cycle notes are private, opt-in, and fully deletable", () => {
 
     act(() => api.current!.setCycleEnabled(true, new Date()));
     for (const [i, startDate] of ["2026-01-01", "2026-01-29"].entries()) {
-      act(() => api.current!.logCycleStart({ id: `e${i}`, startDate, loggedAt: "x" }));
+      act(() => api.current!.logCycleStart({ id: `e${i}`, startDate, endDate: null, loggedAt: "x" }));
     }
     expect(estimateNext(api.current!.cycle)).toBeNull();
 
-    act(() => api.current!.logCycleStart({ id: "e2", startDate: "2026-02-26", loggedAt: "x" }));
+    act(() => api.current!.logCycleStart({ id: "e2", startDate: "2026-02-26", endDate: null, loggedAt: "x" }));
     expect(estimateNext(api.current!.cycle)).toMatchObject({ typicalGap: 28, basedOn: 2 });
   });
 
@@ -1367,7 +1367,7 @@ describe("cycle notes are private, opt-in, and fully deletable", () => {
     await waitFor(() => expect(api.current?.ready).toBe(true));
 
     act(() => api.current!.setCycleEnabled(true, new Date()));
-    act(() => api.current!.logCycleStart({ id: "e1", startDate: "2026-08-01", loggedAt: "x" }));
+    act(() => api.current!.logCycleStart({ id: "e1", startDate: "2026-08-01", endDate: null, loggedAt: "x" }));
     act(() => api.current!.writeCycleCheckIn("2026-08-19", { mood: "good" }, new Date()));
 
     act(() => api.current!.deleteAllCycleData());
@@ -1427,9 +1427,10 @@ describe("cycle edits recalculate, and deletion stays isolated", () => {
     act(() => {
       api.current!.setCycleEnabled(true, new Date());
       api.current!.setCycleEntries({
-        e0: { id: "e0", startDate: "2026-06-01", loggedAt: "x" },
-        e1: { id: "e1", startDate: "2026-06-29", loggedAt: "x" },
-        e2: { id: "e2", startDate: "2026-07-27", loggedAt: "x" },
+        // One completed range and two starts, so deletion is proved against both.
+        e0: { id: "e0", startDate: "2026-06-01", endDate: "2026-06-04", loggedAt: "x" },
+        e1: { id: "e1", startDate: "2026-06-29", endDate: null, loggedAt: "x" },
+        e2: { id: "e2", startDate: "2026-07-27", endDate: null, loggedAt: "x" },
       });
     });
 
@@ -1441,7 +1442,12 @@ describe("cycle edits recalculate, and deletion stays isolated", () => {
     expect(estimateNext(api.current!.cycle)?.typicalGap).toBe(28);
 
     act(() => {
-      const result = editStart(api.current!.cycle, "e2", "2026-08-03", TODAY);
+      const result = editPeriod(
+        api.current!.cycle,
+        "e2",
+        { startDate: "2026-08-03", endDate: null },
+        TODAY,
+      );
       if (result.ok) api.current!.setCycleEntries(result.entries);
     });
 
@@ -1465,7 +1471,12 @@ describe("cycle edits recalculate, and deletion stays isolated", () => {
     seedStarts(api);
 
     act(() => {
-      const result = editStart(api.current!.cycle, "e0", "2026-06-02", TODAY);
+      const result = editPeriod(
+        api.current!.cycle,
+        "e0",
+        { startDate: "2026-06-02", endDate: null },
+        TODAY,
+      );
       if (result.ok) api.current!.setCycleEntries(result.entries);
     });
     await flush();

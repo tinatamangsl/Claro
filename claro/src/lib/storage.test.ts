@@ -722,3 +722,97 @@ describe("reading a plan saved before the workspace grew", () => {
     expect(weeks[11]).toBe("");
   });
 });
+
+describe("v7 → v8 period range migration", () => {
+  /** Exactly what a store saved before ranges existed looks like on disk. */
+  const v7Store = () => ({
+    ...emptyState(),
+    version: 7,
+    cycle: {
+      settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
+      entries: {
+        e0: { id: "e0", startDate: "2026-06-01", loggedAt: "2026-06-01T09:00:00.000Z" },
+        e1: { id: "e1", startDate: "2026-06-29", loggedAt: "2026-06-29T09:00:00.000Z" },
+      },
+      checkIns: {},
+    },
+  });
+
+  it("keeps every start date that was already logged", () => {
+    const { entries } = migrate(v7Store()).cycle;
+
+    expect(Object.keys(entries).sort()).toEqual(["e0", "e1"]);
+    expect(entries.e0.startDate).toBe("2026-06-01");
+    expect(entries.e1.startDate).toBe("2026-06-29");
+  });
+
+  it("records the missing end as null rather than inventing one", () => {
+    const { entries } = migrate(v7Store()).cycle;
+
+    // An end date is a fact about someone's body. A guess would be a lie in a
+    // place where lying matters.
+    expect(entries.e0.endDate).toBeNull();
+    expect(entries.e1.endDate).toBeNull();
+  });
+
+  it("keeps the opt-in and the private notes intact", () => {
+    const store = v7Store();
+    store.cycle.checkIns = {
+      "2026-06-02": {
+        dayId: "2026-06-02",
+        energy: 2,
+        mood: null,
+        stress: null,
+        note: "Tired",
+        updatedAt: "2026-06-02T20:00:00.000Z",
+      },
+    };
+
+    const cycle = migrate(store).cycle;
+    expect(cycle.settings.enabled).toBe(true);
+    expect(cycle.settings.optedInAt).toBe("2026-01-01T09:00:00.000Z");
+    expect(cycle.checkIns["2026-06-02"].note).toBe("Tired");
+  });
+
+  it("drops an entry with no start date at all, rather than crashing on it", () => {
+    const store = v7Store();
+    (store.cycle.entries as Record<string, unknown>).broken = { id: "broken" };
+
+    expect(Object.keys(migrate(store).cycle.entries).sort()).toEqual(["e0", "e1"]);
+  });
+});
+
+describe("period ranges survive a refresh", () => {
+  const withPeriods = (): ClaroState => ({
+    ...emptyState(),
+    cycle: {
+      settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
+      entries: {
+        done: {
+          id: "done",
+          startDate: "2026-08-01",
+          endDate: "2026-08-04",
+          loggedAt: "2026-08-01T09:00:00.000Z",
+        },
+        open: {
+          id: "open",
+          startDate: "2026-08-17",
+          endDate: null,
+          loggedAt: "2026-08-17T09:00:00.000Z",
+        },
+      },
+      checkIns: {},
+    },
+  });
+
+  it("reloads a completed range and an ongoing one exactly as they were saved", () => {
+    saveNow(withPeriods());
+
+    const { entries } = loadState().cycle;
+    expect(entries.done.startDate).toBe("2026-08-01");
+    expect(entries.done.endDate).toBe("2026-08-04");
+    expect(entries.open.startDate).toBe("2026-08-17");
+    // Still ongoing after the reload, not silently closed.
+    expect(entries.open.endDate).toBeNull();
+  });
+});

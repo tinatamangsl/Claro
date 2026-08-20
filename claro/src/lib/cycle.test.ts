@@ -3,9 +3,16 @@ import { describe, expect, it } from "vitest";
 import {
   LOG_REFUSAL,
   MIN_ENTRIES_FOR_ESTIMATE,
-  addStart,
+  addPeriod,
   checkInOn,
-  editStart,
+  completedPeriods,
+  confirmedRange,
+  describeRefusal,
+  durationHistory,
+  durationOf,
+  editPeriod,
+  endPeriod,
+  formatWeeksAndDays,
   hasStartOn,
   entryOn,
   estimateNext,
@@ -13,20 +20,32 @@ import {
   hasAnyCycleData,
   hasCheckIn,
   isLoggedStart,
+  isOngoing,
+  isPeriodDay,
   loggedStartDays,
+  ongoingPeriod,
+  overlapping,
+  periodEntryOn,
   recentCheckIns,
+  reopenPeriod,
   sortedEntries,
 } from "./cycle";
 import { blankCycle } from "./storage";
 import type { CycleState, ISODate } from "./types";
 
-const cycleWith = (...starts: ISODate[]): CycleState => ({
+/** A start on its own is an open period; a pair is a completed range. */
+type Spec = ISODate | [ISODate, ISODate | null];
+
+const cycleWith = (...specs: Spec[]): CycleState => ({
   settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
   entries: Object.fromEntries(
-    starts.map((startDate, i) => [
-      `e${i}`,
-      { id: `e${i}`, startDate, loggedAt: `${startDate}T09:00:00.000Z` },
-    ]),
+    specs.map((spec, i) => {
+      const [startDate, endDate] = Array.isArray(spec) ? spec : [spec, null];
+      return [
+        `e${i}`,
+        { id: `e${i}`, startDate, endDate, loggedAt: `${startDate}T09:00:00.000Z` },
+      ];
+    }),
   ),
   checkIns: {},
 });
@@ -199,35 +218,47 @@ describe("marking the calendar", () => {
 
 // ------------------------------------------------- adding and editing starts
 
+/** Thin helpers so the existing start-only cases keep reading as they did. */
+const addPeriodStart = (
+  cycle: CycleState,
+  startDate: string,
+  id: string,
+  now: Date,
+  todayId: ISODate,
+) => addPeriod(cycle, { startDate, endDate: null }, id, now, todayId);
+
+const editPeriodStart = (cycle: CycleState, id: string, startDate: string, todayId: ISODate) =>
+  editPeriod(cycle, id, { startDate, endDate: cycle.entries[id]?.endDate ?? null }, todayId);
+
 describe("adding a logged start", () => {
   const TODAY = "2026-08-19";
 
   it("adds a date in the past", () => {
-    const result = addStart(blankCycle(), "2026-08-01", "e1", new Date(), TODAY);
+    const result = addPeriodStart(blankCycle(), "2026-08-01", "e1", new Date(), TODAY);
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.entries.e1.startDate).toBe("2026-08-01");
   });
 
   it("refuses a date that is already logged, rather than double counting it", () => {
-    const result = addStart(cycleWith("2026-08-01"), "2026-08-01", "e9", new Date(), TODAY);
+    const result = addPeriodStart(cycleWith("2026-08-01"), "2026-08-01", "e9", new Date(), TODAY);
 
     expect(result).toEqual({ ok: false, reason: "duplicate" });
   });
 
   it("refuses a date that has not happened yet", () => {
-    expect(addStart(blankCycle(), "2026-09-01", "e1", new Date(), TODAY)).toEqual({
+    expect(addPeriodStart(blankCycle(), "2026-09-01", "e1", new Date(), TODAY)).toEqual({
       ok: false,
       reason: "future",
     });
   });
 
   it("accepts today itself", () => {
-    expect(addStart(blankCycle(), TODAY, "e1", new Date(), TODAY).ok).toBe(true);
+    expect(addPeriodStart(blankCycle(), TODAY, "e1", new Date(), TODAY).ok).toBe(true);
   });
 
   it("refuses something that is not a date", () => {
-    expect(addStart(blankCycle(), "not-a-date", "e1", new Date(), TODAY)).toEqual({
+    expect(addPeriodStart(blankCycle(), "not-a-date", "e1", new Date(), TODAY)).toEqual({
       ok: false,
       reason: "invalid",
     });
@@ -243,31 +274,31 @@ describe("editing a logged start", () => {
   const cycle = () => cycleWith("2026-06-01", "2026-06-29");
 
   it("moves an entry to another date", () => {
-    const result = editStart(cycle(), "e0", "2026-06-02", TODAY);
+    const result = editPeriodStart(cycle(), "e0", "2026-06-02", TODAY);
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.entries.e0.startDate).toBe("2026-06-02");
   });
 
   it("keeps the entry's own id, so nothing else has to be rewritten", () => {
-    const result = editStart(cycle(), "e0", "2026-06-02", TODAY);
+    const result = editPeriodStart(cycle(), "e0", "2026-06-02", TODAY);
     if (result.ok) expect(result.entries.e0.id).toBe("e0");
   });
 
   it("refuses a move onto another logged date", () => {
-    expect(editStart(cycle(), "e0", "2026-06-29", TODAY)).toEqual({
+    expect(editPeriodStart(cycle(), "e0", "2026-06-29", TODAY)).toEqual({
       ok: false,
       reason: "duplicate",
     });
   });
 
   it("allows saving an entry onto its own date, which changes nothing", () => {
-    expect(editStart(cycle(), "e0", "2026-06-01", TODAY).ok).toBe(true);
+    expect(editPeriodStart(cycle(), "e0", "2026-06-01", TODAY).ok).toBe(true);
   });
 
   it("refuses a future date and an unknown entry", () => {
-    expect(editStart(cycle(), "e0", "2026-12-01", TODAY).ok).toBe(false);
-    expect(editStart(cycle(), "gone", "2026-06-02", TODAY)).toEqual({
+    expect(editPeriodStart(cycle(), "e0", "2026-12-01", TODAY).ok).toBe(false);
+    expect(editPeriodStart(cycle(), "gone", "2026-06-02", TODAY)).toEqual({
       ok: false,
       reason: "invalid",
     });
@@ -279,7 +310,7 @@ describe("editing a logged start", () => {
 
     // Moving the last start later stretches the second gap to 35, so the
     // median of the two gaps moves with it.
-    const edited = editStart(original, "e2", "2026-08-03", TODAY);
+    const edited = editPeriodStart(original, "e2", "2026-08-03", TODAY);
     expect(edited.ok).toBe(true);
     if (!edited.ok) return;
 
@@ -301,5 +332,313 @@ describe("editing a logged start", () => {
     expect(hasStartOn(cycle(), "2026-06-01")).toBe(true);
     // Ignoring the entry itself is what lets it be saved unchanged.
     expect(hasStartOn(cycle(), "2026-06-01", "e0")).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------ period ranges
+
+describe("a period is a range", () => {
+  const TODAY: ISODate = "2026-08-19";
+
+  it("counts duration inclusively, so a period ending the day it started is one day", () => {
+    const cycle = cycleWith(["2026-08-01", "2026-08-01"]);
+
+    expect(durationOf(cycle, cycle.entries.e0, TODAY)).toBe(1);
+  });
+
+  it("counts a three day period as three days, not two", () => {
+    const cycle = cycleWith(["2026-08-01", "2026-08-03"]);
+
+    expect(durationOf(cycle, cycle.entries.e0, TODAY)).toBe(3);
+    expect(confirmedRange(cycle, cycle.entries.e0, TODAY)).toEqual({
+      from: "2026-08-01",
+      to: "2026-08-03",
+    });
+  });
+
+  it("colours every day from start through end, and nothing outside it", () => {
+    const cycle = cycleWith(["2026-08-01", "2026-08-04"]);
+
+    expect(isPeriodDay(cycle, "2026-07-31", TODAY)).toBe(false);
+    for (const day of ["2026-08-01", "2026-08-02", "2026-08-03", "2026-08-04"] as ISODate[]) {
+      expect(isPeriodDay(cycle, day, TODAY)).toBe(true);
+    }
+    expect(isPeriodDay(cycle, "2026-08-05", TODAY)).toBe(false);
+  });
+
+  it("finds which period a day belongs to", () => {
+    const cycle = cycleWith(["2026-06-01", "2026-06-04"], ["2026-08-01", "2026-08-03"]);
+
+    expect(periodEntryOn(cycle, "2026-06-03", TODAY)?.id).toBe("e0");
+    expect(periodEntryOn(cycle, "2026-08-02", TODAY)?.id).toBe("e1");
+    expect(periodEntryOn(cycle, "2026-07-01", TODAY)).toBeNull();
+  });
+});
+
+describe("an ongoing period", () => {
+  const TODAY: ISODate = "2026-08-19";
+
+  it("is the newest period with no end date", () => {
+    const cycle = cycleWith(["2026-06-01", "2026-06-04"], "2026-08-17");
+
+    expect(ongoingPeriod(cycle)?.id).toBe("e1");
+    expect(isOngoing(cycle, cycle.entries.e1)).toBe(true);
+    expect(isOngoing(cycle, cycle.entries.e0)).toBe(false);
+  });
+
+  it("shows only the days confirmed so far, and never past today", () => {
+    const cycle = cycleWith("2026-08-17");
+
+    expect(confirmedRange(cycle, cycle.entries.e0, TODAY)).toEqual({
+      from: "2026-08-17",
+      to: TODAY,
+    });
+    expect(durationOf(cycle, cycle.entries.e0, TODAY)).toBe(3);
+    expect(isPeriodDay(cycle, TODAY, TODAY)).toBe(true);
+    expect(isPeriodDay(cycle, "2026-08-20", TODAY)).toBe(false);
+  });
+
+  it("does not count towards recorded durations until it is closed", () => {
+    const open = cycleWith(["2026-06-01", "2026-06-04"], "2026-08-17");
+
+    expect(completedPeriods(open).map((e) => e.id)).toEqual(["e0"]);
+    expect(durationHistory(open)?.of).toBe(1);
+
+    const closed = endPeriod(open, "e1", "2026-08-19", TODAY);
+    expect(closed.ok).toBe(true);
+    if (!closed.ok) return;
+
+    expect(durationHistory({ ...open, entries: closed.entries })?.of).toBe(2);
+  });
+
+  it("is closed by adding an end date, and can be reopened", () => {
+    const cycle = cycleWith("2026-08-17");
+
+    const closed = endPeriod(cycle, "e0", "2026-08-19", TODAY);
+    if (!closed.ok) throw new Error("expected the close to be accepted");
+    expect(closed.entries.e0.endDate).toBe("2026-08-19");
+
+    const reopened = reopenPeriod({ ...cycle, entries: closed.entries }, "e0", TODAY);
+    if (!reopened.ok) throw new Error("expected the reopen to be accepted");
+    expect(reopened.entries.e0.endDate).toBeNull();
+  });
+
+  it("refuses an end date before its own start", () => {
+    const cycle = cycleWith("2026-08-17");
+
+    expect(endPeriod(cycle, "e0", "2026-08-15", TODAY)).toEqual({
+      ok: false,
+      reason: "backwards",
+    });
+  });
+
+  it("treats an older period with no end as end-not-recorded, covering only its start", () => {
+    // Logged before ranges existed. Nothing is invented to fill the gap, and it
+    // must not swallow every day between then and now.
+    const cycle = cycleWith("2026-06-01", "2026-08-17");
+
+    expect(isOngoing(cycle, cycle.entries.e0)).toBe(false);
+    expect(confirmedRange(cycle, cycle.entries.e0, TODAY)).toEqual({
+      from: "2026-06-01",
+      to: "2026-06-01",
+    });
+    expect(isPeriodDay(cycle, "2026-06-02", TODAY)).toBe(false);
+  });
+});
+
+describe("recorded durations", () => {
+  it("reads back the user's own numbers, with no verdict on them", () => {
+    const cycle = cycleWith(
+      ["2026-06-01", "2026-06-03"],
+      ["2026-06-29", "2026-07-03"],
+      ["2026-07-27", "2026-07-30"],
+    );
+
+    const history = durationHistory(cycle);
+    expect(history).toEqual({ last: 4, min: 3, max: 5, typical: 4, of: 3 });
+  });
+
+  it("is null until at least one period has been closed", () => {
+    expect(durationHistory(cycleWith("2026-06-01", "2026-06-29"))).toBeNull();
+    expect(durationHistory(blankCycle())).toBeNull();
+  });
+});
+
+describe("overlapping periods are refused", () => {
+  const TODAY: ISODate = "2026-08-19";
+
+  it("refuses a range that covers a day another period already covers", () => {
+    const cycle = cycleWith(["2026-08-01", "2026-08-05"]);
+
+    const result = addPeriod(
+      cycle,
+      { startDate: "2026-08-04", endDate: "2026-08-08" },
+      "new",
+      new Date(),
+      TODAY,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("overlap");
+    expect(result.conflict?.id).toBe("e0");
+  });
+
+  it("refuses a range swallowed whole by an existing one", () => {
+    const cycle = cycleWith(["2026-08-01", "2026-08-10"]);
+
+    const result = addPeriod(
+      cycle,
+      { startDate: "2026-08-04", endDate: "2026-08-06" },
+      "new",
+      new Date(),
+      TODAY,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("allows a range that begins the day after another ends", () => {
+    const cycle = cycleWith(["2026-08-01", "2026-08-05"]);
+
+    expect(
+      addPeriod(cycle, { startDate: "2026-08-06", endDate: "2026-08-08" }, "new", new Date(), TODAY)
+        .ok,
+    ).toBe(true);
+  });
+
+  it("refuses a new start inside a period that is still ongoing", () => {
+    const cycle = cycleWith("2026-08-15");
+
+    const result = addPeriod(
+      cycle,
+      { startDate: "2026-08-18", endDate: null },
+      "new",
+      new Date(),
+      TODAY,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("overlap");
+  });
+
+  it("lets a period be saved over itself while it is being edited", () => {
+    const cycle = cycleWith(["2026-08-01", "2026-08-05"]);
+
+    expect(
+      editPeriod(cycle, "e0", { startDate: "2026-08-01", endDate: "2026-08-06" }, TODAY).ok,
+    ).toBe(true);
+  });
+
+  it("names the dates it clashed with, rather than only refusing", () => {
+    const cycle = cycleWith(["2026-08-01", "2026-08-05"]);
+    const result = addPeriod(
+      cycle,
+      { startDate: "2026-08-03", endDate: "2026-08-07" },
+      "new",
+      new Date(),
+      TODAY,
+    );
+    if (result.ok) throw new Error("expected a refusal");
+
+    const message = describeRefusal(result, cycle, TODAY);
+    expect(message).toContain("1 Aug");
+    expect(message).toContain("5 Aug");
+  });
+
+  it("reports the colliding entry directly, for any caller that wants it", () => {
+    const cycle = cycleWith(["2026-08-01", "2026-08-05"]);
+
+    expect(overlapping(cycle, { from: "2026-08-05", to: "2026-08-09" }, TODAY)?.id).toBe("e0");
+    expect(overlapping(cycle, { from: "2026-08-06", to: "2026-08-09" }, TODAY)).toBeNull();
+    // Ignoring itself is what makes an in-place edit possible.
+    expect(overlapping(cycle, { from: "2026-08-01", to: "2026-08-05" }, TODAY, "e0")).toBeNull();
+  });
+});
+
+describe("cycle length and period duration stay separate", () => {
+  const TODAY: ISODate = "2026-08-19";
+  const starts = () => cycleWith("2026-06-01", "2026-06-29", "2026-07-27");
+
+  it("estimates from start to start, never from the number of bleeding days", () => {
+    const before = estimateNext(starts());
+    expect(before?.typicalGap).toBe(28);
+    expect(before?.nextStart).toBe("2026-08-24");
+
+    // Give every period a wildly different length. The estimate must not move.
+    let entries = starts().entries;
+    for (const [id, end] of [
+      ["e0", "2026-06-02"],
+      ["e1", "2026-07-08"],
+    ] as const) {
+      const result = editPeriod(
+        { ...starts(), entries },
+        id,
+        { startDate: entries[id].startDate, endDate: end },
+        TODAY,
+      );
+      if (!result.ok) throw new Error("expected the edit to be accepted");
+      entries = result.entries;
+    }
+
+    const after = estimateNext({ ...starts(), entries });
+    expect(after?.typicalGap).toBe(28);
+    expect(after?.nextStart).toBe("2026-08-24");
+    // And the durations are reported on their own terms.
+    expect(durationHistory({ ...starts(), entries })).toEqual({
+      last: 10,
+      min: 2,
+      max: 10,
+      typical: 6,
+      of: 2,
+    });
+  });
+
+  it("reads a length back in weeks and days without changing the stored number", () => {
+    expect(formatWeeksAndDays(29)).toBe("4 weeks and 1 day");
+    expect(formatWeeksAndDays(28)).toBe("4 weeks");
+    expect(formatWeeksAndDays(5)).toBe("5 days");
+    expect(formatWeeksAndDays(0)).toBe("0 days");
+  });
+});
+
+describe("editing a historic range", () => {
+  const TODAY: ISODate = "2026-08-19";
+
+  it("changes both ends at once and recalculates everything from it", () => {
+    const cycle = cycleWith(["2026-06-01", "2026-06-04"], ["2026-06-29", "2026-07-02"]);
+
+    const result = editPeriod(
+      cycle,
+      "e0",
+      { startDate: "2026-06-02", endDate: "2026-06-08" },
+      TODAY,
+    );
+    if (!result.ok) throw new Error("expected the edit to be accepted");
+
+    const after = { ...cycle, entries: result.entries };
+    expect(after.entries.e0.startDate).toBe("2026-06-02");
+    expect(durationOf(after, after.entries.e0, TODAY)).toBe(7);
+    expect(gaps(sortedEntries(after))).toEqual([27]);
+  });
+
+  it("refuses an end date in the future", () => {
+    const cycle = cycleWith(["2026-08-01", "2026-08-05"]);
+
+    expect(
+      editPeriod(cycle, "e0", { startDate: "2026-08-01", endDate: "2026-12-01" }, TODAY),
+    ).toEqual({ ok: false, reason: "future" });
+  });
+
+  it("refuses an end date before the start", () => {
+    const cycle = cycleWith(["2026-08-05", "2026-08-08" ]);
+
+    expect(
+      editPeriod(cycle, "e0", { startDate: "2026-08-05", endDate: "2026-08-02" }, TODAY),
+    ).toEqual({ ok: false, reason: "backwards" });
+  });
+
+  it("explains every refusal in plain words, including the new ones", () => {
+    expect(Object.values(LOG_REFUSAL).every((line) => line.trim().length > 0)).toBe(true);
+    expect(LOG_REFUSAL.backwards).toContain("end date");
+    expect(LOG_REFUSAL.overlap).toContain("overlaps");
   });
 });

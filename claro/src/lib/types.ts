@@ -1,6 +1,6 @@
 /** The Claro domain model. Everything here is plain data — no React, no dates library. */
 
-export const CLARO_SCHEMA_VERSION = 7;
+export const CLARO_SCHEMA_VERSION = 8;
 
 export const MAX_SIDE_QUESTS = 3;
 export const MAX_WEEK_ACTIONS = 3;
@@ -512,7 +512,25 @@ export const habitCompletionId = (habitId: string, dayId: ISODate) => `${habitId
  */
 export type CycleSettings = { enabled: boolean; optedInAt: string | null };
 
-export type CycleEntry = { id: string; startDate: ISODate; loggedAt: string };
+/**
+ * One recorded period, as a date range.
+ *
+ * `endDate` is null while the period is **ongoing** — started, but not yet
+ * ended. That is a real state a person is in, not missing data, so it is
+ * modelled rather than guessed at: nothing extends an ongoing period past
+ * today, and its length is only ever reported as what has been confirmed so
+ * far.
+ *
+ * Cycle length is measured start-to-start and never from this range. The two
+ * numbers answer different questions and must not be mixed up.
+ */
+export type CycleEntry = {
+  id: string;
+  startDate: ISODate;
+  /** Null means ongoing. */
+  endDate: ISODate | null;
+  loggedAt: string;
+};
 
 /** Named low to high. A reading, never a rating. */
 export type EnergyLevel = 1 | 2 | 3 | 4 | 5;
