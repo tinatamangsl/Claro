@@ -34,6 +34,8 @@ export function startFocusSession(input: {
   target: FocusTargetRef | null;
   intention: string;
   plannedMs: number;
+  /** 0 for a block with no break after it. */
+  breakMs?: number;
   now: Date;
   timeZone: string;
 }): FocusSession {
@@ -48,12 +50,14 @@ export function startFocusSession(input: {
     target,
     intention: input.intention,
     plannedMs: input.plannedMs,
+    breakMs: input.breakMs ?? 0,
     startedAt: iso(input.now),
     timeZone: input.timeZone,
     phase: "running",
     elapsedBeforeMs: 0,
     segmentStartedAt: iso(input.now),
     returnBlockEndsAt: null,
+    breakEndsAt: null,
     endedAt: null,
     outcome: null,
   };
@@ -90,6 +94,79 @@ export function isSessionOpen(session: FocusSession | null): boolean {
 
 export function isCounting(session: FocusSession): boolean {
   return session.phase === "running" || session.phase === "returning";
+}
+
+/**
+ * Whether anything on screen is counting down.
+ *
+ * A wider question than whether the *block* is draining, and the reason it
+ * exists: a break counts down too, and the app's one clock has to tick through
+ * it or the number sits frozen at its full length while the break quietly
+ * passes. `isCounting` still means the main block, which is what the block's
+ * own arithmetic asks about.
+ */
+export function isTicking(session: FocusSession): boolean {
+  return isCounting(session) || session.phase === "break";
+}
+
+// ------------------------------------------------------------------ breaks
+
+export function breakRemainingMs(session: FocusSession, now: Date): number {
+  if (!session.breakEndsAt) return 0;
+  return Math.max(0, ms(session.breakEndsAt) - now.getTime());
+}
+
+export function isBreakOver(session: FocusSession, now: Date): boolean {
+  return session.phase === "break" && breakRemainingMs(session, now) === 0;
+}
+
+/**
+ * The break a finished block earns, if the user asked for one.
+ *
+ * It is only ever entered from `ended`, which is to say only ever by choosing
+ * it: a break that started on its own would be the app deciding to stop
+ * someone. When it runs out the session waits, rather than launching the next
+ * block at a desk nobody is sitting at.
+ */
+export function beginBreak(session: FocusSession, breakMs: number, now: Date): FocusSession {
+  if (session.phase !== "ended" || breakMs <= 0) return session;
+  return {
+    ...session,
+    phase: "break",
+    breakMs,
+    breakEndsAt: iso(new Date(now.getTime() + breakMs)),
+  };
+}
+
+/** Back out of a break without taking it. Returns to the end choices. */
+export function endBreak(session: FocusSession): FocusSession {
+  if (session.phase !== "break") return session;
+  return { ...session, phase: "ended", breakEndsAt: null };
+}
+
+// ------------------------------------------------------- adjusting a block
+
+/**
+ * Lengthening or shortening the block that is already running.
+ *
+ * Elapsed time comes from timestamps, so changing the plan is safe: nothing is
+ * recomputed and nothing is lost. It will not shrink below the time already
+ * spent, because silently ending a block someone is in the middle of is not
+ * what "five minutes less" means. Ending early has its own button.
+ */
+export function adjustPlanned(
+  session: FocusSession,
+  deltaMs: number,
+  now: Date,
+  maxMs: number,
+): FocusSession {
+  if (session.phase !== "running" && session.phase !== "paused") return session;
+
+  const spent = mainElapsedMs(session, now);
+  const floor = Math.max(60_000, Math.ceil(spent / 60_000) * 60_000);
+  const plannedMs = Math.min(maxMs, Math.max(floor, session.plannedMs + deltaMs));
+
+  return plannedMs === session.plannedMs ? session : { ...session, plannedMs };
 }
 
 // -------------------------------------------------------------- transitions

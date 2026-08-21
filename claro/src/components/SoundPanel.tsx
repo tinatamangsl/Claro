@@ -111,7 +111,7 @@ export function SoundPanel({ compact }: { compact?: boolean }) {
             max={100}
             value={Math.round(prefs.volume * 100)}
             onChange={(e) => setSound({ volume: Number(e.target.value) / 100 })}
-            className="w-full accent-[var(--color-primary)]"
+            className="field-range"
           />
         </label>
       </div>

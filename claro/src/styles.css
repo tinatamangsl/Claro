@@ -904,3 +904,58 @@
     background-color: color-mix(in srgb, var(--foreground) 6%, transparent);
   }
 }
+
+/*
+ * The block-length slider.
+ *
+ * `accent-color` alone leaves Chromium's default dark track, which reads as a
+ * black bar across warm paper. The track and thumb are drawn explicitly so the
+ * control belongs to the same page as everything around it.
+ */
+@layer utilities {
+  .field-range {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    height: 1.25rem;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .field-range::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border);
+  }
+
+  .field-range::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    margin-top: -6px;
+    height: 16px;
+    width: 16px;
+    border-radius: 999px;
+    border: 2px solid var(--card);
+    background: var(--primary);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
+  }
+
+  .field-range::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border);
+  }
+
+  .field-range::-moz-range-thumb {
+    height: 16px;
+    width: 16px;
+    border-radius: 999px;
+    border: 2px solid var(--card);
+    background: var(--primary);
+  }
+
+  .field-range:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}

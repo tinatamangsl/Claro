@@ -3,14 +3,18 @@ import { useEffect, type ReactNode } from "react";
 
 import { CheckToggle } from "@/components/CheckToggle";
 import { EditableText } from "@/components/EditableText";
+import { BlockPicker } from "@/components/today/BlockPicker";
+import { FocusBreak } from "@/components/today/FocusBreak";
 import { FocusEnd } from "@/components/today/FocusEnd";
 import { FocusInterruption } from "@/components/today/FocusInterruption";
 import { FocusTimer } from "@/components/today/FocusTimer";
 import { focusLadder, selectFocus } from "@/lib/focus";
 import type { PriorityTarget } from "@/lib/priorities";
-import { FOCUS_BLOCK_MS, JUST_BEGIN_BLOCK_MS, priorityKey } from "@/lib/types";
+import { breakRemainingMs } from "@/lib/focus-session";
+import { priorityKey } from "@/lib/types";
 import type {
   Day,
+  FocusPrefs,
   FocusSession,
   Interruption,
   InterruptionReason,
@@ -31,7 +35,13 @@ type Props = {
   openInterruption: Interruption | null;
   now: Date | null;
   onPatchPriority: (target: PriorityTarget, patch: Partial<Priority>) => void;
-  onStart: (plannedMs: number) => void;
+  onStart: (plannedMs: number, breakMs: number) => void;
+  /** The remembered block length, so the picker opens on the user's own choice. */
+  blockPrefs: FocusPrefs;
+  onBlockPrefs: (patch: Partial<FocusPrefs>) => void;
+  onAdjust: (deltaMs: number) => void;
+  onTakeBreak: (breakMs: number) => void;
+  onSkipBreak: () => void;
   onDistracted: () => void;
   onPause: () => void;
   onResumeBlock: () => void;
@@ -117,6 +127,7 @@ export function FocusView(props: Props) {
               onPause={props.onPause}
               onResume={props.onResumeBlock}
               onEnd={props.onEnd}
+              onAdjust={props.onAdjust}
               onPark={props.onPark}
               soundPanel={props.soundPanel}
             />
@@ -134,6 +145,17 @@ export function FocusView(props: Props) {
           />
         )}
 
+        {session && session.phase === "break" && (
+          <FocusBreak
+            session={session}
+            now={now}
+            remainingMs={now ? breakRemainingMs(session, now) : session.breakMs}
+            onStartNext={props.onContinue}
+            onSkip={props.onSkipBreak}
+            onExit={props.onLeave}
+          />
+        )}
+
         {session && session.phase === "ended" && (
           <FocusEnd
             session={session}
@@ -142,6 +164,7 @@ export function FocusView(props: Props) {
             onSoundFeedback={props.onSoundFeedback}
             onComplete={props.onComplete}
             onContinue={props.onContinue}
+            onTakeBreak={() => props.onTakeBreak(session.breakMs)}
             onExit={props.onLeave}
           />
         )}
@@ -153,7 +176,15 @@ export function FocusView(props: Props) {
 }
 
 /** No live session: name the one thing, then pick how long to give it. */
-function StartPanel({ day, week, quarter, onPatchPriority, onStart }: Props) {
+function StartPanel({
+  day,
+  week,
+  quarter,
+  onPatchPriority,
+  onStart,
+  blockPrefs,
+  onBlockPrefs,
+}: Props) {
   const target = selectFocus(day);
 
   if (target.kind === "empty") {
@@ -195,7 +226,7 @@ function StartPanel({ day, week, quarter, onPatchPriority, onStart }: Props) {
                 <span>{target.next.text}</span>
               </p>
             </div>
-            <BlockChoices onStart={onStart} />
+            <BlockPicker prefs={blockPrefs} onChange={onBlockPrefs} onStart={onStart} />
           </>
         ) : (
           <p className="mt-3 text-[0.92rem] leading-relaxed text-muted-foreground">
@@ -250,29 +281,8 @@ function StartPanel({ day, week, quarter, onPatchPriority, onStart }: Props) {
           </p>
         </div>
 
-        <BlockChoices onStart={onStart} />
+        <BlockPicker prefs={blockPrefs} onChange={onBlockPrefs} onStart={onStart} />
       </div>
-    </div>
-  );
-}
-
-function BlockChoices({ onStart }: { onStart: (plannedMs: number) => void }) {
-  return (
-    <div className="mt-7 flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        onClick={() => onStart(FOCUS_BLOCK_MS)}
-        className="btn btn-primary"
-      >
-        Start 25 minutes
-      </button>
-      <button
-        type="button"
-        onClick={() => onStart(JUST_BEGIN_BLOCK_MS)}
-        className="btn btn-quiet"
-      >
-        Just begin, 5 minutes
-      </button>
     </div>
   );
 }

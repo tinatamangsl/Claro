@@ -190,7 +190,9 @@ const focusSession = (dayId: string, minutes: number, i = 0): FocusSession => ({
   phase: "closed",
   elapsedBeforeMs: minutes * 60_000,
   segmentStartedAt: null,
+  breakMs: 0,
   returnBlockEndsAt: null,
+  breakEndsAt: null,
   endedAt: `${dayId}T09:30:00.000Z`,
   outcome: "completed",
 });

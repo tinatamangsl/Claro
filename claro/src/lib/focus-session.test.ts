@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  adjustPlanned,
+  beginBreak,
   beginReturnBlock,
+  breakRemainingMs,
   closeSession,
   endBlockNow,
+  endBreak,
+  isBreakOver,
+  isCounting,
+  isTicking,
   mainElapsedMs,
   pauseSession,
   createInterruption,
@@ -316,5 +323,143 @@ describe("elapsed time without a clock", () => {
     const paused = pauseSession(start(), at(10 * MINUTE));
 
     expect(mainElapsedMs(paused, at(10 * MINUTE))).toBe(paused.elapsedBeforeMs);
+  });
+});
+
+// ------------------------------------------------------------------ breaks
+
+describe("the break between blocks", () => {
+  const finished = (breakMs = 5 * MINUTE) =>
+    endBlockNow({ ...start(), breakMs }, at(25 * MINUTE));
+
+  it("is only ever entered by choosing it, from a block that has ended", () => {
+    // A break that began on its own would be the app deciding to stop someone.
+    const running = { ...start(), breakMs: 5 * MINUTE };
+    expect(beginBreak(running, 5 * MINUTE, at(MINUTE)).phase).toBe("running");
+
+    const paused = pauseSession(running, at(MINUTE));
+    expect(beginBreak(paused, 5 * MINUTE, at(2 * MINUTE)).phase).toBe("paused");
+
+    expect(beginBreak(finished(), 5 * MINUTE, at(25 * MINUTE)).phase).toBe("break");
+  });
+
+  it("is refused outright when the block was set up without one", () => {
+    const none = finished(0);
+
+    expect(beginBreak(none, 0, at(25 * MINUTE))).toBe(none);
+  });
+
+  it("counts down from when it started, and floors at zero", () => {
+    const onBreak = beginBreak(finished(), 5 * MINUTE, at(25 * MINUTE));
+
+    expect(breakRemainingMs(onBreak, at(25 * MINUTE))).toBe(5 * MINUTE);
+    expect(breakRemainingMs(onBreak, at(27 * MINUTE))).toBe(3 * MINUTE);
+    expect(breakRemainingMs(onBreak, at(30 * MINUTE))).toBe(0);
+    // Long gone, and still zero rather than negative.
+    expect(breakRemainingMs(onBreak, at(300 * MINUTE))).toBe(0);
+  });
+
+  it("waits once it is over instead of starting the next block", () => {
+    const onBreak = beginBreak(finished(), 5 * MINUTE, at(25 * MINUTE));
+    const later = settleSession(onBreak, at(90 * MINUTE));
+
+    // Settling must not launch a block at a desk nobody is sitting at.
+    expect(later.phase).toBe("break");
+    expect(isBreakOver(later, at(90 * MINUTE))).toBe(true);
+    expect(isBreakOver(onBreak, at(26 * MINUTE))).toBe(false);
+  });
+
+  it("can be backed out of, returning to the end choices", () => {
+    const onBreak = beginBreak(finished(), 5 * MINUTE, at(25 * MINUTE));
+    const backed = endBreak(onBreak);
+
+    expect(backed.phase).toBe("ended");
+    expect(backed.breakEndsAt).toBeNull();
+  });
+
+  it("carries no break at all on a session started without one", () => {
+    expect(start().breakMs).toBe(0);
+    expect(start().breakEndsAt).toBeNull();
+  });
+});
+
+// ------------------------------------------------- changing a block's length
+
+describe("adjusting the block that is already running", () => {
+  const MAX = 180 * MINUTE;
+
+  it("lengthens it without disturbing the time already spent", () => {
+    const running = start();
+    const longer = adjustPlanned(running, 5 * MINUTE, at(10 * MINUTE), MAX);
+
+    expect(longer.plannedMs).toBe(30 * MINUTE);
+    // Elapsed is read from timestamps, so it is untouched by the change.
+    expect(mainElapsedMs(longer, at(10 * MINUTE))).toBe(10 * MINUTE);
+    expect(mainRemainingMs(longer, at(10 * MINUTE))).toBe(20 * MINUTE);
+  });
+
+  it("shortens it", () => {
+    const shorter = adjustPlanned(start(), -5 * MINUTE, at(5 * MINUTE), MAX);
+
+    expect(shorter.plannedMs).toBe(20 * MINUTE);
+  });
+
+  it("will not shrink below the time already spent", () => {
+    // "Five minutes less" must never mean "end this block right now": ending
+    // early is a different button, and a deliberate one.
+    const shorter = adjustPlanned(start(), -5 * MINUTE, at(23 * MINUTE), MAX);
+
+    expect(shorter.plannedMs).toBe(23 * MINUTE);
+    expect(mainRemainingMs(shorter, at(23 * MINUTE))).toBe(0);
+    expect(shorter.phase).toBe("running");
+  });
+
+  it("stops at the longest block the app allows", () => {
+    const long = adjustPlanned({ ...start(), plannedMs: MAX }, 5 * MINUTE, at(MINUTE), MAX);
+
+    expect(long.plannedMs).toBe(MAX);
+  });
+
+  it("returns the very same object when nothing moved", () => {
+    const running = { ...start(), plannedMs: MAX };
+
+    expect(adjustPlanned(running, 5 * MINUTE, at(MINUTE), MAX)).toBe(running);
+  });
+
+  it("works while paused, and is ignored everywhere else", () => {
+    const paused = pauseSession(start(), at(5 * MINUTE));
+    expect(adjustPlanned(paused, 5 * MINUTE, at(6 * MINUTE), MAX).plannedMs).toBe(30 * MINUTE);
+
+    const ended = endBlockNow(start(), at(25 * MINUTE));
+    expect(adjustPlanned(ended, 5 * MINUTE, at(25 * MINUTE), MAX)).toBe(ended);
+  });
+});
+
+describe("what the clock ticks for", () => {
+  it("counts through a break, so the number does not sit frozen", () => {
+    const finished = endBlockNow({ ...start(), breakMs: 5 * MINUTE }, at(25 * MINUTE));
+    const onBreak = beginBreak(finished, 5 * MINUTE, at(25 * MINUTE));
+
+    expect(isTicking(onBreak)).toBe(true);
+    // The block itself is not draining, which is a different question.
+    expect(isCounting(onBreak)).toBe(false);
+  });
+
+  it("stays off wherever nothing is counting down", () => {
+    for (const session of [
+      pauseSession(start(), at(MINUTE)),
+      markDistracted(start(), at(MINUTE)),
+      endBlockNow(start(), at(25 * MINUTE)),
+      closeSession(start(), "left", at(25 * MINUTE)),
+    ]) {
+      expect(isTicking(session)).toBe(false);
+    }
+  });
+
+  it("is on for a running block and for the return on-ramp", () => {
+    expect(isTicking(start())).toBe(true);
+    expect(isTicking(beginReturnBlock(markDistracted(start(), at(MINUTE)), at(2 * MINUTE)))).toBe(
+      true,
+    );
   });
 });

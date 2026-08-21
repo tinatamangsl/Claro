@@ -1,3 +1,4 @@
+import { Minus, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { AddItem } from "@/components/AddItem";
@@ -15,6 +16,8 @@ type Props = {
   onPause: () => void;
   onResume: () => void;
   onEnd: () => void;
+  /** Lengthen or shorten the block that is already running. */
+  onAdjust: (deltaMs: number) => void;
   onPark: (text: string) => void;
   /** The sound controls, when the route supplies them. */
   soundPanel?: ReactNode;
@@ -33,6 +36,7 @@ export function FocusTimer({
   onPause,
   onResume,
   onEnd,
+  onAdjust,
   onPark,
   soundPanel,
 }: Props) {
@@ -141,6 +145,35 @@ export function FocusTimer({
         >
           End block
         </button>
+
+        {/*
+          Changing your mind mid-block costs nothing: elapsed time comes from
+          timestamps, so the plan is just a number and moving it loses none of
+          the work already done. It will not shrink past what you have spent.
+        */}
+        {session.phase !== "returning" && (
+          <span className="ml-auto flex items-center gap-1.5">
+            <span className="tnum text-[10px] text-muted-foreground">
+              {Math.round(session.plannedMs / 60_000)} min block
+            </span>
+            <button
+              type="button"
+              onClick={() => onAdjust(-5 * 60_000)}
+              aria-label="Shorten this block by five minutes"
+              className="btn btn-sm btn-icon btn-quiet"
+            >
+              <Minus aria-hidden className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onAdjust(5 * 60_000)}
+              aria-label="Lengthen this block by five minutes"
+              className="btn btn-sm btn-icon btn-quiet"
+            >
+              <Plus aria-hidden className="h-3 w-3" />
+            </button>
+          </span>
+        )}
       </div>
 
       {soundPanel && (

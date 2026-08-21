@@ -32,6 +32,7 @@ import type {
   CycleEntry,
   CycleState,
   Day,
+  FocusPrefs,
   Habit,
   FocusSession,
   ISODate,
@@ -84,6 +85,12 @@ type ClaroContextValue = {
    */
   moveCarried: (fromDayId: ISODate, toDayId: ISODate, itemId: string) => void;
 
+  /**
+   * The block length carried between sessions. Read by every entry point, so a
+   * block started from Quarter is the length the user last chose, not 25.
+   */
+  focusPrefs: FocusPrefs;
+  setFocusPrefs: (patch: Partial<FocusPrefs>) => void;
   /** Habits. Completions are one row per habit per day. */
   addHabit: (habit: Habit) => void;
   patchHabit: (id: string, patch: Partial<Habit>) => void;
@@ -318,6 +325,17 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     },
     [],
   );
+
+  const setFocusPrefs = useCallback((patch: Partial<FocusPrefs>) => {
+    setSnap((prev) =>
+      prev
+        ? {
+            ...prev,
+            state: { ...prev.state, focusPrefs: { ...prev.state.focusPrefs, ...patch } },
+          }
+        : prev,
+    );
+  }, []);
 
   const addHabit = useCallback((habit: Habit) => {
     setSnap((prev) =>
@@ -568,6 +586,8 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       logInterruption,
       updateInterruption,
       moveCarried,
+      focusPrefs: state.focusPrefs,
+      setFocusPrefs,
       addHabit,
       patchHabit,
       deleteHabit,
@@ -607,6 +627,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       logInterruption,
       updateInterruption,
       moveCarried,
+      setFocusPrefs,
       addHabit,
       patchHabit,
       deleteHabit,

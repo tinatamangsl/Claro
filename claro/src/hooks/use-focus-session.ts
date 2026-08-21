@@ -3,12 +3,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNow } from "@/hooks/use-now";
 import { useClaro } from "@/lib/claro-store";
 import * as sound from "@/lib/sound";
+import { MAX_FOCUS_MINUTES } from "@/lib/focus-presets";
 import {
+  adjustPlanned,
+  beginBreak,
   beginReturnBlock,
   closeSession,
+  endBreak,
   createInterruption,
   endBlockNow,
-  isCounting,
+  isTicking,
   localTimeZone,
   markDistracted,
   pauseSession,
@@ -56,11 +60,13 @@ export function useFocusSession() {
     clearActiveSession,
     logInterruption,
     updateInterruption,
+    focusPrefs,
+    setFocusPrefs,
     today,
   } = useClaro();
 
   // The app's only clock. It ticks solely while something is actually counting.
-  const now = useNow(activeSession && isCounting(activeSession) ? 1000 : null);
+  const now = useNow(activeSession && isTicking(activeSession) ? 1000 : null);
 
   /** Displayed state is settled immediately; the commit follows in the effect. */
   const session = activeSession && now ? settleSession(activeSession, now) : activeSession;
@@ -96,20 +102,44 @@ export function useFocusSession() {
     }
   }, [now, activeSession, openInterruption, updateSession, updateInterruption]);
 
+  /**
+   * Starting a block.
+   *
+   * The length defaults to the one the user last chose, which is what makes
+   * "Focus" on a side quest four screens away start at their length rather than
+   * at a number Claro picked. An explicit length still wins, for the flows that
+   * genuinely have one of their own.
+   */
   const start = useCallback(
-    (target: FocusTargetRef | null, plannedMs: number) => {
+    (target: FocusTargetRef | null, plannedMs?: number, breakMs?: number) => {
       startSession(
         startFocusSession({
           dayId: today,
           target,
           intention: target?.title ?? "",
-          plannedMs,
+          plannedMs: plannedMs ?? focusPrefs.plannedMs,
+          breakMs: breakMs ?? (plannedMs === undefined ? focusPrefs.breakMs : 0),
           now: new Date(),
           timeZone: localTimeZone(),
         }),
       );
     },
-    [startSession, today],
+    [startSession, today, focusPrefs.plannedMs, focusPrefs.breakMs],
+  );
+
+  /** The break a finished block earns. Only ever entered by choosing it. */
+  const takeBreak = useCallback(
+    (breakMs: number) => updateSession((s) => beginBreak(s, breakMs, new Date())),
+    [updateSession],
+  );
+
+  const skipBreak = useCallback(() => updateSession(endBreak), [updateSession]);
+
+  /** Lengthening or shortening the block that is already running. */
+  const adjust = useCallback(
+    (deltaMs: number) =>
+      updateSession((s) => adjustPlanned(s, deltaMs, new Date(), MAX_FOCUS_MINUTES * 60_000)),
+    [updateSession],
   );
 
   const distracted = useCallback(() => {
@@ -204,6 +234,11 @@ export function useFocusSession() {
     /** True while a session exists and has not been resolved. */
     isLive: session !== null && session.phase !== "closed",
     start,
+    blockPrefs: focusPrefs,
+    setBlockPrefs: setFocusPrefs,
+    takeBreak,
+    skipBreak,
+    adjust,
     pause: useCallback(() => updateSession((s) => pauseSession(s, new Date())), [updateSession]),
     resume: useCallback(() => updateSession((s) => resumeFocus(s, new Date())), [updateSession]),
     endBlock: useCallback(() => updateSession((s) => endBlockNow(s, new Date())), [updateSession]),

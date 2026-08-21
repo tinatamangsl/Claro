@@ -1,4 +1,5 @@
 import { newId } from "./id";
+import { DEFAULT_FOCUS_PREFS, readFocusPrefs } from "./focus-presets";
 import { blankPlan } from "./quarter-plan";
 import {
   CLARO_SCHEMA_VERSION,
@@ -50,6 +51,7 @@ export function emptyState(): ClaroState {
     focusSessions: {},
     activeFocusSessionId: null,
     interruptions: {},
+    focusPrefs: DEFAULT_FOCUS_PREFS,
     habits: {},
     habitCompletions: {},
     cycle: blankCycle(),
@@ -146,9 +148,11 @@ export function migrate(raw: unknown): ClaroState {
     quarters: isRecord(candidate.quarters) ? candidate.quarters : {},
     weeks: isRecord(candidate.weeks) ? candidate.weeks : {},
     days: migrateDays(days, candidate.version),
-    focusSessions: v3SessionsToV4(
-      isRecord<FocusSession>(candidate.focusSessions) ? candidate.focusSessions : {},
-      candidate.version,
+    focusSessions: readSessions(
+      v3SessionsToV4(
+        isRecord<FocusSession>(candidate.focusSessions) ? candidate.focusSessions : {},
+        candidate.version,
+      ),
     ),
     activeFocusSessionId:
       typeof candidate.activeFocusSessionId === "string"
@@ -157,6 +161,9 @@ export function migrate(raw: unknown): ClaroState {
     interruptions: isRecord<Interruption>(candidate.interruptions)
       ? candidate.interruptions
       : {},
+    // Additive: a store saved before block lengths were choosable arrives with
+    // the default pair, which is the length it was always using anyway.
+    focusPrefs: readFocusPrefs(candidate.focusPrefs),
     habits: isRecord<Habit>(candidate.habits) ? candidate.habits : {},
     habitCompletions: isRecord<HabitCompletion>(candidate.habitCompletions)
       ? candidate.habitCompletions
@@ -170,6 +177,26 @@ export function migrate(raw: unknown): ClaroState {
     // Additive: a store saved before monthly plans existed simply arrives empty.
     monthPlans: isRecord<MonthPlan>(candidate.monthPlans) ? candidate.monthPlans : {},
   };
+}
+
+/**
+ * Fills in the session fields added after a record was written.
+ *
+ * A block saved before breaks existed simply had none: `breakMs` of 0 says
+ * exactly that, and is the same thing the interface would have shown anyway.
+ * Read-through rather than a versioned step, because nothing already on disk
+ * changes meaning.
+ */
+function readSessions(sessions: Record<string, FocusSession>): Record<string, FocusSession> {
+  const read: Record<string, FocusSession> = {};
+  for (const [id, session] of Object.entries(sessions)) {
+    read[id] = {
+      ...session,
+      breakMs: typeof session.breakMs === "number" ? session.breakMs : 0,
+      breakEndsAt: typeof session.breakEndsAt === "string" ? session.breakEndsAt : null,
+    };
+  }
+  return read;
 }
 
 export function blankMonthPlan(id: string, now: Date): MonthPlan {

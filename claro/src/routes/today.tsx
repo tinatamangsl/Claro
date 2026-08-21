@@ -69,6 +69,7 @@ import {
   queueCarried,
 } from "@/lib/rollover";
 import {
+  breakRemainingMs,
   formatRemaining,
   isSessionOpen,
   mainElapsedMs,
@@ -212,7 +213,7 @@ function TodayView() {
   const leaveFocus = () => navigate({ to: "/today", search: {} });
 
   /** Starts a block on one of the day's three priorities, from anywhere on the page. */
-  const focusOnPriority = (target: PriorityTarget, plannedMs = FOCUS_BLOCK_MS) => {
+  const focusOnPriority = (target: PriorityTarget, plannedMs?: number) => {
     const key = resolvePriorityKey(record, target);
     if (!key) return;
     const rank = (PRIORITY_KEYS.indexOf(key) + 1) as PriorityRank;
@@ -220,17 +221,18 @@ function TodayView() {
     enterFocus();
   };
 
-  const beginBlock = (plannedMs: number) => {
+  const beginBlock = (plannedMs: number, breakMs = 0) => {
     const target = selectFocus(record);
     if (target.kind === "priority") {
       focus.start(
         { kind: "priority", dayId, rank: target.rank, title: target.priority.text },
         plannedMs,
+        breakMs,
       );
       return;
     }
     const title = target.kind === "done" ? (target.next?.text ?? "") : "";
-    focus.start(title ? { kind: "open", title } : null, plannedMs);
+    focus.start(title ? { kind: "open", title } : null, plannedMs, breakMs);
   };
 
   /** The only path to a completed priority is this explicit choice. */
@@ -246,9 +248,12 @@ function TodayView() {
 
   const continueWorking = () => {
     const plannedMs = session?.plannedMs ?? 0;
+    const breakMs = session?.breakMs ?? 0;
     const target = session?.target ?? null;
     focus.close("continued");
-    if (plannedMs > 0) focus.start(target, plannedMs);
+    // Same length and same break: continuing is another of what you were doing,
+    // not a fresh decision to make while the momentum is there.
+    if (plannedMs > 0) focus.start(target, plannedMs, breakMs);
   };
 
   const leaveFinishedBlock = () => {
@@ -326,6 +331,11 @@ function TodayView() {
         now={now}
         onPatchPriority={patchPriority}
         onStart={beginBlock}
+        blockPrefs={focus.blockPrefs}
+        onBlockPrefs={focus.setBlockPrefs}
+        onAdjust={focus.adjust}
+        onTakeBreak={focus.takeBreak}
+        onSkipBreak={focus.skipBreak}
         onDistracted={focus.distracted}
         onPause={focus.pause}
         onResumeBlock={focus.resume}
@@ -619,6 +629,7 @@ const STATUS_COPY: Record<FocusSession["phase"], string> = {
   paused: "Focus session paused",
   interrupted: "Focus session paused",
   returning: "Back in, five minutes",
+  break: "On a break",
   ended: "Focus block finished",
   closed: "",
 };
@@ -637,10 +648,14 @@ function FocusStrip({
   now: Date | null;
   onOpen: () => void;
 }) {
+  // During a break the block has already finished, so counting down the block
+  // would be reporting a clock that is not running.
+  const onBreak = session.phase === "break";
   const elapsed = now ? mainElapsedMs(session, now) : session.elapsedBeforeMs;
-  const left = Math.max(0, session.plannedMs - elapsed);
-  const ratio =
-    session.plannedMs > 0 ? Math.min(1, Math.max(0, elapsed / session.plannedMs)) : 0;
+  const blockLeft = Math.max(0, session.plannedMs - elapsed);
+  const left = onBreak ? (now ? breakRemainingMs(session, now) : session.breakMs) : blockLeft;
+  const total = onBreak ? session.breakMs : session.plannedMs;
+  const ratio = total > 0 ? Math.min(1, Math.max(0, 1 - left / total)) : 0;
 
   return (
     <section className="surface-raised relative overflow-hidden px-5 py-4 sm:px-7">
@@ -662,7 +677,7 @@ function FocusStrip({
         </div>
 
         <button type="button" onClick={onOpen} className="btn btn-sm btn-primary shrink-0">
-          Resume focus
+          {onBreak ? "Back to the break" : "Resume focus"}
         </button>
       </div>
 

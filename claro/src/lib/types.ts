@@ -357,11 +357,25 @@ export type MonthPlan = {
 
 // ---------------------------------------------------------------- focus
 
+/** The length a block starts at before anyone has chosen their own. */
 export const FOCUS_BLOCK_MS = 25 * 60_000;
 /** The "just begin" block — small enough that starting is never the hard part. */
 export const JUST_BEGIN_BLOCK_MS = 5 * 60_000;
 /** The on-ramp back after an interruption. */
 export const RETURN_BLOCK_MS = 5 * 60_000;
+
+/**
+ * The block length the user last chose, so the next one starts at theirs.
+ *
+ * `breakMs` of 0 means no break, which is a real choice rather than a missing
+ * value: plenty of people want a timer and nothing else.
+ */
+export type FocusPrefs = {
+  plannedMs: number;
+  breakMs: number;
+  /** Which preset the pair came from, or "custom". Presentation only. */
+  presetId: string;
+};
 
 /**
  * A focus session's phase. There is only ever one live session (see
@@ -377,6 +391,8 @@ export type FocusPhase =
   | "interrupted"
   /** The five-minute return block is counting down. */
   | "returning"
+  /** The block finished and the user chose to take a break before the next one. */
+  | "break"
   /** The main block finished; waiting for the user to choose what happens next. */
   | "ended"
   /** The user resolved it. Kept for the record; never resumed. */
@@ -417,6 +433,8 @@ export type FocusSession = {
   /** A snapshot of the priority text, so the record still reads honestly later. */
   intention: string;
   plannedMs: number;
+  /** The break this block is followed by, if any. 0 means the user wanted none. */
+  breakMs: number;
   startedAt: string;
   /** IANA zone, captured at start so a later reader knows the local context. */
   timeZone: string;
@@ -427,6 +445,8 @@ export type FocusSession = {
   segmentStartedAt: string | null;
   /** When the active return block is due to finish. */
   returnBlockEndsAt: string | null;
+  /** When the break the user is taking is due to finish. */
+  breakEndsAt: string | null;
   /** When the main block ran out. */
   endedAt: string | null;
   /** How the user resolved the session. */
@@ -667,6 +687,8 @@ export type ClaroState = {
   /** The one canonical live session. There is nowhere for a second to exist. */
   activeFocusSessionId: string | null;
   interruptions: Record<string, Interruption>;
+  /** The block length carried between sessions, so nobody re-picks it every time. */
+  focusPrefs: FocusPrefs;
   habits: Record<string, Habit>;
   habitCompletions: Record<string, HabitCompletion>;
   cycle: CycleState;

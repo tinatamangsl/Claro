@@ -1,4 +1,5 @@
 import { SoundFeedback } from "@/components/today/SoundFeedback";
+import { formatBlockLength, formatBreakLength } from "@/lib/focus-presets";
 import type { FocusSession, SoundFeedbackResponse } from "@/lib/types";
 
 type Props = {
@@ -10,6 +11,8 @@ type Props = {
   onSoundFeedback: (response: SoundFeedbackResponse) => void;
   onComplete: () => void;
   onContinue: () => void;
+  /** Offered only when this block was set up with a break to take. */
+  onTakeBreak: () => void;
   onExit: () => void;
 };
 
@@ -24,6 +27,7 @@ export function FocusEnd({
   onSoundFeedback,
   onComplete,
   onContinue,
+  onTakeBreak,
   onExit,
 }: Props) {
   return (
@@ -47,12 +51,22 @@ export function FocusEnd({
             Complete priority
           </button>
         )}
+        {/* The break is part of the shape the user chose, so it is offered here. */}
+        {session.breakMs > 0 && (
+          <button
+            type="button"
+            onClick={onTakeBreak}
+            className="btn btn-quiet"
+          >
+            Take a {formatBreakLength(session.breakMs)} break
+          </button>
+        )}
         <button
           type="button"
           onClick={onContinue}
           className="btn btn-quiet"
         >
-          Continue
+          Another {formatBlockLength(session.plannedMs)}
         </button>
         <button
           type="button"

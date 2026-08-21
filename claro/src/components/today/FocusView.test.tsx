@@ -9,11 +9,12 @@ import {
   settleSession,
   startFocusSession,
 } from "@/lib/focus-session";
+import { DEFAULT_FOCUS_PREFS } from "@/lib/focus-presets";
 import { blankDay, blankPriority, blankQuarter, blankWeek } from "@/lib/storage";
 import {
   FOCUS_BLOCK_MS,
-  JUST_BEGIN_BLOCK_MS,
   type Day,
+  type FocusPrefs,
   type FocusSession,
   type Interruption,
   type Priority,
@@ -48,6 +49,10 @@ const handlers = () => ({
   onSoundFeedback: vi.fn(),
   onPatchPriority: vi.fn(),
   onStart: vi.fn(),
+  onBlockPrefs: vi.fn(),
+  onAdjust: vi.fn(),
+  onTakeBreak: vi.fn(),
+  onSkipBreak: vi.fn(),
   onDistracted: vi.fn(),
   onPause: vi.fn(),
   onResumeBlock: vi.fn(),
@@ -70,6 +75,7 @@ const renderFocus = (
     session?: FocusSession | null;
     openInterruption?: Interruption | null;
     now?: Date | null;
+    blockPrefs?: FocusPrefs;
   } = {},
 ) => {
   const spies = handlers();
@@ -81,6 +87,7 @@ const renderFocus = (
       session={options.session ?? null}
       openInterruption={options.openInterruption ?? null}
       now={options.now ?? T0}
+      blockPrefs={options.blockPrefs ?? DEFAULT_FOCUS_PREFS}
       {...spies}
     />,
   );
@@ -88,14 +95,50 @@ const renderFocus = (
 };
 
 describe("starting a block", () => {
-  it("offers twenty-five minutes and a just-begin block", () => {
+  it("starts at the length the user last chose, not at a number Claro picked", () => {
+    const spies = renderFocus({
+      blockPrefs: { plannedMs: 18 * 60_000, breakMs: 0, presetId: "custom" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Start 18 minutes" }));
+
+    expect(spies.onStart).toHaveBeenCalledWith(18 * 60_000, 0);
+  });
+
+  it("offers the named shapes, Pomodoro among them", () => {
     const spies = renderFocus();
 
+    fireEvent.click(screen.getByRole("button", { name: /Pomodoro/ }));
     fireEvent.click(screen.getByRole("button", { name: "Start 25 minutes" }));
-    expect(spies.onStart).toHaveBeenCalledWith(FOCUS_BLOCK_MS);
 
-    fireEvent.click(screen.getByRole("button", { name: "Just begin, 5 minutes" }));
-    expect(spies.onStart).toHaveBeenCalledWith(JUST_BEGIN_BLOCK_MS);
+    expect(spies.onStart).toHaveBeenCalledWith(25 * 60_000, 5 * 60_000);
+  });
+
+  it("takes any length at all, typed in", () => {
+    const spies = renderFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: /Custom/ }));
+    fireEvent.change(screen.getByLabelText("Focus block length in minutes"), {
+      target: { value: "22" },
+    });
+    fireEvent.change(screen.getByLabelText("Break length in minutes, zero for none"), {
+      target: { value: "0" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start 22 minutes" }));
+
+    expect(spies.onStart).toHaveBeenCalledWith(22 * 60_000, 0);
+  });
+
+  it("remembers the choice, so the next block opens on it", () => {
+    const spies = renderFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: /Long block/ }));
+
+    expect(spies.onBlockPrefs).toHaveBeenCalledWith({
+      plannedMs: 50 * 60_000,
+      breakMs: 10 * 60_000,
+      presetId: "deep",
+    });
   });
 
   it("names the priority it is about to work on", () => {
@@ -256,7 +299,7 @@ describe("when the block ends", () => {
     fireEvent.click(screen.getByRole("button", { name: "Complete priority" }));
     expect(spies.onComplete).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Another 25 minutes" }));
     expect(spies.onContinue).toHaveBeenCalledTimes(1);
   });
 
@@ -283,7 +326,7 @@ describe("when the block ends", () => {
     renderFocus({ session: loose, now: at(30 * MINUTE) });
 
     expect(screen.queryByRole("button", { name: "Complete priority" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Continue" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Another 25 minutes" })).toBeDefined();
   });
 });
 

@@ -69,6 +69,7 @@ src/lib/dates.ts        quarter/ISO-week/day ids, hierarchy resolution, navigati
 src/lib/storage.ts      the ONLY module that touches localStorage
 src/lib/focus.ts        Return to Focus: what to return to, and where a distraction goes
 src/lib/focus-session.ts the focus session state machine — pure, now-injected, no timers
+src/lib/focus-presets.ts    how long a block is, and whether a break follows it
 src/lib/rollover.ts     the 10 PM carry-forward rule and the review-area decisions
 src/lib/reorder.ts      pure list movement — every drag and every keyboard nudge goes through it
 src/lib/schedule.ts     moving a schedule entry between hours, and the swap when one is taken
@@ -172,6 +173,41 @@ title, so the record still reads honestly after the goal is renamed or deleted.
 
 **Resolving a session never completes the work it pointed at.** `close()` writes only to the
 session. The single path to a completed priority is the explicit choice on the end screen.
+
+### A block is any length the person wants
+
+`plannedMs` was always an arbitrary number, but for a long time the interface offered exactly two
+values and every other entry point silently used 25 minutes. `lib/focus-presets.ts` fixes the
+interface, not the model: four named shapes (Pomodoro 25/5, Long block 50/10, Short burst 15,
+Just begin 5) plus a plain minutes field that takes anything from 1 to 180. Nineteen minutes is
+an ordinary way to work and a fixed menu cannot express it.
+
+**The chip is derived from the numbers, never tracked beside them.** `matchPreset` works out
+which shape a pair of durations happens to be, so typing 25 and 5 by hand lights up Pomodoro
+rather than reading "Custom". There is one source of truth, so the two cannot disagree.
+
+**The choice is remembered in `ClaroState.focusPrefs`** and read by every entry point, which is
+what makes "Focus" on a side quest four screens away start at the user's length. Additive, so no
+migration: `readFocusPrefs` repairs anything unusable rather than letting a half-typed field
+become a block length.
+
+**A block can be lengthened or shortened while it is running.** `adjustPlanned` is safe precisely
+because elapsed time comes from timestamps: the plan is just a number and moving it loses nothing.
+It will not shrink below the time already spent, because "five minutes less" must never silently
+mean "end this now" — ending early is its own deliberate button.
+
+### The break, and the clock that has to tick through it
+
+Pomodoro is a break as much as it is 25 minutes, so `FocusPhase` has a `break`. It is only ever
+entered from `ended`, which is to say only ever by choosing it, and **when it runs out the screen
+waits**: a timer that starts itself at a desk nobody is sitting at turns the rest of the break
+into a debt. `settleSession` deliberately does not advance out of it.
+
+`isCounting` still means "the main block is draining", which is what the block's own arithmetic
+asks about. **`isTicking` is the wider question the clock asks** — it includes `break`, and
+without it `useNow` returns null through the whole break and the number sits frozen at its full
+length while the break quietly passes. The header and the Today strip read the break's remaining
+time too, rather than reporting a block that already finished.
 
 ## Ambient sound
 

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_FOCUS_PREFS } from "./focus-presets";
 import { blankPlan } from "./quarter-plan";
 import {
   STORAGE_KEY,
@@ -39,6 +40,7 @@ describe("blank records", () => {
       focusSessions: {},
       activeFocusSessionId: null,
       interruptions: {},
+      focusPrefs: DEFAULT_FOCUS_PREFS,
       habits: {},
       habitCompletions: {},
       cycle: { settings: { enabled: false, optedInAt: null }, entries: {}, checkIns: {} },

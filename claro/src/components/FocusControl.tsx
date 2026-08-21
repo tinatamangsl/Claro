@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Timer } from "lucide-react";
 
 import { useFocusSession } from "@/hooks/use-focus-session";
-import { formatRemaining, mainElapsedMs } from "@/lib/focus-session";
+import { breakRemainingMs, formatRemaining, mainElapsedMs } from "@/lib/focus-session";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,17 +15,28 @@ export function FocusControl({ className }: { className?: string }) {
   const { session, now, isLive } = useFocusSession();
 
   const live = isLive ? session : null;
+  // A break is a different clock from the block, and the header must not report
+  // the block still draining while somebody is away from the desk.
+  const onBreak = live?.phase === "break";
   const elapsed = live ? (now ? mainElapsedMs(live, now) : live.elapsedBeforeMs) : 0;
-  const left = live ? Math.max(0, live.plannedMs - elapsed) : 0;
+  const left = !live
+    ? 0
+    : onBreak
+      ? now
+        ? breakRemainingMs(live, now)
+        : live.breakMs
+      : Math.max(0, live.plannedMs - elapsed);
 
   return (
     <Link
       to="/today"
       search={{ focus: true }}
       aria-label={
-        live
-          ? `Resume focus, ${formatRemaining(left)} left on ${live.target?.title || "this block"}`
-          : "Start a focus block"
+        !live
+          ? "Start a focus block"
+          : onBreak
+            ? `On a break, ${formatRemaining(left)} left`
+            : `Resume focus, ${formatRemaining(left)} left on ${live.target?.title || "this block"}`
       }
       className={cn(
         "btn btn-sm gap-1.5",
