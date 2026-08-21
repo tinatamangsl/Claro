@@ -2,6 +2,7 @@ import {
   addDays,
   addQuarters,
   addWeeks,
+  differenceInCalendarDays,
   endOfISOWeek,
   endOfQuarter,
   format,
@@ -118,6 +119,21 @@ export function formatDayWeekday(id: ISODate): string {
 
 export function formatDayDate(id: ISODate): string {
   return format(parseDayId(id), "d MMMM yyyy");
+}
+
+/**
+ * "today", "yesterday", "3 days ago", "in 2 days".
+ *
+ * Days near now are the ones people are correcting, and a relative phrase is
+ * quicker to check than a date: "yesterday" is either right or wrong at a
+ * glance, where "21/08/2026" has to be worked out.
+ */
+export function formatRelativeDay(id: ISODate, todayId: ISODate): string {
+  const delta = differenceInCalendarDays(parseDayId(id), parseDayId(todayId));
+  if (delta === 0) return "today";
+  if (delta === -1) return "yesterday";
+  if (delta === 1) return "tomorrow";
+  return delta < 0 ? `${-delta} days ago` : `in ${delta} days`;
 }
 
 /** "17 Aug" — for inline references to another day. */

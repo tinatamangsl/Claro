@@ -8,7 +8,7 @@ type Spec = ISODate | [ISODate, ISODate | null];
 
 const cycleWith = (...specs: Spec[]): CycleState => ({
   ...blankCycle(),
-  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
+  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
   entries: Object.fromEntries(
     specs.map((spec, i) => {
       const [startDate, endDate] = Array.isArray(spec) ? spec : [spec, null];

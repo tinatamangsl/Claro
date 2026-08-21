@@ -8,7 +8,7 @@ import type { CycleState, ISODate } from "./types";
 type Spec = ISODate | [ISODate, ISODate | null];
 
 const cycleWith = (...specs: Spec[]): CycleState => ({
-  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
+  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
   entries: Object.fromEntries(
     specs.map((spec, i) => {
       const [startDate, endDate] = Array.isArray(spec) ? spec : [spec, null];
@@ -154,6 +154,7 @@ describe("marks for a run of days", () => {
           mood: null,
           stress: null,
           feeling: null,
+          flow: null,
           note: "",
           evening: null,
           updatedAt: "2026-08-14T20:00:00.000Z",

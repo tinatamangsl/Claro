@@ -2,12 +2,13 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { CycleCalendar } from "./CycleCalendar";
+import { blankCheckIn } from "@/lib/storage";
 import type { CycleState, ISODate } from "@/lib/types";
 
 type Spec = ISODate | [ISODate, ISODate | null];
 
 const cycleWith = (...specs: Spec[]): CycleState => ({
-  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
+  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
   entries: Object.fromEntries(
     specs.map((spec, i) => {
       const [startDate, endDate] = Array.isArray(spec) ? spec : [spec, null];
@@ -26,10 +27,33 @@ const TODAY: ISODate = "2026-08-19";
 const setup = (cycle: CycleState) => {
   const onReplace = vi.fn();
   const onDelete = vi.fn();
+  const onWriteNote = vi.fn();
+  const onLogged = vi.fn();
   const view = render(
-    <CycleCalendar cycle={cycle} todayId={TODAY} onReplace={onReplace} onDelete={onDelete} />,
+    <CycleCalendar
+      cycle={cycle}
+      todayId={TODAY}
+      onReplace={onReplace}
+      onDelete={onDelete}
+      onLogged={onLogged}
+      noteOn={(dayId) => blankCheckIn(dayId, new Date())}
+      onWriteNote={onWriteNote}
+    />,
   );
-  return { ...view, onReplace, onDelete };
+  return { ...view, onReplace, onDelete, onWriteNote, onLogged };
+};
+
+/**
+ * A press, a move across, and a release: the drag that paints a range.
+ *
+ * `pointerover` rather than `pointerenter`, because React implements
+ * `onPointerEnter` on top of the bubbling `pointerover` event and never sees a
+ * dispatched `pointerenter` at all.
+ */
+const paint = (from: HTMLElement, through: HTMLElement[]) => {
+  fireEvent.pointerDown(from, { pointerId: 1 });
+  for (const cell of through) fireEvent.pointerOver(cell, { pointerId: 1 });
+  fireEvent.pointerUp(through[through.length - 1] ?? from, { pointerId: 1 });
 };
 
 describe("the cycle calendar", () => {
@@ -172,5 +196,144 @@ describe("logging from the calendar", () => {
     for (const banned of ["fertile", "fertility", "ovulation", "pregnan", "conceive"]) {
       expect(text).not.toContain(banned);
     }
+  });
+});
+
+describe("painting a period by dragging", () => {
+  const dayCell = (name: RegExp) => screen.getByRole("button", { name });
+
+  it("logs the whole range in one gesture", () => {
+    const { onReplace } = setup(cycleWith());
+
+    paint(dayCell(/^\S+ 10 August/), [
+      dayCell(/^\S+ 11 August/),
+      dayCell(/^\S+ 12 August/),
+      dayCell(/^\S+ 13 August/),
+    ]);
+
+    expect(onReplace).toHaveBeenCalledTimes(1);
+    const saved = Object.values(
+      onReplace.mock.calls[0][0] as Record<string, { startDate: string; endDate: string | null }>,
+    )[0];
+    expect(saved.startDate).toBe("2026-08-10");
+    expect(saved.endDate).toBe("2026-08-13");
+  });
+
+  it("writes once on release, not once per day dragged across", () => {
+    const { onReplace } = setup(cycleWith());
+
+    paint(dayCell(/^\S+ 10 August/), [
+      dayCell(/^\S+ 11 August/),
+      dayCell(/^\S+ 12 August/),
+    ]);
+
+    expect(onReplace).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads a backwards drag as the same range", () => {
+    const { onReplace } = setup(cycleWith());
+
+    paint(dayCell(/^\S+ 13 August/), [
+      dayCell(/^\S+ 12 August/),
+      dayCell(/^\S+ 11 August/),
+      dayCell(/^\S+ 10 August/),
+    ]);
+
+    const saved = Object.values(
+      onReplace.mock.calls[0][0] as Record<string, { startDate: string; endDate: string | null }>,
+    )[0];
+    expect(saved.startDate).toBe("2026-08-10");
+    expect(saved.endDate).toBe("2026-08-13");
+  });
+
+  it("treats a press without a drag as a tap, not a one day period", () => {
+    const { onReplace } = setup(cycleWith());
+    const cell = dayCell(/^\S+ 10 August/);
+
+    fireEvent.pointerDown(cell, { pointerId: 1 });
+    fireEvent.pointerUp(cell, { pointerId: 1 });
+    fireEvent.click(cell);
+
+    expect(onReplace).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "A period started on this day" })).toBeTruthy();
+  });
+
+  it("refuses to start a drag on a day already inside a logged period", () => {
+    // Otherwise a drag could quietly paint over a period that is already there.
+    const { onReplace } = setup(cycleWith(["2026-08-03", "2026-08-06"]));
+
+    paint(dayCell(/^\S+ 4 August/), [dayCell(/^\S+ 5 August/)]);
+
+    expect(onReplace).not.toHaveBeenCalled();
+  });
+
+  it("will not drag into days that have not happened", () => {
+    const { onReplace } = setup(cycleWith());
+
+    // The 25th is next week: the drag simply does not extend to it, so this
+    // ends up a press on the 18th rather than a range running into the future.
+    paint(dayCell(/^\S+ 18 August/), [dayCell(/^\S+ 25 August/)]);
+
+    expect(onReplace).not.toHaveBeenCalled();
+  });
+
+  it("stops the range at today when the drag runs past it", () => {
+    const { onReplace } = setup(cycleWith());
+
+    paint(dayCell(/^\S+ 17 August/), [
+      dayCell(/^\S+ 18 August/),
+      dayCell(/^\S+ 19 August/),
+      dayCell(/^\S+ 25 August/),
+    ]);
+
+    const saved = Object.values(
+      onReplace.mock.calls[0][0] as Record<string, { startDate: string; endDate: string | null }>,
+    )[0];
+    expect(saved.startDate).toBe("2026-08-17");
+    expect(saved.endDate).toBe(TODAY);
+  });
+
+  it("refuses a painted range that overlaps one already logged, and says why", () => {
+    const { onReplace, container } = setup(cycleWith(["2026-08-10", "2026-08-13"]));
+
+    paint(dayCell(/^\S+ 7 August/), [
+      dayCell(/^\S+ 8 August/),
+      dayCell(/^\S+ 9 August/),
+      dayCell(/^\S+ 10 August/),
+    ]);
+
+    expect(onReplace).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("overlaps a period you have already logged");
+  });
+});
+
+describe("how heavy a day was", () => {
+  it("records the user's own observation on a logged day", () => {
+    const { onWriteNote } = setup(cycleWith(["2026-08-03", "2026-08-06"]));
+
+    fireEvent.click(screen.getByRole("button", { name: /^\S+ 4 August/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Heavy/ }));
+
+    expect(onWriteNote).toHaveBeenCalledWith("2026-08-04", { flow: "heavy" });
+  });
+
+  it("passes no judgement on what was chosen", () => {
+    const { container } = setup(cycleWith(["2026-08-03", "2026-08-06"]));
+
+    fireEvent.click(screen.getByRole("button", { name: /^\S+ 4 August/ }));
+
+    expect(container.textContent).toContain("says nothing about what it means");
+    const text = container.textContent!.toLowerCase();
+    for (const banned of ["normal", "abnormal", "too heavy", "concerning", "see a doctor"]) {
+      expect(text).not.toContain(banned);
+    }
+  });
+
+  it("offers it only on a day inside a logged period", () => {
+    setup(cycleWith(["2026-08-03", "2026-08-06"]));
+
+    fireEvent.click(screen.getByRole("button", { name: /^\S+ 12 August/ }));
+
+    expect(screen.queryByRole("button", { name: /Heavy/ })).toBeNull();
   });
 });

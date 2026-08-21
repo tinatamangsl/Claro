@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { monthGrid, monthOfDay, formatMonthLong, shiftMonthId, type MonthId } from "@/lib/calendar";
 import {
@@ -18,7 +18,7 @@ import { estimatedWindow, markFor } from "@/lib/cycle-calendar";
 import { formatDayDate, formatDayLong, formatDayOfMonth, formatDayShort } from "@/lib/dates";
 import { newId } from "@/lib/id";
 import { cn } from "@/lib/utils";
-import type { CycleEntry, CycleState, ISODate } from "@/lib/types";
+import { FLOWS, FLOW_META, type CycleCheckIn, type CycleEntry, type CycleState, type ISODate } from "@/lib/types";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -27,6 +27,11 @@ type Props = {
   todayId: ISODate;
   onReplace: (entries: Record<string, CycleEntry>) => void;
   onDelete: (id: string) => void;
+  /** Fired after a range is painted, so the page can explain what was recorded. */
+  onLogged?: (startDate: ISODate) => void;
+  /** The day's private note, for recording how heavy it was. */
+  noteOn: (dayId: ISODate) => CycleCheckIn;
+  onWriteNote: (dayId: ISODate, patch: Partial<CycleCheckIn>) => void;
 };
 
 /**
@@ -40,10 +45,21 @@ type Props = {
  * rather than acting immediately. A tap should never silently write a date into
  * someone's medical history.
  */
-export function CycleCalendar({ cycle, todayId, onReplace, onDelete }: Props) {
+export function CycleCalendar({
+  cycle,
+  todayId,
+  onReplace,
+  onDelete,
+  onLogged,
+  noteOn,
+  onWriteNote,
+}: Props) {
   const [monthId, setMonthId] = useState<MonthId>(monthOfDay(todayId));
   const [selected, setSelected] = useState<ISODate | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
+  /** The range being dragged out, before it is committed. */
+  const [drag, setDrag] = useState<{ from: ISODate; to: ISODate } | null>(null);
+  const dragging = useRef(false);
 
   const window = estimatedWindow(cycle);
 
@@ -60,6 +76,54 @@ export function CycleCalendar({ cycle, todayId, onReplace, onDelete }: Props) {
     setSelected(dayId === selected ? null : dayId);
     setRefusal(null);
   };
+
+  /**
+   * Painting a period straight onto the calendar.
+   *
+   * Press on the first day, drag to the last, release. Pointer events so the
+   * same handler serves a finger and a mouse, and the range is only committed
+   * on release: dragging across the month must not write six periods on the way
+   * past. A day already inside a logged period is left alone, so a drag can
+   * never quietly overwrite one.
+   */
+  const beginDrag = (dayId: ISODate) => {
+    if (dayId > todayId || periodEntryOn(cycle, dayId, todayId)) return;
+    dragging.current = true;
+    setDrag({ from: dayId, to: dayId });
+    setRefusal(null);
+  };
+
+  const extendDrag = (dayId: ISODate) => {
+    if (!dragging.current || !drag || dayId > todayId) return;
+    setDrag({ from: drag.from, to: dayId });
+  };
+
+  const commitDrag = () => {
+    if (!dragging.current || !drag) return;
+    dragging.current = false;
+
+    const [from, to] = drag.from <= drag.to ? [drag.from, drag.to] : [drag.to, drag.from];
+    setDrag(null);
+
+    // A press without a drag is a tap. Selecting here as well as in the click
+    // that follows would toggle the day straight back off, so this leaves it to
+    // the click.
+    if (from === to) return;
+
+    const result = addPeriod(cycle, { startDate: from, endDate: to }, newId(), new Date(), todayId);
+    if (!result.ok) {
+      setRefusal(describeRefusal(result, cycle, todayId));
+      return;
+    }
+    onReplace(result.entries);
+    setSelected(from);
+    onLogged?.(from);
+  };
+
+  const inDrag = (dayId: ISODate) =>
+    drag !== null &&
+    dayId >= (drag.from <= drag.to ? drag.from : drag.to) &&
+    dayId <= (drag.from <= drag.to ? drag.to : drag.from);
 
   // Bounded rather than full width: at 768px a seven column grid gives 100px
   // cells, which reads as a wall of boxes rather than a calendar.
@@ -97,7 +161,11 @@ export function CycleCalendar({ cycle, todayId, onReplace, onDelete }: Props) {
         its own. Padding rather than `overflow-hidden`, which would clip the
         selection ring.
       */}
-      <div className="cycle-grid mt-4 grid grid-cols-7 gap-1 px-0.5">
+      <div
+        className="cycle-grid mt-4 grid grid-cols-7 gap-1 px-0.5 select-none"
+        onPointerUp={commitDrag}
+        onPointerLeave={commitDrag}
+      >
         {WEEKDAYS.map((day) => (
           <span
             key={day}
@@ -116,7 +184,23 @@ export function CycleCalendar({ cycle, todayId, onReplace, onDelete }: Props) {
             <button
               key={cell.dayId}
               type="button"
-              onClick={() => select(cell.dayId)}
+              onPointerDown={(e) => {
+                /*
+                 * Touch pointers are implicitly captured by the element they
+                 * start on, which would stop `pointerenter` firing on the days
+                 * dragged across. Releasing hands the pointer back to the grid.
+                 * Guarded because releasing a capture that was never taken
+                 * throws, which is the case for a mouse.
+                 */
+                if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+                  e.currentTarget.releasePointerCapture(e.pointerId);
+                }
+                beginDrag(cell.dayId);
+              }}
+              onPointerEnter={() => extendDrag(cell.dayId)}
+              onClick={() => {
+                if (!dragging.current && drag === null) select(cell.dayId);
+              }}
               aria-pressed={isSelected}
               aria-current={cell.dayId === todayId ? "date" : undefined}
               aria-label={[
@@ -135,7 +219,8 @@ export function CycleCalendar({ cycle, todayId, onReplace, onDelete }: Props) {
                 "relative grid aspect-square place-items-center rounded-lg text-[0.8rem] transition-colors",
                 cell.inMonth ? "text-foreground" : "text-muted-foreground/40",
                 cell.dayId === todayId && "font-medium",
-                isSelected && "ring-2 ring-ring ring-offset-1 ring-offset-card",
+                inDrag(cell.dayId) && "bg-primary/20",
+                isSelected && !drag && "ring-2 ring-ring ring-offset-1 ring-offset-card",
               )}
             >
               {/* Confirmed: one band, closed across the gutter. */}
@@ -184,6 +269,8 @@ export function CycleCalendar({ cycle, todayId, onReplace, onDelete }: Props) {
           cycle={cycle}
           dayId={selected}
           todayId={todayId}
+          note={noteOn(selected)}
+          onWriteNote={(patch) => onWriteNote(selected, patch)}
           onApply={apply}
           onDelete={(id) => {
             onDelete(id);
@@ -200,8 +287,8 @@ export function CycleCalendar({ cycle, todayId, onReplace, onDelete }: Props) {
 
       {!selected && (
         <p className="mt-3 text-[0.82rem] leading-relaxed text-muted-foreground">
-          Choose any day to log a period that started then, or to change one you have already
-          logged.
+          Tap a day to open it, or press and drag across several days to log a whole period at
+          once.
         </p>
       )}
     </div>
@@ -240,12 +327,16 @@ function SelectedDay({
   cycle,
   dayId,
   todayId,
+  note,
+  onWriteNote,
   onApply,
   onDelete,
 }: {
   cycle: CycleState;
   dayId: ISODate;
   todayId: ISODate;
+  note: CycleCheckIn;
+  onWriteNote: (patch: Partial<CycleCheckIn>) => void;
   onApply: (result: LogResult) => void;
   onDelete: (id: string) => void;
 }) {
@@ -259,14 +350,17 @@ function SelectedDay({
       <p className="text-[0.9rem] font-medium">{formatDayDate(dayId)}</p>
 
       {entry ? (
-        <LoggedDay
-          cycle={cycle}
-          entry={entry}
-          dayId={dayId}
-          todayId={todayId}
-          onApply={onApply}
-          onDelete={() => onDelete(entry.id)}
-        />
+        <>
+          <LoggedDay
+            cycle={cycle}
+            entry={entry}
+            dayId={dayId}
+            todayId={todayId}
+            onApply={onApply}
+            onDelete={() => onDelete(entry.id)}
+          />
+          <FlowPicker note={note} onWrite={onWriteNote} />
+        </>
       ) : (
         <div className="mt-2 space-y-3">
           <p className="text-[0.85rem] leading-relaxed text-muted-foreground">
@@ -304,6 +398,56 @@ function SelectedDay({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * How heavy the day was, recorded and read back.
+ *
+ * Claro never says whether a heavy day or a light one means anything. It is the
+ * user's own observation, kept beside their other notes, and nothing in the app
+ * behaves differently because of it.
+ */
+function FlowPicker({
+  note,
+  onWrite,
+}: {
+  note: CycleCheckIn;
+  onWrite: (patch: Partial<CycleCheckIn>) => void;
+}) {
+  return (
+    <div className="mt-3 border-t border-border/70 pt-3">
+      <p className="text-[10px] text-muted-foreground">How heavy was this day?</p>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {FLOWS.map((option) => {
+          const selected = note.flow === option;
+          return (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onWrite({ flow: selected ? null : option })}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                selected
+                  ? "border-primary bg-primary/15 text-foreground"
+                  : "border-border text-muted-foreground hover:border-foreground/40",
+              )}
+            >
+              <span aria-hidden className="flex gap-[2px]">
+                {Array.from({ length: FLOW_META[option].marks }, (_, i) => (
+                  <span key={i} className="h-1 w-1 rounded-full bg-current" />
+                ))}
+              </span>
+              {FLOW_META[option].label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+        Your own observation. Claro records it and says nothing about what it means.
+      </p>
     </div>
   );
 }
@@ -371,7 +515,7 @@ function LoggedDay({
         <button
           type="button"
           onClick={onDelete}
-          className="btn btn-sm btn-ghost gap-1.5 text-destructive"
+          className="btn btn-sm btn-quiet gap-1.5 border-destructive/40 text-destructive"
         >
           <Trash2 aria-hidden className="h-3.5 w-3.5" />
           Delete this period

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FORECAST_DAYS, forecast, pastNotesFor } from "./cycle-forecast";
+import { FORECAST_DAYS, forecast, pastNotesFor, todayIndex } from "./cycle-forecast";
 import { blankCycle } from "./storage";
 import type { CycleCheckIn, CycleState, ISODate } from "./types";
 
@@ -8,7 +8,7 @@ type Spec = ISODate | [ISODate, ISODate | null];
 
 const cycleWith = (...specs: Spec[]): CycleState => ({
   ...blankCycle(),
-  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
+  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
   entries: Object.fromEntries(
     specs.map((spec, i) => {
       const [startDate, endDate] = Array.isArray(spec) ? spec : [spec, null];
@@ -23,6 +23,7 @@ const note = (dayId: ISODate, patch: Partial<CycleCheckIn> = {}): CycleCheckIn =
   mood: null,
   stress: null,
   feeling: null,
+  flow: null,
   note: "",
   evening: null,
   updatedAt: "x",
@@ -32,14 +33,27 @@ const note = (dayId: ISODate, patch: Partial<CycleCheckIn> = {}): CycleCheckIn =
 const TODAY: ISODate = "2026-08-21";
 
 describe("the next seven days", () => {
-  it("starts at today and runs forward, one card each", () => {
+  it("centres on today: three back, today, three ahead", () => {
     const days = forecast(cycleWith(), TODAY);
 
     expect(days).toHaveLength(FORECAST_DAYS);
-    expect(days[0].dayId).toBe(TODAY);
-    expect(days[0].isToday).toBe(true);
-    expect(days[6].dayId).toBe("2026-08-27");
+    expect(days[0].dayId).toBe("2026-08-18");
+    expect(days[3].dayId).toBe(TODAY);
+    expect(days[6].dayId).toBe("2026-08-24");
     expect(days.filter((d) => d.isToday)).toHaveLength(1);
+  });
+
+  it("opens on today's card, wherever today falls in the run", () => {
+    const days = forecast(cycleWith(), TODAY);
+
+    expect(todayIndex(days)).toBe(3);
+    expect(days[todayIndex(days)].isToday).toBe(true);
+  });
+
+  it("signs the offset, so the past cannot be mistaken for the days ahead", () => {
+    const days = forecast(cycleWith(), TODAY);
+
+    expect(days.map((d) => d.offset)).toEqual([-3, -2, -1, 0, 1, 2, 3]);
   });
 
   it("counts the estimated cycle day forward across the strip", () => {
@@ -47,7 +61,9 @@ describe("the next seven days", () => {
     const cycle = cycleWith("2026-06-21", "2026-07-19", "2026-08-16");
     const days = forecast(cycle, TODAY);
 
-    expect(days.map((d) => d.cycleDay)).toEqual([6, 7, 8, 9, 10, 11, 12]);
+    // Today is day 6, so the run reads day 3 through day 9.
+    expect(days.map((d) => d.cycleDay)).toEqual([3, 4, 5, 6, 7, 8, 9]);
+    expect(days[3].cycleDay).toBe(6);
     expect(days[0].band).toBe("early");
   });
 
@@ -61,7 +77,8 @@ describe("the next seven days", () => {
     const cycle = cycleWith("2026-06-21", "2026-07-19", ["2026-08-20", "2026-08-23"]);
     const days = forecast(cycle, TODAY);
 
-    expect(days.slice(0, 3).map((d) => d.isPeriod)).toEqual([true, true, true]);
+    const marked = days.filter((d) => d.isPeriod).map((d) => d.dayId);
+    expect(marked).toEqual(["2026-08-20", "2026-08-21", "2026-08-22", "2026-08-23"]);
     expect(days.every((d) => !(d.isPeriod && d.isEstimated))).toBe(true);
   });
 
@@ -102,11 +119,30 @@ describe("the next seven days", () => {
         "isPeriod",
         "isEstimated",
         "hasPastNotes",
+        "loggedEnergy",
+        "feeling",
         "isToday",
+        "offset",
       ]),
     );
-    expect(keys.has("energy")).toBe(false);
+    expect(keys.has("energyPrediction")).toBe(false);
     expect(keys.has("descriptor")).toBe(false);
+  });
+
+  it("carries the energy the user logged, and nothing for a day they did not", () => {
+    const cycle: CycleState = {
+      ...cycleWith("2026-06-21", "2026-07-19", "2026-08-16"),
+      checkIns: { [TODAY]: note(TODAY, { energy: 4, feeling: "motivated" }) },
+    };
+
+    const days = forecast(cycle, TODAY);
+    const today = days[todayIndex(days)];
+
+    expect(today.loggedEnergy).toBe(4);
+    expect(today.feeling).toBe("motivated");
+    // Tomorrow has not been lived, so there is nothing to show for it.
+    expect(days[todayIndex(days) + 1].loggedEnergy).toBeNull();
+    expect(days[todayIndex(days) + 1].feeling).toBeNull();
   });
 });
 

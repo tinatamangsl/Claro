@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight, BookOpen, Lock, Trash2 } from "lucide-react";
+import { ArrowLeft, BookOpen, CalendarDays, ChevronDown, Lock, NotebookPen, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
@@ -7,7 +7,12 @@ import { useClaro } from "@/lib/claro-store";
 import { EditableText } from "@/components/EditableText";
 import { CycleCalendar } from "@/components/cycle/CycleCalendar";
 import { CycleGlance } from "@/components/cycle/CycleGlance";
+import { CycleNumbers } from "@/components/cycle/CycleNumbers";
 import { PeriodHistory } from "@/components/cycle/PeriodHistory";
+import { LoggedMeaning } from "@/components/cycle/LoggedMeaning";
+import { PhasePanel } from "@/components/cycle/PhasePanel";
+import { RangeStepper } from "@/components/cycle/RangeStepper";
+import { YearCalendar } from "@/components/cycle/YearCalendar";
 import {
   addPeriod,
   checkInOn,
@@ -55,6 +60,9 @@ export const Route = createFileRoute("/cycle")({
  * read back to them, and nothing on the page changes a plan.
  */
 export function CycleNotes() {
+  const [scale, setScale] = useState<"month" | "year">("month");
+  /** The period just recorded, so the page can explain it once. */
+  const [justLogged, setJustLogged] = useState<string | null>(null);
   const {
     today,
     cycle,
@@ -62,6 +70,7 @@ export function CycleNotes() {
     setCycleEntries,
     deleteCycleEntry,
     writeCycleCheckIn,
+    setCycleLength,
     deleteAllCycleData,
   } = useClaro();
 
@@ -89,69 +98,113 @@ export function CycleNotes() {
         </p>
       </header>
 
-      {/* The daily flow: the way in most mornings, so it comes first. */}
-      <Link
-        to="/cycle-day"
-        className="surface-raised flex items-center justify-between gap-4 p-5 transition-colors hover:border-foreground/25"
-      >
-        <span className="min-w-0">
-          <span className="display block text-[1.35rem] leading-tight">Log today</span>
-          <span className="mt-0.5 block text-[0.85rem] text-muted-foreground">
-            Energy, a word for the day, and anything you want to remember.
-          </span>
-        </span>
-        <ArrowRight aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
-      </Link>
-
       {/* 1. What Claro estimated, stated quietly and always labelled. */}
       <CycleGlance cycle={cycle} todayId={today} />
 
-      {/* 2. The action, and the loudest thing on the page. */}
-      <LogPeriod cycle={cycle} todayId={today} onReplace={setCycleEntries} />
+      {/* 2. The three ways in, side by side, so nothing is buried. */}
+      <QuickActions />
 
-      {/* 3. The calendar, where a range is drawn and edited. */}
+      {/* 3. The action, and the loudest thing on the page. */}
+      <LogPeriod
+        cycle={cycle}
+        todayId={today}
+        onReplace={setCycleEntries}
+        onLogged={setJustLogged}
+      />
+
+      {/* What was just written down, and what it does and does not mean. */}
+      {justLogged && (
+        <LoggedMeaning
+          cycle={cycle}
+          todayId={today}
+          startDate={justLogged}
+          onReplace={setCycleEntries}
+          onUndo={(id) => {
+            deleteCycleEntry(id);
+            setJustLogged(null);
+          }}
+          onMoved={setJustLogged}
+          onDismiss={() => setJustLogged(null)}
+        />
+      )}
+
+      {/* 4. One calendar, two scales. */}
       <section>
-        <div className="flex items-baseline gap-2.5">
-          <h2 className="eyebrow">Your cycle calendar</h2>
-          <span className="text-[11px] text-muted-foreground">tap any day</span>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+          <div className="flex items-baseline gap-2.5">
+            <h2 className="eyebrow">Your cycle calendar</h2>
+            <span className="text-[11px] text-muted-foreground">
+              {scale === "month" ? "tap any day" : "tap a month to open it"}
+            </span>
+          </div>
+          <ScaleToggle scale={scale} onChange={setScale} />
         </div>
         <div className="mt-3">
-          <CycleCalendar
-            cycle={cycle}
-            todayId={today}
-            onReplace={setCycleEntries}
-            onDelete={deleteCycleEntry}
-          />
+          {scale === "month" ? (
+            <CycleCalendar
+              cycle={cycle}
+              todayId={today}
+              onReplace={setCycleEntries}
+              onDelete={deleteCycleEntry}
+              onLogged={setJustLogged}
+              noteOn={(dayId) => checkInOn(cycle, dayId)}
+              onWriteNote={(dayId, patch) => writeCycleCheckIn(dayId, patch, new Date())}
+            />
+          ) : (
+            <YearCalendar cycle={cycle} todayId={today} onOpenMonth={() => setScale("month")} />
+          )}
+        </div>
+      </section>
+
+      {/* 5. The numbers, all worked out from the user's own dates. */}
+      <section>
+        <div className="flex items-baseline gap-2.5">
+          <h2 className="eyebrow">Your numbers</h2>
+          <span className="text-[11px] text-muted-foreground">from your own dates</span>
+        </div>
+        <div className="mt-3">
+          <CycleNumbers cycle={cycle} todayId={today} onSetLength={setCycleLength} />
+        </div>
+      </section>
+
+      {/* 6. Each part of the cycle, as this person's own record of it. */}
+      <section>
+        <div className="flex items-baseline gap-2.5">
+          <h2 className="eyebrow">Your cycle, part by part</h2>
+          <span className="text-[11px] text-muted-foreground">what you logged, and questions</span>
+        </div>
+        <div className="mt-3">
+          <PhasePanel cycle={cycle} todayId={today} />
         </div>
       </section>
 
       {/* 4. Every logged period, editable start and end. */}
-      <section>
-        <div className="flex items-baseline gap-2.5">
-          <h2 className="eyebrow">Your logged periods</h2>
-          <span className="text-[11px] text-muted-foreground">edit any of them</span>
-        </div>
-        <div className="mt-3">
-          <PeriodHistory
-            cycle={cycle}
-            todayId={today}
-            onReplace={setCycleEntries}
-            onDelete={deleteCycleEntry}
-          />
-        </div>
-      </section>
+      <Disclosure summary="Your logged periods" hint="edit any of them">
+        <PeriodHistory
+          cycle={cycle}
+          todayId={today}
+          onReplace={setCycleEntries}
+          onDelete={deleteCycleEntry}
+        />
+      </Disclosure>
 
       {/* 5. The user's own notes, and what they show. */}
       <Patterns cycle={cycle} />
 
-      <CheckIn
-        todayId={today}
-        note={checkInOn(cycle, today)}
-        recent={recentCheckIns(cycle)}
-        onWrite={(patch) => writeCycleCheckIn(today, patch, new Date())}
-      />
-
-      <PlanningPrompts />
+      {/*
+        Folded away by default. The three-tap log at /cycle-day is how a day
+        gets recorded now; this is the fuller form for anyone who wants the
+        five-level readings, and it is long enough to bury everything under it
+        if it is left open.
+      */}
+      <Disclosure summary="How today felt" hint="the fuller form">
+        <CheckIn
+          todayId={today}
+          note={checkInOn(cycle, today)}
+          recent={recentCheckIns(cycle, 5)}
+          onWrite={(patch) => writeCycleCheckIn(today, patch, new Date())}
+        />
+      </Disclosure>
 
       {/* 6. A quiet way through to the guidance, never in place of the actions. */}
       <section className="border-t border-border/70 pt-6">
@@ -222,24 +275,27 @@ function LogPeriod({
   cycle,
   todayId,
   onReplace,
+  onLogged,
 }: {
   cycle: CycleState;
   todayId: ISODate;
   onReplace: (entries: Record<string, CycleEntry>) => void;
+  onLogged: (startDate: ISODate) => void;
 }) {
-  const [start, setStart] = useState(todayId);
-  const [end, setEnd] = useState("");
+  const [start, setStart] = useState<ISODate>(todayId);
+  const [end, setEnd] = useState<ISODate | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
 
   const ongoing = ongoingPeriod(cycle);
 
-  const apply = (result: LogResult) => {
+  const apply = (result: LogResult, startDate?: ISODate) => {
     if (!result.ok) {
       setRefusal(describeRefusal(result, cycle, todayId));
       return false;
     }
     onReplace(result.entries);
     setRefusal(null);
+    if (startDate) onLogged(startDate);
     return true;
   };
 
@@ -271,6 +327,7 @@ function LogPeriod({
             onClick={() =>
               apply(
                 addPeriod(cycle, { startDate: todayId, endDate: null }, newId(), new Date(), todayId),
+                todayId,
               )
             }
             className="btn btn-primary"
@@ -280,63 +337,45 @@ function LogPeriod({
         )}
       </div>
 
-      {/* Manual historical entry: a whole past range in one go. */}
-      <form
-        className="mt-5 flex flex-wrap items-end gap-3 border-t border-border/70 pt-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const saved = apply(
-            addPeriod(
-              cycle,
-              { startDate: start, endDate: end === "" ? null : end },
-              newId(),
-              new Date(),
-              todayId,
-            ),
-          );
-          if (saved) {
-            setStart(todayId);
-            setEnd("");
-          }
-        }}
-      >
-        <span className="w-full text-[11px] text-muted-foreground">Add a past period</span>
+      {/* Manual historical entry: nudged into place, never typed out. */}
+      <div className="mt-5 border-t border-border/70 pt-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <span className="text-[11px] text-muted-foreground">Add a past period</span>
+          <span className="text-[10px] text-muted-foreground">
+            Or drag across the days on the calendar below.
+          </span>
+        </div>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] text-muted-foreground">Started</span>
-          <input
-            type="date"
-            value={start}
-            max={todayId}
-            aria-label="Start date of a past period"
-            onChange={(e) => {
-              setStart(e.target.value);
+        <div className="mt-2.5">
+          <RangeStepper
+            from={start}
+            to={end}
+            todayId={todayId}
+            onChange={(nextFrom, nextTo) => {
+              setStart(nextFrom);
+              setEnd(nextTo);
               setRefusal(null);
             }}
-            className="tnum rounded-md border border-border bg-card px-2.5 py-1.5 text-[0.88rem]"
           />
-        </label>
+        </div>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] text-muted-foreground">Ended, if it has</span>
-          <input
-            type="date"
-            value={end}
-            max={todayId}
-            min={start}
-            aria-label="End date of a past period"
-            onChange={(e) => {
-              setEnd(e.target.value);
-              setRefusal(null);
-            }}
-            className="tnum rounded-md border border-border bg-card px-2.5 py-1.5 text-[0.88rem]"
-          />
-        </label>
-
-        <button type="submit" className="btn btn-sm btn-quiet">
+        <button
+          type="button"
+          onClick={() => {
+            const saved = apply(
+              addPeriod(cycle, { startDate: start, endDate: end }, newId(), new Date(), todayId),
+              start,
+            );
+            if (saved) {
+              setStart(todayId);
+              setEnd(null);
+            }
+          }}
+          className="btn btn-sm btn-quiet mt-3"
+        >
           Add this period
         </button>
-      </form>
+      </div>
 
       {refusal && (
         <p role="alert" className="mt-3 text-[0.85rem] leading-relaxed text-muted-foreground">
@@ -380,37 +419,6 @@ function Patterns({ cycle }: { cycle: CycleState }) {
   );
 }
 
-/**
- * Questions, and only questions.
- *
- * Nothing here writes anything. The point is that the decision about a plan
- * stays with the person, which it cannot do if the app has already made it.
- */
-function PlanningPrompts() {
-  return (
-    <section>
-      <div className="flex items-baseline gap-2.5">
-        <h2 className="eyebrow">If you want to plan around this</h2>
-        <span className="text-[11px] text-muted-foreground">your call, always</span>
-      </div>
-
-      <div className="surface-quiet mt-3 p-4">
-        <ul className="space-y-2">
-          {SUPPORTIVE_PROMPTS.map((prompt) => (
-            <li key={prompt} className="flex items-start gap-2 text-[0.88rem] leading-relaxed">
-              <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gold" />
-              {prompt}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-          Claro does not change your day, week, quarter, habits, goals, focus sessions or sound
-          because of anything on this page. {SUPPORT_NOTE}
-        </p>
-      </div>
-    </section>
-  );
-}
 
 /** Neutral readings. No interpretation is offered, and none is stored. */
 function CheckIn({
@@ -426,12 +434,8 @@ function CheckIn({
 }) {
   return (
     <section>
-      <div className="flex items-baseline gap-2.5">
-        <h2 className="eyebrow">How today felt</h2>
-        <span className="text-[11px] text-muted-foreground">optional</span>
-      </div>
-
-      <div className="surface mt-3 space-y-4 p-4">
+      {/* The heading lives on the disclosure that opens this. */}
+      <div className="surface space-y-4 p-4">
         <Scale
           legend="Energy"
           options={ENERGY_LEVELS}
@@ -564,6 +568,95 @@ function Scale<T extends number>({
         ))}
       </div>
     </fieldset>
+  );
+}
+
+/**
+ * A section that stays out of the way until it is wanted.
+ *
+ * A native `<details>` rather than state and a chevron: it is keyboard
+ * reachable, findable by the browser's own in-page search, and it needs no
+ * JavaScript to open.
+ */
+function Disclosure({
+  summary,
+  hint,
+  children,
+}: {
+  summary: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group">
+      <summary className="flex cursor-pointer list-none items-baseline gap-2.5">
+        <h2 className="eyebrow">{summary}</h2>
+        <span className="text-[11px] text-muted-foreground">{hint}</span>
+        <ChevronDown
+          aria-hidden
+          className="ml-auto h-3.5 w-3.5 shrink-0 self-center text-muted-foreground transition-transform group-open:rotate-180"
+        />
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
+
+/**
+ * The three ways in, given equal weight.
+ *
+ * Logging a day, logging a period and reading the guide are different jobs; a
+ * page that hides two of them behind the third makes the user hunt.
+ */
+function QuickActions() {
+  const items = [
+    { to: "/cycle-day" as const, icon: NotebookPen, label: "Log today", hint: "3 taps" },
+    { to: "/cycle-day" as const, icon: CalendarDays, label: "This week", hint: "7 days", search: { view: "forecast" as const } },
+    { to: "/cycle-guide" as const, icon: BookOpen, label: "Learn", hint: "with sources" },
+  ];
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {items.map((item) => (
+        <Link
+          key={item.label}
+          to={item.to}
+          search={item.search}
+          className="surface flex flex-col items-center gap-1.5 rounded-xl p-3.5 transition-colors hover:border-foreground/25"
+        >
+          <item.icon aria-hidden className="h-4 w-4 text-muted-foreground" />
+          <span className="text-[0.85rem] font-medium">{item.label}</span>
+          <span className="text-[10px] text-muted-foreground">{item.hint}</span>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function ScaleToggle({
+  scale,
+  onChange,
+}: {
+  scale: "month" | "year";
+  onChange: (next: "month" | "year") => void;
+}) {
+  return (
+    <div className="flex rounded-full bg-muted p-0.5">
+      {(["month", "year"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={scale === option}
+          onClick={() => onChange(option)}
+          className={cn(
+            "rounded-full px-3 py-1 text-[11px] capitalize transition-colors",
+            scale === option ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+          )}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
   );
 }
 

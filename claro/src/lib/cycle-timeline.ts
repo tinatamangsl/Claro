@@ -27,6 +27,7 @@ import {
   STRESS_LABELS,
   type CycleCheckIn,
   type CycleState,
+  type Feeling,
   type ISODate,
 } from "./types";
 
@@ -200,4 +201,73 @@ export function notesInBand(cycle: CycleState, dayId: ISODate, limit = 5): Cycle
     })
     .sort((a, b) => b.dayId.localeCompare(a.dayId))
     .slice(0, limit);
+}
+
+// --------------------------------------------------- one band, described
+
+export type BandSummary = {
+  band: CycleBand;
+  /** Which estimated cycle days this band covers, or null without an estimate. */
+  days: { from: number; to: number } | null;
+  /** How many of the user's notes fall in it. */
+  notes: number;
+  /** The word they chose most often here. Null on a tie or with nothing logged. */
+  commonFeeling: Feeling | null;
+  /** How many of those notes recorded low energy. A count, never a verdict. */
+  lowEnergy: number;
+};
+
+/** Every note the user wrote in one band of their own estimated cycle. */
+export function notesForBand(cycle: CycleState, band: CycleBand): CycleCheckIn[] {
+  return Object.values(cycle.checkIns)
+    .filter(
+      (note) =>
+        note.energy !== null ||
+        note.feeling !== null ||
+        note.mood !== null ||
+        note.stress !== null ||
+        note.note.trim() !== "",
+    )
+    .filter((note) => positionOn(cycle, note.dayId)?.band === band)
+    .sort((a, b) => b.dayId.localeCompare(a.dayId));
+}
+
+/**
+ * What the user's own notes say about one part of their cycle.
+ *
+ * Counts and a most-frequent word, and nothing beyond them. There is no
+ * suggestion here about food, movement, work or capacity, because a count of
+ * what somebody wrote does not support one: knowing they logged "exhausted"
+ * four times says nothing about what they should have eaten.
+ */
+export function summariseBand(cycle: CycleState, band: CycleBand): BandSummary {
+  const estimate = estimateNext(cycle);
+  const notes = notesForBand(cycle, band);
+
+  const counts = new Map<Feeling, number>();
+  for (const note of notes) {
+    if (!note.feeling) continue;
+    counts.set(note.feeling, (counts.get(note.feeling) ?? 0) + 1);
+  }
+
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const tied = ranked.length > 1 && ranked[0][1] === ranked[1][1];
+
+  let days: BandSummary["days"] = null;
+  if (estimate) {
+    const third = estimate.typicalGap / 3;
+    const index = CYCLE_BANDS.indexOf(band);
+    days = {
+      from: Math.floor(third * index) + 1,
+      to: index === CYCLE_BANDS.length - 1 ? estimate.typicalGap : Math.floor(third * (index + 1)),
+    };
+  }
+
+  return {
+    band,
+    days,
+    notes: notes.length,
+    commonFeeling: ranked.length > 0 && !tied ? ranked[0][0] : null,
+    lowEnergy: notes.filter((note) => note.energy !== null && note.energy <= 2).length,
+  };
 }

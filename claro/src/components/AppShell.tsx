@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import { formatQuarterShort, formatWeekNumber, quarterOfDay, weekOfDay } from "@/lib/dates";
+import { UndoBar } from "@/components/UndoBar";
 import { FocusControl } from "@/components/FocusControl";
 import { SoundControl } from "@/components/SoundControl";
 import { useClaro } from "@/lib/claro-store";
@@ -87,6 +88,9 @@ export function AppShell({ children, wide }: { children: ReactNode; wide?: boole
       <main className={cn(page, "flex-1 pb-14 pt-8 sm:pt-12")}>
         {ready ? children : <BootSkeleton />}
       </main>
+
+      {/* One way back, on every screen. */}
+      <UndoBar />
 
       <AppFooter ready={ready} today={today} page={page} />
     </div>

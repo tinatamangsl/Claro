@@ -66,3 +66,30 @@ export function describeMorning(note: CycleCheckIn, feelingLabel: (f: Feeling) =
 
   return parts.length === 0 ? "" : parts.join(", ");
 }
+
+
+// ------------------------------------------------------- the guided steps
+
+/**
+ * "It started a few days ago" without making anyone find a date picker.
+ *
+ * Five is the last chip rather than a cap on anything: past it, the calendar on
+ * the cycle page takes an exact date, which is the right tool for a period the
+ * user is reconstructing rather than remembering.
+ */
+export const DAYS_AGO_OPTIONS = [1, 2, 3, 4, 5] as const;
+
+export type PeriodAnswer =
+  | { kind: "started"; daysAgo: number }
+  | { kind: "ended" }
+  | { kind: "none" };
+
+/**
+ * The completion line.
+ *
+ * Warm, and deliberately about what the user just entered rather than about
+ * what their body is doing or what they should now do with their day. The
+ * design this came from offered "rest is productive right now" and "finish,
+ * don't start"; both decide somebody's day for them from a calendar estimate.
+ */
+export const LOGGED_LINE = "logged. that's today, in your own words.";

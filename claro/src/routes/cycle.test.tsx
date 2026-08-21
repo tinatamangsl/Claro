@@ -79,12 +79,65 @@ describe("the screen once it is on", () => {
     const { container } = await enabled();
 
     const headings = [...container.querySelectorAll("h1, h2")].map((h) => h.textContent);
-    expect(headings.slice(0, 4)).toEqual([
+    expect(headings).toEqual([
       "Cycle at a glance",
       "Log a period start",
       "Your cycle calendar",
+      "Your numbers",
+      "Your cycle, part by part",
       "Your logged periods",
+      "How today felt",
+      "Your data",
     ]);
+  });
+
+  it("puts the three ways in side by side, none of them buried", async () => {
+    await enabled();
+
+    for (const label of ["Log today", "This week", "Learn"]) {
+      expect(screen.getByRole("link", { name: new RegExp(label) })).toBeTruthy();
+    }
+  });
+
+  it("offers the calendar at both scales", async () => {
+    const { container } = await enabled();
+
+    expect(screen.getByRole("button", { name: "month" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "year" }));
+
+    expect(container.textContent).toContain("Logged by you");
+    expect(screen.getByRole("button", { name: "Previous year" })).toBeTruthy();
+  });
+
+  it("offers only calculators a calendar can actually support", async () => {
+    const { container } = await enabled();
+    const text = container.textContent!.toLowerCase();
+
+    expect(text).toContain("your usual cycle length");
+    expect(text).toContain("which cycle day is a date?");
+    // Every calculator the reference apps offer here is a fertility or
+    // pregnancy prediction, and none of them can come from a calendar.
+    for (const banned of ["ovulation calculator", "fertile", "implantation", "hcg", "due date"]) {
+      expect(text).not.toContain(banned);
+    }
+  });
+
+  it("answers the per-phase slot with questions, never with food or exercise", async () => {
+    const { container } = await enabled();
+    const text = container.textContent!.toLowerCase();
+
+    expect(text).toContain("what feels supportive for you?");
+    expect(text).toContain("does not tell you what to eat");
+    for (const banned of [
+      "protein-rich",
+      "fermented",
+      "gentle movement",
+      "avoid caffeine",
+      "supplement",
+      "workout",
+    ]) {
+      expect(text).not.toContain(banned);
+    }
   });
 
   it("puts the main action in the open, never behind a Learn more", async () => {
@@ -116,9 +169,18 @@ describe("the screen once it is on", () => {
 
     expect(container.textContent).toContain("How is your energy today?");
     expect(container.textContent).toContain("Would you like to reduce, keep, or expand your plan?");
-    expect(container.textContent).toContain(
-      "Claro does not change your day, week, quarter, habits, goals, focus sessions or sound",
+    expect(container.textContent).toContain("does not tell you what to eat");
+  });
+
+  it("folds the long sections away, so the page opens short", async () => {
+    const { container } = await enabled();
+
+    const folded = [...container.querySelectorAll("details")].map(
+      (d) => d.querySelector("h2")?.textContent,
     );
+    expect(folded).toEqual(["Your logged periods", "How today felt"]);
+    // Closed by default, and still findable by the browser's own search.
+    expect([...container.querySelectorAll("details")].every((d) => !d.open)).toBe(true);
   });
 });
 
@@ -146,35 +208,48 @@ describe("logging a period from the screen", () => {
     expect(sortedEntries(api.store!.cycle)[0].endDate).toBe(todayId);
   });
 
-  it("adds a whole past range from the manual form", async () => {
+  it("adds a past period by nudging the days, with no date typing", async () => {
     const { api } = await enabled();
     const todayId = api.store!.today;
-    const from = shiftDayId(todayId, -40);
-    const to = shiftDayId(todayId, -37);
 
-    fireEvent.change(screen.getByLabelText("Start date of a past period"), {
-      target: { value: from },
-    });
-    fireEvent.change(screen.getByLabelText("End date of a past period"), {
-      target: { value: to },
-    });
+    // The form opens on today. Three taps back is three days ago.
+    const back = screen.getAllByRole("button", {
+      name: "One day earlier for the started date",
+    })[0];
+    fireEvent.click(back);
+    fireEvent.click(back);
+    fireEvent.click(back);
     fireEvent.click(screen.getByRole("button", { name: "Add this period" }));
 
     const entries = sortedEntries(api.store!.cycle);
     expect(entries).toHaveLength(1);
-    expect(entries[0].startDate).toBe(from);
-    expect(entries[0].endDate).toBe(to);
+    expect(entries[0].startDate).toBe(shiftDayId(todayId, -3));
+    // No end was added, so it is recorded as ongoing rather than guessed at.
+    expect(entries[0].endDate).toBeNull();
+  });
+
+  it("adds an end to a past period without opening a date picker", async () => {
+    const { api } = await enabled();
+    const todayId = api.store!.today;
+
+    const back = screen.getAllByRole("button", {
+      name: "One day earlier for the started date",
+    })[0];
+    fireEvent.click(back);
+    fireEvent.click(back);
+    fireEvent.click(screen.getAllByRole("button", { name: "Add an end date" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Add this period" }));
+
+    const entries = sortedEntries(api.store!.cycle);
+    expect(entries[0].startDate).toBe(shiftDayId(todayId, -2));
+    expect(entries[0].endDate).toBe(todayId);
   });
 
   it("refuses a duplicate start rather than double counting it", async () => {
     const { api, container } = await enabled();
-    const todayId = api.store!.today;
 
     fireEvent.click(screen.getByRole("button", { name: "My period started today" }));
-
-    fireEvent.change(screen.getByLabelText("Start date of a past period"), {
-      target: { value: todayId },
-    });
+    // The past-period form still opens on today, so adding it again duplicates.
     fireEvent.click(screen.getByRole("button", { name: "Add this period" }));
 
     expect(sortedEntries(api.store!.cycle)).toHaveLength(1);
@@ -189,19 +264,19 @@ describe("logging a period from the screen", () => {
       api.store!.setCycleEntries({
         e0: {
           id: "e0",
-          startDate: shiftDayId(todayId, -20),
-          endDate: shiftDayId(todayId, -17),
+          startDate: shiftDayId(todayId, -4),
+          endDate: shiftDayId(todayId, -1),
           loggedAt: "x",
         },
       }),
     );
 
-    fireEvent.change(screen.getByLabelText("Start date of a past period"), {
-      target: { value: shiftDayId(todayId, -18) },
-    });
-    fireEvent.change(screen.getByLabelText("End date of a past period"), {
-      target: { value: shiftDayId(todayId, -15) },
-    });
+    // Two taps back lands inside the period already logged.
+    const back = screen.getAllByRole("button", {
+      name: "One day earlier for the started date",
+    })[0];
+    fireEvent.click(back);
+    fireEvent.click(back);
     fireEvent.click(screen.getByRole("button", { name: "Add this period" }));
 
     expect(sortedEntries(api.store!.cycle)).toHaveLength(1);

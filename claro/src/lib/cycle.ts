@@ -16,7 +16,14 @@
 import { addDays, differenceInCalendarDays } from "date-fns";
 
 import { formatDayId, formatDayShort, parseDayId } from "./dates";
-import type { CycleCheckIn, CycleEntry, CycleState, ISODate } from "./types";
+import {
+  MAX_STATED_CYCLE_DAYS,
+  MIN_STATED_CYCLE_DAYS,
+  type CycleCheckIn,
+  type CycleEntry,
+  type CycleState,
+  type ISODate,
+} from "./types";
 
 /** Below this there is no history to speak from, so nothing is estimated. */
 export const MIN_ENTRIES_FOR_ESTIMATE = 3;
@@ -51,11 +58,18 @@ function median(values: number[]): number {
 }
 
 export type CycleEstimate = {
-  /** The user's own median gap, in days. */
+  /** The length being used, in days. */
   typicalGap: number;
   nextStart: ISODate;
   /** How many gaps the estimate was drawn from — shown, not hidden. */
   basedOn: number;
+  /**
+   * Where the length came from, so the interface can say which it is.
+   *
+   * `"logged"` is the median of the user's real gaps. `"stated"` is the figure
+   * they typed in, used only until there is enough history to do better.
+   */
+  source: "logged" | "stated";
 };
 
 /**
@@ -66,24 +80,45 @@ export type CycleEstimate = {
  * **Start dates only.** A cycle is measured from the first day of one period to
  * the first day of the next, so how long a period lasted never enters this
  * calculation. Mixing the two is the classic way to get the number wrong.
+ *
+ * Falls back to the length the user stated when there is not yet enough history
+ * to measure one. That is deliberately second in line: a figure somebody
+ * remembers is a way to see something useful on day one, not a better answer
+ * than the dates they went on to log.
  */
 export function estimateNext(cycle: CycleState): CycleEstimate | null {
   const entries = sortedEntries(cycle);
-  if (entries.length < MIN_ENTRIES_FOR_ESTIMATE) return null;
+  if (entries.length === 0) return null;
 
-  const usable = gaps(entries).filter(
-    (gap) => gap >= PLAUSIBLE_GAP.min && gap <= PLAUSIBLE_GAP.max,
-  );
-  if (usable.length === 0) return null;
-
-  const typicalGap = median(usable);
   const last = entries[entries.length - 1];
-
-  return {
+  const from = (typicalGap: number, basedOn: number, source: "logged" | "stated") => ({
     typicalGap,
     nextStart: formatDayId(addDays(parseDayId(last.startDate), typicalGap)),
-    basedOn: usable.length,
-  };
+    basedOn,
+    source,
+  });
+
+  if (entries.length >= MIN_ENTRIES_FOR_ESTIMATE) {
+    const usable = gaps(entries).filter(
+      (gap) => gap >= PLAUSIBLE_GAP.min && gap <= PLAUSIBLE_GAP.max,
+    );
+    if (usable.length > 0) return from(median(usable), usable.length, "logged");
+  }
+
+  const stated = cycle.settings.cycleLength;
+  if (stated !== null && stated >= MIN_STATED_CYCLE_DAYS && stated <= MAX_STATED_CYCLE_DAYS) {
+    return from(stated, 0, "stated");
+  }
+
+  return null;
+}
+
+/** "3 weeks and 4 days" back into days, for a field that accepts either. */
+export function clampStatedCycleLength(days: number): number | null {
+  if (!Number.isFinite(days)) return null;
+  const rounded = Math.round(days);
+  if (rounded < MIN_STATED_CYCLE_DAYS || rounded > MAX_STATED_CYCLE_DAYS) return null;
+  return rounded;
 }
 
 /** True when the day is a logged start. Used only to mark the calendar. */
@@ -111,6 +146,7 @@ export function checkInOn(cycle: CycleState, dayId: ISODate): CycleCheckIn {
       mood: null,
       stress: null,
       feeling: null,
+      flow: null,
       note: "",
       evening: null,
       // Read during render, so no clock is touched here. A blank note has never

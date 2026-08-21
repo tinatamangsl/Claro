@@ -43,7 +43,12 @@ describe("blank records", () => {
       focusPrefs: DEFAULT_FOCUS_PREFS,
       habits: {},
       habitCompletions: {},
-      cycle: { settings: { enabled: false, optedInAt: null }, entries: {}, checkIns: {}, lastSeen: null },
+      cycle: {
+        settings: { enabled: false, optedInAt: null, cycleLength: null },
+        entries: {},
+        checkIns: {},
+        lastSeen: null,
+      },
       sound: {
         volume: 0.4,
         muted: false,
@@ -731,7 +736,7 @@ describe("v7 → v8 period range migration", () => {
     ...emptyState(),
     version: 7,
     cycle: {
-      settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
+      settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
       entries: {
         e0: { id: "e0", startDate: "2026-06-01", loggedAt: "2026-06-01T09:00:00.000Z" },
         e1: { id: "e1", startDate: "2026-06-29", loggedAt: "2026-06-29T09:00:00.000Z" },
@@ -789,7 +794,7 @@ describe("period ranges survive a refresh", () => {
   const withPeriods = (): ClaroState => ({
     ...emptyState(),
     cycle: {
-      settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
+      settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
       entries: {
         done: {
           id: "done",

@@ -15,7 +15,7 @@ import { estimatedWindow } from "./cycle-calendar";
 import { isPeriodDay } from "./cycle";
 import { notesInBand, positionOn, type CycleBand } from "./cycle-timeline";
 import { shiftDayId } from "./dates";
-import type { CycleCheckIn, CycleState, ISODate } from "./types";
+import type { CycleCheckIn, CycleState, EnergyLevel, Feeling, ISODate } from "./types";
 
 export type ForecastDay = {
   dayId: ISODate;
@@ -28,22 +28,39 @@ export type ForecastDay = {
   isEstimated: boolean;
   /** The user wrote something around this point in a past cycle. */
   hasPastNotes: boolean;
+  /**
+   * What the user recorded on this day, if anything.
+   *
+   * Deliberately **logged**, never predicted. There is no `energyPrediction`
+   * beside it and there must not be: a strip that tells somebody on Monday what
+   * Thursday will feel like is guessing, and the guess shapes the day.
+   */
+  loggedEnergy: EnergyLevel | null;
+  feeling: Feeling | null;
   isToday: boolean;
+  /** Days from today. Negative is the past, which cannot be logged forward. */
+  offset: number;
 };
 
-export const FORECAST_DAYS = 7;
+/** Three back, today, three ahead. */
+export const FORECAST_BACK = 3;
+export const FORECAST_AHEAD = 3;
+export const FORECAST_DAYS = FORECAST_BACK + 1 + FORECAST_AHEAD;
 
 export function forecast(
   cycle: CycleState,
   todayId: ISODate,
-  days = FORECAST_DAYS,
+  back = FORECAST_BACK,
+  ahead = FORECAST_AHEAD,
 ): ForecastDay[] {
   const window = estimatedWindow(cycle);
 
-  return Array.from({ length: days }, (_, i) => {
-    const dayId = shiftDayId(todayId, i);
+  return Array.from({ length: back + 1 + ahead }, (_, i) => {
+    const offset = i - back;
+    const dayId = shiftDayId(todayId, offset);
     const position = positionOn(cycle, dayId);
     const isPeriod = isPeriodDay(cycle, dayId, todayId);
+    const note = cycle.checkIns[dayId] ?? null;
 
     return {
       dayId,
@@ -53,9 +70,18 @@ export function forecast(
       // A confirmed day is never also an estimate, exactly as on the calendar.
       isEstimated: !isPeriod && window !== null && dayId >= window.from && dayId <= window.to,
       hasPastNotes: notesInBand(cycle, dayId, 1).length > 0,
+      loggedEnergy: note?.energy ?? null,
+      feeling: note?.feeling ?? null,
       isToday: dayId === todayId,
+      offset,
     };
   });
+}
+
+/** Where today sits in the strip, which is the card to open on. */
+export function todayIndex(days: ForecastDay[]): number {
+  const found = days.findIndex((day) => day.isToday);
+  return found === -1 ? 0 : found;
 }
 
 /**

@@ -1,157 +1,297 @@
 import { useEffect, useRef, useState } from "react";
 
-import { bandOf, levelForBand, ENERGY_BANDS, ENERGY_BAND_LABELS } from "@/lib/cycle-log";
+import {
+  DAYS_AGO_OPTIONS,
+  ENERGY_BANDS,
+  ENERGY_BAND_LABELS,
+  LOGGED_LINE,
+  bandOf,
+  levelForBand,
+  type EnergyBand,
+  type PeriodAnswer,
+} from "@/lib/cycle-log";
 import { BAND_LABELS, positionOn } from "@/lib/cycle-timeline";
+import { ongoingPeriod } from "@/lib/cycle";
 import { cn } from "@/lib/utils";
-import { FEELINGS, FEELING_META, type CycleCheckIn, type CycleState, type Feeling, type ISODate } from "@/lib/types";
+import {
+  FEELINGS,
+  FEELING_META,
+  type CycleCheckIn,
+  type CycleState,
+  type Feeling,
+  type ISODate,
+} from "@/lib/types";
 
 /** Long enough to read the line, short enough not to be a wait. */
 const CONFIRM_MS = 1500;
+
+/** One word each, so the shape of the choice is obvious at a glance. */
+const ENERGY_HINTS: Record<EnergyBand, { moon: string; hint: string }> = {
+  low: { moon: "🌑", hint: "I need to take it easy" },
+  medium: { moon: "🌓", hint: "I can manage the essentials" },
+  high: { moon: "🌕", hint: "I'm ready for more" },
+};
+
+type Step = "period" | "daysAgo" | "feeling" | "energy" | "done";
 
 type Props = {
   cycle: CycleState;
   todayId: ISODate;
   note: CycleCheckIn;
   onWrite: (patch: Partial<CycleCheckIn>) => void;
+  /** Records a period start that began `daysAgo` days ago, or closes an open one. */
+  onPeriod: (answer: PeriodAnswer) => void;
   onDone: () => void;
 };
 
 /**
- * The morning log. Three taps on a good day.
+ * The morning log, as one question at a time.
  *
- * The line under the date says where today sits in the user's *own* estimated
- * cycle, and says it positionally. A physiological name here would be Claro
- * asserting what is happening inside somebody from a calendar, which it cannot
- * know and must not imply.
+ * A tap is the whole interaction: choosing an answer advances, so there is no
+ * submit button between steps and never two decisions on screen at once. Three
+ * taps on an ordinary day.
  *
- * Nothing on this screen predicts anything, and nothing it records changes a
- * plan. Every control writes one field and stops.
+ * The first question adapts to what is already recorded rather than asking the
+ * same thing regardless. With a period already open it asks whether that period
+ * has ended, and it always offers a way through without logging one, because a
+ * flow that can only be answered "yes" is not asking.
  */
-export function DayLog({ cycle, todayId, note, onWrite, onDone }: Props) {
-  const [saved, setSaved] = useState(false);
+export function DayLog({ cycle, todayId, note, onWrite, onPeriod, onDone }: Props) {
+  const [step, setStep] = useState<Step>("period");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
-  const log = () => {
-    setSaved(true);
+  const finish = () => {
+    setStep("done");
     timer.current = setTimeout(onDone, CONFIRM_MS);
   };
 
-  if (saved) {
+  const position = positionOn(cycle, todayId);
+  const ongoing = ongoingPeriod(cycle);
+
+  if (step === "done") {
     return (
       <div
         role="status"
-        className="flex min-h-[60vh] items-center justify-center px-6 text-center"
+        className="flex min-h-[55vh] flex-col items-center justify-center px-6 text-center"
       >
-        <p className="display text-[1.5rem] leading-snug italic">
-          logged. here is what your own notes show.
-        </p>
+        <p className="display text-[1.5rem] leading-snug italic">{LOGGED_LINE}</p>
+        {position && (
+          <p className="mt-3 text-[0.82rem] text-muted-foreground">
+            Day {position.day}. {BAND_LABELS[position.band]}.
+          </p>
+        )}
       </div>
     );
   }
 
-  const position = positionOn(cycle, todayId);
-  const band = bandOf(note.energy);
+  const stepIndex = step === "period" || step === "daysAgo" ? 0 : step === "feeling" ? 1 : 2;
 
   return (
-    <div className="space-y-7">
-      <header>
-        <p className="text-[0.82rem] text-muted-foreground">
-          {position ? `Day ${position.day} of your cycle` : "Not enough logged dates for a day count"}
-        </p>
-        {position && (
-          <p className="display mt-0.5 text-[0.95rem] italic text-foreground/80">
-            {BAND_LABELS[position.band]}
-          </p>
-        )}
-        <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-          An estimate from the dates you entered, not medical information.
-        </p>
-      </header>
+    <div className="flex min-h-[55vh] flex-col">
+      <Dots active={stepIndex} />
 
-      <section>
-        <h2 className="eyebrow">Energy today</h2>
-        <div className="mt-2.5 grid grid-cols-3 gap-2">
-          {ENERGY_BANDS.map((option) => {
-            const selected = band === option;
-            return (
+      {step === "period" && (
+        <Stage question={ongoing ? "Is your period still going?" : "Has your period started?"}>
+          {ongoing ? (
+            <>
+              <Choice
+                label="Yes, still going"
+                onSelect={() => {
+                  onPeriod({ kind: "none" });
+                  setStep("feeling");
+                }}
+              />
+              <Choice
+                label="It ended today"
+                onSelect={() => {
+                  onPeriod({ kind: "ended" });
+                  setStep("feeling");
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <Choice
+                label="Yes, today"
+                onSelect={() => {
+                  onPeriod({ kind: "started", daysAgo: 0 });
+                  setStep("feeling");
+                }}
+              />
+              <Choice label="It started a few days ago" onSelect={() => setStep("daysAgo")} />
+              {/*
+                A flow that can only be answered yes is not asking anything.
+                Every answer reports, and "none" is the handler's no-op, so the
+                decision about whether anything is written lives in one place.
+              */}
+              <Choice
+                label="No, not yet"
+                quiet
+                onSelect={() => {
+                  onPeriod({ kind: "none" });
+                  setStep("feeling");
+                }}
+              />
+            </>
+          )}
+        </Stage>
+      )}
+
+      {step === "daysAgo" && (
+        <Stage question="How many days ago?">
+          <div className="flex gap-2">
+            {DAYS_AGO_OPTIONS.map((days) => (
               <button
-                key={option}
+                key={days}
                 type="button"
-                aria-pressed={selected}
-                onClick={() =>
-                  onWrite({ energy: selected ? null : levelForBand(option, note.energy) })
-                }
-                className={cn(
-                  "h-14 rounded-lg text-[0.92rem] font-medium transition-colors",
-                  selected
-                    ? "bg-primary text-primary-foreground"
-                    : "border border-border bg-card text-muted-foreground hover:text-foreground",
-                )}
+                onClick={() => {
+                  onPeriod({ kind: "started", daysAgo: days });
+                  setStep("feeling");
+                }}
+                className="h-14 flex-1 rounded-xl bg-card text-[0.95rem] font-medium ring-1 ring-border transition-colors hover:bg-muted"
               >
-                {ENERGY_BAND_LABELS[option]}
+                {days === 5 ? "5+" : days}
               </button>
-            );
-          })}
-        </div>
-      </section>
+            ))}
+          </div>
+          <p className="mt-3 text-center text-[10px] text-muted-foreground">
+            Longer ago than that? The cycle calendar takes an exact date.
+          </p>
+        </Stage>
+      )}
 
-      <section>
-        <h2 className="eyebrow">How I feel</h2>
-        <div className="mt-2.5 grid grid-cols-3 gap-3">
-          {FEELINGS.map((feeling) => {
-            const selected = note.feeling === feeling;
-            return (
+      {step === "feeling" && (
+        <Stage question="How are you feeling right now?">
+          <div className="grid grid-cols-2 gap-3">
+            {FEELINGS.map((feeling) => (
               <button
                 key={feeling}
                 type="button"
-                aria-pressed={selected}
-                onClick={() => onWrite({ feeling: selected ? null : (feeling as Feeling) })}
+                aria-pressed={note.feeling === feeling}
+                onClick={() => {
+                  onWrite({ feeling: feeling as Feeling });
+                  setStep("energy");
+                }}
                 className={cn(
-                  "flex h-11 items-center justify-center gap-1.5 rounded-lg px-2 text-[0.8rem] transition-colors",
-                  selected ? "bg-foreground text-background" : "bg-muted text-foreground",
+                  "flex h-14 items-center justify-center gap-2 rounded-xl text-[0.9rem] transition-colors",
+                  note.feeling === feeling
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card text-foreground ring-1 ring-border hover:bg-muted",
                 )}
               >
-                <span aria-hidden className="text-[0.95rem] leading-none">
+                <span aria-hidden className="text-[1.05rem] leading-none">
                   {FEELING_META[feeling].emoji}
                 </span>
                 {FEELING_META[feeling].label}
               </button>
-            );
-          })}
-        </div>
-      </section>
+            ))}
+          </div>
+          <SkipLine onSkip={() => setStep("energy")} />
+        </Stage>
+      )}
 
-      <section>
-        <div className="flex items-baseline gap-1.5">
-          <h2 className="eyebrow">Anything notable</h2>
-          <span className="text-[10px] font-normal text-muted-foreground/80">(optional)</span>
-        </div>
-        <input
-          type="text"
-          value={note.note}
-          aria-label="Anything notable about today"
-          placeholder="pain, mood, sleep, cravings…"
-          onChange={(e) => onWrite({ note: e.target.value })}
-          className="mt-2 w-full border-b border-border bg-transparent pb-2 text-[0.9rem] outline-none placeholder:text-muted-foreground/70 focus:border-foreground/40"
+      {step === "energy" && (
+        <Stage question="What's your energy like today?">
+          <div className="space-y-2">
+            {ENERGY_BANDS.map((band) => (
+              <button
+                key={band}
+                type="button"
+                aria-pressed={bandOf(note.energy) === band}
+                onClick={() => {
+                  onWrite({ energy: levelForBand(band, note.energy) });
+                  finish();
+                }}
+                className={cn(
+                  "flex h-14 w-full items-center gap-3 rounded-xl px-4 text-left transition-colors",
+                  bandOf(note.energy) === band
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card ring-1 ring-border hover:bg-muted",
+                )}
+              >
+                <span aria-hidden className="text-[1.1rem] leading-none">
+                  {ENERGY_HINTS[band].moon}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[0.92rem] font-medium">
+                    {ENERGY_BAND_LABELS[band]}
+                  </span>
+                  <span className="block text-[11px] opacity-75">{ENERGY_HINTS[band].hint}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          <SkipLine onSkip={finish} label="skip and finish" />
+        </Stage>
+      )}
+    </div>
+  );
+}
+
+/** One question, filling the content area. Fades in so steps do not jump. */
+function Stage({ question, children }: { question: string; children: React.ReactNode }) {
+  return (
+    <div key={question} className="cycle-step flex flex-1 flex-col justify-center">
+      <h2 className="display mb-7 text-center text-[1.375rem] leading-snug italic">{question}</h2>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+function Choice({
+  label,
+  onSelect,
+  quiet,
+}: {
+  label: string;
+  onSelect: () => void;
+  quiet?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "mb-2 h-14 w-full rounded-xl px-4 text-[0.95rem] transition-colors",
+        quiet
+          ? "text-muted-foreground hover:text-foreground"
+          : "bg-card font-medium ring-1 ring-border hover:bg-muted",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function SkipLine({ onSkip, label = "skip this" }: { onSkip: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onSkip}
+      className="mt-5 w-full text-center text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+    >
+      {label}
+    </button>
+  );
+}
+
+/** Where you are, stated quietly. Three questions, never a score. */
+function Dots({ active }: { active: number }) {
+  return (
+    <div aria-hidden className="mb-6 flex justify-center gap-1.5">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className={cn(
+            "h-1.5 w-1.5 rounded-full transition-colors",
+            i <= active ? "bg-foreground/45" : "bg-border",
+          )}
         />
-      </section>
-
-      <section>
-        <button
-          type="button"
-          onClick={log}
-          className="h-[52px] w-full rounded-xl bg-primary text-[0.95rem] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-        >
-          log it
-        </button>
-        <p className="mt-2 text-center text-[10px] text-muted-foreground">
-          takes 3 taps on a good day
-        </p>
-      </section>
+      ))}
     </div>
   );
 }

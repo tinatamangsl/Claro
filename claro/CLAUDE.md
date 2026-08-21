@@ -49,7 +49,10 @@ Everything hangs off a single three-level hierarchy:
 QUARTER  Direction    → WEEK  Commitment  → DAY  Execution
 ```
 
-Nav is four items: **Today | Week | Quarter | Calendar**. Calendar was added deliberately as a
+Nav is four items: **Today | Week | Quarter | Calendar**. The cycle routes are deliberately not
+among them: `/cycle` is reached from Calendar and from Daily, `/cycle-day` and `/cycle-guide` from
+`/cycle`. Cycle notes are off until turned on, and a nav item would announce the feature to
+somebody who never asked for it. Calendar was added deliberately as a
 *review* surface, not a fifth planning level: it holds Month (the detailed view), Quarter and Year,
 all read from one shared aggregation in `lib/calendar.ts`. Quarter and Year are read only, and no
 view computes a total of its own. The planning Quarter in the nav is a different screen. The product thesis is still "fewer, more meaningful things", so answer most
@@ -88,7 +91,8 @@ src/lib/goals.ts        the one goal vocabulary — resolve and label a GoalRef
 src/lib/habits.ts       habits and their consistency counts (never streaks)
 src/hooks/use-now.ts    the app's ONLY tick source
 src/lib/claro-store.tsx ClaroProvider + useClaro() — also owns the hydration contract
-src/routes/             __root, index (→ /today), today, week, quarter
+src/routes/             __root, index (→ /today), today, week, quarter, quarter-plan,
+                        calendar, cycle, cycle-day, cycle-guide
 ```
 
 ## Invariants — breaking these breaks the app
@@ -146,6 +150,34 @@ is worse than no test, because it manufactures confidence.
 Prioritise the invariants above and the decisions below — they are the things a future change is
 most likely to break unknowingly. Every one of them should have a test whose name says what rule
 it protects, so a failure explains itself.
+
+## Undo
+
+Claro deletes things in a lot of places, and for a long time none of them could be taken back: a
+habit and its history, a side quest, a period, a whole cycle record. `ClaroProvider` now keeps a
+bounded stack of whole `ClaroState` snapshots, which is cheap precisely because the store is one
+`useState` holding a small object. Undo is "restore the previous snapshot", not a per-feature
+inverse operation, so it cannot drift out of step with the mutations it reverses.
+
+**The call site marks the change, the store does not guess.** `recordUndo(label)` snapshots the
+state *before* a destructive change and names it in the words a user would use. The four
+destructive methods the store owns record themselves; day, week and quarter deletions go through
+generic recipes, so those call `recordUndo` at the handler.
+
+**Editing text is deliberately not undoable.** Retyping is its own undo, and recording every
+keystroke would bury the deletion somebody actually wants back under a hundred no-op steps. The
+same goes for toggling something done: the toggle is the way back.
+
+`recordUndo` reads a ref that mirrors the live snapshot rather than depending on state, so it
+stays stable and never re-creates every handler that uses it. It must not be called from inside a
+`setSnap` updater: those have to stay pure, and React may run them twice.
+
+`UndoBar` sits in `AppShell`, so the offer appears on every screen. It fades after nine seconds
+because an undo that stays forever stops reading as urgent and starts reading as furniture. The
+keyboard route has no timer: Command-Z reaches the whole stack, so a run of deletions can be
+walked back one at a time long after the bar has gone. It stands aside inside inputs and
+textareas, where the browser's own undo is the right one and hijacking it would make retyping a
+sentence resurrect a deleted habit. Shift-Command-Z does nothing, because Claro does not redo.
 
 ## Reordering
 
@@ -285,8 +317,10 @@ score, reward or completion-pressure language anywhere in the flow.
 
 ## Private cycle notes
 
-Its own route at `/cycle`, reached from Calendar and from Daily. Off until explicitly turned on,
-kept in its own branch of the store, and deletable in one action.
+Four routes, none of them in the nav: `/cycle` is the centralised view, `/cycle-day` the daily
+flow, `/cycle-guide` the cited education, and the cycle marks on `/calendar` come from the same
+data. Off until explicitly turned on, kept in its own branch of the store, and deletable in one
+action, which is itself undoable.
 
 **Cycle data is separate from planning data on purpose.** The optional daily note (energy, mood,
 stress) lives in `cycle.checkIns`, not on the `Day`, so "delete all cycle data" can remove every
@@ -298,8 +332,9 @@ Claro never reads anything into a note. The Daily prompt asks "Would you like to
 plan?" and does nothing else: no priority, habit, schedule, focus length, sound or calendar plan
 is ever changed because of cycle data.
 An estimate is the **median of the gaps the user has actually logged** — never a population
-average, never a model — withheld entirely below three entries, and always labelled as an
-estimate with the number of gaps it drew on. Implausible gaps are excluded as likely mis-logs.
+average, never a model — and always labelled with the number of gaps it drew on. Implausible gaps
+are excluded as likely mis-logs. Below three logged starts it falls back to the length the user
+stated, and says so; with neither it is withheld entirely rather than guessed at.
 
 Out of bounds, permanently: any medical, fertility, contraception, pregnancy, diagnostic,
 nutrition, supplement or symptom-treatment interpretation, and any suggestion that a phase should
@@ -333,6 +368,76 @@ not the same treatment at different opacities: a logged period is a solid amber 
 continuously across the whole range, and the estimate is a dashed, unfilled outline. The band
 reaches into the grid gutter to close it, which is why the grid carries `px-0.5`.
 
+### `/cycle` is the centralised view
+
+One page holding the whole feature: the glance, three equal ways in (log today, this week,
+learn), logging a period, **one calendar at two scales** (month grid or a twelve-month year), the
+numbers, and each part of the cycle as the user's own record of it. History and the fuller
+check-in form are `<details>` disclosures, closed by default and still findable by the browser's
+own in-page search: opened, they took the page past 12,000px on a phone, which is the opposite of
+a view you can take in.
+
+**The calculators are the ones a calendar can support.** The apps this page takes its shape from
+offer ovulation, fertile window, implantation, HCG, pregnancy-test and due-date calculators.
+Every one is a fertility or pregnancy prediction. What Claro offers instead is arithmetic anyone
+can check: cycle length, recorded durations, the next estimate, and which cycle day a date falls
+on.
+
+**"Your cycle, part by part" is where a food and movement plan would go, and does not.** The
+reference app fills that slot with "eat protein-rich meals, fresh vegetables, fermented foods"
+per phase. A calendar estimate cannot know what a body needs, and a list of foods beside a phase
+label reads as instruction however gently it is written. The slot holds two things instead: what
+this person logged in that part of their own cycle, and the user-led questions. The physiology
+stays on the guide page, where it is cited.
+
+### Logging on the calendar itself
+
+**A period is painted, not filled in.** Press a day, drag across, release: one gesture, committed
+once on release rather than once per day dragged over. Pointer events again, and the touch pointer
+is explicitly released on `pointerdown` because touch implicitly captures the element the gesture
+starts on, which would stop `pointerenter` firing on everything dragged across. That release is
+guarded by `hasPointerCapture?.()`: releasing a capture that was never taken throws, which is
+exactly the mouse case, and jsdom does not implement the method at all.
+
+Two refusals keep a drag safe. It will not begin on a day already inside a logged period, so a
+gesture can never paint over one, and it will not extend into days that have not happened. A press
+with no movement is a tap, and selection is left to the click that follows: doing it in both
+places toggles the day straight back off.
+
+**Dates are nudged, never typed.** `RangeStepper` replaced every pair of `<input type="date">` in
+the cycle feature, because a date picker was the wrong control for the job twice over. The
+correction people actually make is "that was a day earlier", and a picker turns one tap into
+opening a calendar, finding a cell and confirming. It also asks somebody to read `21/08/2026` and
+decide whether it is right, where "yesterday" is either right or wrong at a glance, so each end
+shows a short date and a relative phrase together.
+
+The arrows enforce the shape as they go: neither end can pass today, and the start cannot cross
+the end. **An invalid range is better made unreachable than refused afterwards** — the backwards
+refusal still exists for the paths that can reach it, but the stepper never can. A live day count
+sits beneath, so the length being built is visible while it is being built rather than after.
+
+The one date input left in the feature is the "which cycle day is a date?" lookup, which is a jump
+to an arbitrary date and genuinely wants a picker.
+
+**The way out is in the same place as the way in.** A range painted with a finger lands on the
+wrong day often enough that "open the history, find the entry, press the small cross" is the wrong
+answer. `LoggedMeaning` appears on every log and carries **Undo this** and **Change the dates**
+inline, with the dates editable in the card itself. It scrolls itself into view on mount, because
+a drag happens well below the card on a phone and a confirmation nobody scrolls back to is not a
+confirmation. Undo takes one tap and no dialog: it is the correction of a decision, not a decision.
+
+The card is keyed by start date, so moving a start has to be followed through `onMoved` or the
+confirmation vanishes at the exact moment it is being relied on.
+
+`CycleCheckIn.flow` records how heavy a day was, on the day's own note. Read back, never
+interpreted, and nothing in the app behaves differently because of it.
+
+**`CycleSettings.cycleLength` is the length the user says their cycle runs.** `estimateNext`
+prefers the median of real logged gaps and falls back to this figure, so somebody who has logged
+one period sees an estimate on the calendar immediately instead of waiting three cycles. The
+estimate carries a `source` of `"logged"` or `"stated"` and the interface always says which, so a
+remembered number is never passed off as a measured one.
+
 ### The daily flow at `/cycle-day`
 
 Five screens on one route, driven by a `view` search param so each is linkable and
@@ -352,6 +457,28 @@ are the point rather than an oversight:
 - The changed-estimate screen says **"Your estimate has changed"**, not "Claro has learned
   something", and ends in "got it" rather than "apply to my calendar". Nothing is applied because
   a changed estimate changes a number on a page.
+
+**The log is one question per screen**, and choosing an answer is what advances: no submit button
+between steps, and never two decisions on screen at once. Three taps on an ordinary day.
+
+The first question adapts rather than asking the same thing daily. With a period already open it
+asks whether that period has ended; otherwise it asks whether one has started, and **always offers
+"No, not yet"** — a flow whose only answers are yes is not asking a question. Every answer reports
+through `onPeriod`, with `"none"` as the handler's no-op, so the decision about whether anything
+is written lives in one place. Starts and ends go through the same `addPeriod` and `endPeriod`
+rules as the calendar, so an overlap is refused identically; the refusal is silent here because
+three taps is the point, and the calendar is where a conflict gets explained.
+
+**The week is a swipe, not a table.** Seven full-width cards, three back through three ahead,
+opening on today. Swipe, arrows, dots and the strip above all drive the same index. The gesture is
+**pointer events with `touch-action: pan-y`**, for the same reason `useSortable` is: one handler
+has to serve a finger, a trackpad and a mouse, and vertical scrolling still belongs to the page.
+Edges resist rather than refuse. CSS transitions only, no animation library, and everything stops
+under `prefers-reduced-motion`.
+
+**A card shows the energy the user logged, never a predicted one.** A day they have not logged
+says so. `ForecastDay` carries `loggedEnergy` and has no `energyPrediction` beside it, and a test
+asserts the shape.
 
 Two implementation notes worth keeping. **The landing screen is chosen once, on arrival**
 (`useState` initialiser, not derived per render) or tapping the first control would count the day
@@ -423,6 +550,15 @@ requirement that items move between Quick Ticks / Tasks / Projects makes this de
 a single field change, with no cross-array splice, no id collisions, and order preserved. Views
 derive with `.filter(a => a.bucket === …)`.
 
+**The schema is at v8, and almost nothing needed a version to get there.** `migrate()` applies
+versioned steps only where a field genuinely changed meaning: v1→v2, v2→v3, v5→v6 (a schedule
+entry gains a kind), v6→v7 (the review's second question is renamed and moved across), and v7→v8
+(a period becomes a range). Everything else added since is read through a default instead, which
+is why `focusPrefs`, `Feeling`, `EveningNote`, `flow`, `cycleLength` and `lastSeen` all arrived
+without a bump: nothing already on disk changes shape or meaning, so a store saved last month
+loads correctly with the new field at its blank value. Reach for a versioned step only when an
+existing field means something different afterwards.
+
 **Records are created lazily.** Reading a period you've never visited returns a blank from
 `readQuarter`/`readWeek`/`readDay`; only an actual edit writes a key. Browsing forward through
 quarters must not fill storage with empty shells. Records are also read *through* their blank
@@ -440,12 +576,12 @@ but a button implies work could be lost. The header carries a persistent "All ch
 instead — calmer, and it never lies.
 
 **Caps are product features, not validation.** 3 side quests per domain, 3 weekly actions per
-goal, 3 non-negotiables, 2 priorities. At a cap the add affordance is *replaced* by a line of
+goal, 3 non-negotiables, 3 priorities. At a cap the add affordance is *replaced* by a line of
 copy explaining why ("Three is the limit — that's the point."). Don't turn these into errors or
 raise them; the constraint is the product.
 
 **Return to Focus is a mode of Today, not a fourth screen.** A distracted user who reopens Claro
-meets the entire Today surface — two priorities, an 18-row schedule, three action buckets,
+meets the entire Today surface — three priorities, an 18-row schedule, three action buckets,
 non-negotiables, a check-in and notes — and that surface is itself the re-distraction.
 `/today?focus` strips it to one task, the rungs above it, and one capture field. It stays a search
 param rather than a route so the nav stays three items, the screen is linkable, and browser-back is
@@ -635,7 +771,8 @@ gitignored**, two of its migration pairs are duplicated without `IF NOT EXISTS` 
 
 AI/LLM features, voice, audio briefings, music, analytics and insight dashboards, calendar
 integration, notifications, social, teams, accountability partners, leaderboards, **streaks**,
-subscriptions, payments, gamification, affirmation cards, cycle tracking, and food guidance. The
+subscriptions, payments, gamification, affirmation cards, and food, supplement or exercise
+guidance. The
 MVP is about getting one loop right: **Quarter → Week → Day → Complete → Reflect.**
 
 Habits *are* in, but only as a Monday–Sunday grid with plain counts ("4 days this week"). There is

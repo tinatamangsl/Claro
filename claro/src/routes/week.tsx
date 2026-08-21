@@ -40,7 +40,7 @@ export const Route = createFileRoute("/week")({
 });
 
 function WeekView() {
-  const { today, week, quarter, updateWeek } = useClaro();
+  const { today, week, quarter, updateWeek, recordUndo } = useClaro();
   const { w } = Route.useSearch();
   const navigate = useNavigate();
 
@@ -118,6 +118,7 @@ function WeekView() {
             record={record}
             weekId={weekId}
             onUpdate={updateWeek}
+            recordUndo={recordUndo}
           />
         ))}
       </div>
@@ -130,11 +131,13 @@ function WeekColumn({
   record,
   weekId,
   onUpdate,
+  recordUndo,
 }: {
   domain: Domain;
   record: Week;
   weekId: WeekId;
   onUpdate: (id: WeekId, recipe: (w: Week) => Week) => void;
+  recordUndo: (label: string) => void;
 }) {
   const side = record[domain];
   const label = DOMAIN_META[domain].label;
@@ -198,9 +201,10 @@ function WeekColumn({
           onCommit={(action, value) =>
             patch((s) => ({ ...s, actions: updateById(s.actions, action.id, { text: value }) }))
           }
-          onDelete={(action) =>
-            patch((s) => ({ ...s, actions: removeById(s.actions, action.id) }))
-          }
+          onDelete={(action) => {
+            recordUndo("Action deleted");
+            patch((s) => ({ ...s, actions: removeById(s.actions, action.id) }));
+          }}
           trailing={(action) => (
             <FocusOn
               compact

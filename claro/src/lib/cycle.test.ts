@@ -5,6 +5,7 @@ import {
   MIN_ENTRIES_FOR_ESTIMATE,
   addPeriod,
   checkInOn,
+  clampStatedCycleLength,
   completedPeriods,
   confirmedRange,
   describeRefusal,
@@ -37,7 +38,7 @@ import type { CycleState, ISODate } from "./types";
 type Spec = ISODate | [ISODate, ISODate | null];
 
 const cycleWith = (...specs: Spec[]): CycleState => ({
-  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
+  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
   entries: Object.fromEntries(
     specs.map((spec, i) => {
       const [startDate, endDate] = Array.isArray(spec) ? spec : [spec, null];
@@ -89,7 +90,12 @@ describe("the next-start estimate", () => {
   it("projects the user's own median gap from their last logged start", () => {
     const estimate = estimateNext(cycleWith("2026-01-01", "2026-01-29", "2026-02-26"));
 
-    expect(estimate).toEqual({ typicalGap: 28, nextStart: "2026-03-26", basedOn: 2 });
+    expect(estimate).toEqual({
+      typicalGap: 28,
+      nextStart: "2026-03-26",
+      basedOn: 2,
+      source: "logged",
+    });
   });
 
   it("uses a median, so one unusual month does not drag it", () => {
@@ -127,7 +133,7 @@ describe("the next-start estimate", () => {
 const withCheckIns = (
   entries: Partial<Record<string, { energy?: number; mood?: string; stress?: number }>>,
 ): CycleState => ({
-  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
+  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
   entries: {},
   checkIns: Object.fromEntries(
     Object.entries(entries).map(([dayId, note]) => [
@@ -138,6 +144,7 @@ const withCheckIns = (
         mood: (note?.mood ?? null) as never,
         stress: (note?.stress ?? null) as never,
         feeling: null,
+        flow: null,
         note: "",
         evening: null,
         updatedAt: "x",
@@ -158,6 +165,7 @@ describe("private daily notes", () => {
       mood: null,
       stress: null,
       feeling: null,
+      flow: null,
       note: "",
       evening: null,
       updatedAt: "",
@@ -200,7 +208,7 @@ describe("what deleting everything has to remove", () => {
   it("reports data once the user has opted in", () => {
     const cycle: CycleState = {
       ...blankCycle(),
-      settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
+      settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
     };
 
     expect(hasAnyCycleData(cycle)).toBe(true);
@@ -646,5 +654,59 @@ describe("editing a historic range", () => {
     expect(Object.values(LOG_REFUSAL).every((line) => line.trim().length > 0)).toBe(true);
     expect(LOG_REFUSAL.backwards).toContain("end date");
     expect(LOG_REFUSAL.overlap).toContain("overlaps");
+  });
+});
+
+describe("the length the user states", () => {
+  const stated = (days: number | null, ...specs: Spec[]): CycleState => {
+    const base = cycleWith(...specs);
+    return { ...base, settings: { ...base.settings, cycleLength: days } };
+  };
+
+  it("lets the estimate appear from a single logged period", () => {
+    // The whole point: not making somebody log three cycles before the
+    // calendar is any use to them.
+    const estimate = estimateNext(stated(25, "2026-08-14"));
+
+    expect(estimate?.typicalGap).toBe(25);
+    expect(estimate?.nextStart).toBe("2026-09-08");
+    expect(estimate?.source).toBe("stated");
+    expect(estimate?.basedOn).toBe(0);
+  });
+
+  it("still says nothing with no period logged at all", () => {
+    // A length on its own has no date to count from.
+    expect(estimateNext(stated(25))).toBeNull();
+  });
+
+  it("steps aside as soon as the user's own gaps can answer", () => {
+    const estimate = estimateNext(stated(25, "2026-01-01", "2026-01-29", "2026-02-26"));
+
+    expect(estimate?.typicalGap).toBe(28);
+    expect(estimate?.source).toBe("logged");
+  });
+
+  it("falls back to the stated figure when the logged gaps are all implausible", () => {
+    const estimate = estimateNext(stated(25, "2020-01-01", "2022-01-01", "2024-01-01"));
+
+    expect(estimate?.source).toBe("stated");
+    expect(estimate?.typicalGap).toBe(25);
+  });
+
+  it("ignores a figure outside the range a cycle length can be", () => {
+    expect(estimateNext(stated(3, "2026-08-14"))).toBeNull();
+    expect(estimateNext(stated(400, "2026-08-14"))).toBeNull();
+  });
+
+  it("clamps and rounds what the field accepts", () => {
+    expect(clampStatedCycleLength(25)).toBe(25);
+    expect(clampStatedCycleLength(24.6)).toBe(25);
+    expect(clampStatedCycleLength(3)).toBeNull();
+    expect(clampStatedCycleLength(400)).toBeNull();
+    expect(clampStatedCycleLength(Number.NaN)).toBeNull();
+  });
+
+  it("reads a stated length back in weeks, which is how people say it", () => {
+    expect(formatWeeksAndDays(25)).toBe("3 weeks and 4 days");
   });
 });

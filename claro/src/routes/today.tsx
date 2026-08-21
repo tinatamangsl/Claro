@@ -127,6 +127,7 @@ function TodayView() {
     addHabit,
     patchHabit,
     deleteHabit,
+    recordUndo,
     toggleHabitDone,
     sound: soundPrefs,
     recordSoundFeedback,
@@ -206,8 +207,10 @@ function TodayView() {
       return { ...current, [key]: writePriority(current[key], p, dayId, new Date()) };
     });
 
-  const clearPriorityAt = (target: PriorityTarget) =>
+  const clearPriorityAt = (target: PriorityTarget) => {
+    recordUndo("Priority cleared");
     updateDay(dayId, (current) => clearPriority(current, target));
+  };
 
   const enterFocus = () => navigate({ to: "/today", search: { focus: true } });
   const leaveFocus = () => navigate({ to: "/today", search: {} });
@@ -289,6 +292,7 @@ function TodayView() {
       return;
     }
     if (decision === "letGo") {
+      recordUndo("Item let go");
       updateDay(dayId, (current) => letGoItem(current, item, new Date()));
       return;
     }
@@ -439,7 +443,10 @@ function TodayView() {
               updateDay(dayId, (current) => keepCarriedAsAction(current, itemId, new Date()))
             }
             onSchedule={(itemId, toDayId) => moveCarried(dayId, toDayId, itemId)}
-            onLetGo={(itemId) => updateDay(dayId, (current) => letGoCarried(current, itemId))}
+            onLetGo={(itemId) => {
+              recordUndo("Carried item let go");
+              updateDay(dayId, (current) => letGoCarried(current, itemId));
+            }}
           />
         </div>
 

@@ -7,7 +7,7 @@ import type { CycleState, ISODate } from "@/lib/types";
 type Spec = ISODate | [ISODate, ISODate | null];
 
 const cycleWith = (...specs: Spec[]): CycleState => ({
-  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z" },
+  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
   entries: Object.fromEntries(
     specs.map((spec, i) => {
       const [startDate, endDate] = Array.isArray(spec) ? spec : [spec, null];
@@ -69,17 +69,13 @@ describe("the logged period list", () => {
 });
 
 describe("editing a logged period", () => {
-  it("changes the start and the end together", () => {
+  it("changes the start and the end by nudging, with no date typing", () => {
     const { onReplace } = setup(cycleWith(["2026-08-03", "2026-08-06"]));
 
     fireEvent.click(screen.getByRole("button", { name: /Edit the period logged on 3 Aug/ }));
 
-    fireEvent.change(screen.getByLabelText(/Start date of the period/), {
-      target: { value: "2026-08-02" },
-    });
-    fireEvent.change(screen.getByLabelText(/End date of the period/), {
-      target: { value: "2026-08-07" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "One day earlier for the started date" }));
+    fireEvent.click(screen.getByRole("button", { name: "One day later for the ended date" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(onReplace).toHaveBeenCalledTimes(1);
@@ -88,11 +84,21 @@ describe("editing a logged period", () => {
     expect(entries.e0.endDate).toBe("2026-08-07");
   });
 
-  it("lets an end date be cleared, which puts the period back to ongoing", () => {
+  it("shows the length as it is nudged, so the change can be checked", () => {
+    const { container } = setup(cycleWith(["2026-08-03", "2026-08-06"]));
+
+    fireEvent.click(screen.getByRole("button", { name: /Edit the period logged on 3 Aug/ }));
+    expect(container.textContent).toContain("4 days");
+
+    fireEvent.click(screen.getByRole("button", { name: "One day later for the ended date" }));
+    expect(container.textContent).toContain("5 days");
+  });
+
+  it("puts a period back to ongoing in one tap", () => {
     const { onReplace } = setup(cycleWith(["2026-08-17", "2026-08-18"]));
 
     fireEvent.click(screen.getByRole("button", { name: /Edit the period logged on 17 Aug/ }));
-    fireEvent.change(screen.getByLabelText(/End date of the period/), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "It has not ended yet" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const entries = onReplace.mock.calls[0][0] as Record<string, { endDate: string | null }>;
@@ -105,9 +111,9 @@ describe("editing a logged period", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Edit the period logged on 10 Aug/ }));
-    fireEvent.change(screen.getByLabelText(/Start date of the period/), {
-      target: { value: "2026-08-03" },
-    });
+    // Nudge the start back until it lands inside the earlier period.
+    const back = screen.getByRole("button", { name: "One day earlier for the started date" });
+    for (let i = 0; i < 6; i += 1) fireEvent.click(back);
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(onReplace).not.toHaveBeenCalled();
@@ -115,26 +121,23 @@ describe("editing a logged period", () => {
     expect(container.textContent).toContain("1 Aug to 4 Aug");
   });
 
-  it("refuses an end date before the start, and says why", () => {
-    const { onReplace, container } = setup(cycleWith(["2026-08-10", "2026-08-13"]));
+  it("makes an end before the start unreachable rather than refusing it", () => {
+    // The arrows enforce the shape, so the refusal never has to fire here.
+    setup(cycleWith(["2026-08-10", "2026-08-13"]));
 
     fireEvent.click(screen.getByRole("button", { name: /Edit the period logged on 10 Aug/ }));
-    fireEvent.change(screen.getByLabelText(/End date of the period/), {
-      target: { value: "2026-08-08" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const back = screen.getByRole("button", { name: "One day earlier for the ended date" });
+    for (let i = 0; i < 6; i += 1) fireEvent.click(back);
 
-    expect(onReplace).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("An end date cannot come before the start date");
+    expect(back.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("1 day")).toBeTruthy();
   });
 
   it("abandons an edit on cancel, leaving the record alone", () => {
     const { onReplace } = setup(cycleWith(["2026-08-03", "2026-08-06"]));
 
     fireEvent.click(screen.getByRole("button", { name: /Edit the period logged on 3 Aug/ }));
-    fireEvent.change(screen.getByLabelText(/Start date of the period/), {
-      target: { value: "2026-08-02" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "One day earlier for the started date" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(onReplace).not.toHaveBeenCalled();

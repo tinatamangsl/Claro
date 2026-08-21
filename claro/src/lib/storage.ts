@@ -63,7 +63,12 @@ export function emptyState(): ClaroState {
 }
 
 export function blankCycle(): CycleState {
-  return { settings: { enabled: false, optedInAt: null }, entries: {}, checkIns: {}, lastSeen: null };
+  return {
+    settings: { enabled: false, optedInAt: null, cycleLength: null },
+    entries: {},
+    checkIns: {},
+    lastSeen: null,
+  };
 }
 
 /** A day's private note before anything has been written on it. */
@@ -74,6 +79,7 @@ export function blankCheckIn(dayId: ISODate, now: Date): CycleCheckIn {
     mood: null,
     stress: null,
     feeling: null,
+    flow: null,
     note: "",
     evening: null,
     updatedAt: now.toISOString(),
@@ -465,6 +471,7 @@ function readCheckIns(raw: unknown): Record<string, CycleCheckIn> {
       mood: note.mood ?? null,
       stress: note.stress ?? null,
       feeling: note.feeling ?? null,
+      flow: note.flow ?? null,
       note: typeof note.note === "string" ? note.note : "",
       evening: note.evening ?? null,
       updatedAt: typeof note.updatedAt === "string" ? note.updatedAt : "",
@@ -481,6 +488,10 @@ function readCycle(raw: unknown): CycleState {
     settings: {
       enabled: c.settings?.enabled === true,
       optedInAt: typeof c.settings?.optedInAt === "string" ? c.settings.optedInAt : null,
+      // Additive: a store saved before the length could be stated arrives null,
+      // which is the truth about it.
+      cycleLength:
+        typeof c.settings?.cycleLength === "number" ? c.settings.cycleLength : null,
     },
     entries: readCycleEntries(c.entries),
     // Additive: a store saved before check-ins existed simply arrives empty.

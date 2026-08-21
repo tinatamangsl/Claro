@@ -1,6 +1,8 @@
 import { Check, Pencil, X } from "lucide-react";
 import { useState } from "react";
 
+import { RangeStepper } from "@/components/cycle/RangeStepper";
+
 import {
   confirmedRange,
   describeRefusal,
@@ -83,8 +85,8 @@ function HistoryRow({
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [start, setStart] = useState(entry.startDate);
-  const [end, setEnd] = useState(entry.endDate ?? "");
+  const [start, setStart] = useState<ISODate>(entry.startDate);
+  const [end, setEnd] = useState<ISODate | null>(entry.endDate);
   const [refusal, setRefusal] = useState<string | null>(null);
 
   const ongoing = isOngoing(cycle, entry) && entry.endDate === null;
@@ -92,12 +94,7 @@ function HistoryRow({
   const days = durationOf(cycle, entry, todayId);
 
   const save = () => {
-    const result = editPeriod(
-      cycle,
-      entry.id,
-      { startDate: start, endDate: end === "" ? null : end },
-      todayId,
-    );
+    const result = editPeriod(cycle, entry.id, { startDate: start, endDate: end }, todayId);
     if (!result.ok) {
       setRefusal(describeRefusal(result, cycle, todayId));
       return;
@@ -110,39 +107,24 @@ function HistoryRow({
   if (editing) {
     return (
       <li className="py-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-[10px] text-muted-foreground">Started</span>
-            <input
-              type="date"
-              value={start}
-              max={todayId}
-              autoFocus
-              aria-label={`Start date of the period logged on ${formatDayShort(entry.startDate)}`}
-              onChange={(e) => {
-                setStart(e.target.value);
-                setRefusal(null);
-              }}
-              className="tnum rounded-md border border-border bg-card px-2 py-1 text-[0.85rem]"
-            />
-          </label>
+        <p className="tnum text-[0.85rem] text-muted-foreground">
+          {formatDayLong(entry.startDate)}
+        </p>
 
-          <label className="flex flex-col gap-1">
-            <span className="text-[10px] text-muted-foreground">Ended</span>
-            <input
-              type="date"
-              value={end}
-              max={todayId}
-              min={start}
-              aria-label={`End date of the period logged on ${formatDayShort(entry.startDate)}`}
-              onChange={(e) => {
-                setEnd(e.target.value);
-                setRefusal(null);
-              }}
-              className="tnum rounded-md border border-border bg-card px-2 py-1 text-[0.85rem]"
-            />
-          </label>
+        <div className="mt-2">
+          <RangeStepper
+            from={start}
+            to={end}
+            todayId={todayId}
+            onChange={(nextFrom, nextTo) => {
+              setStart(nextFrom);
+              setEnd(nextTo);
+              setRefusal(null);
+            }}
+          />
+        </div>
 
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button type="button" onClick={save} className="btn btn-sm btn-quiet gap-1.5">
             <Check aria-hidden className="h-3 w-3" />
             Save
@@ -151,7 +133,7 @@ function HistoryRow({
             type="button"
             onClick={() => {
               setStart(entry.startDate);
-              setEnd(entry.endDate ?? "");
+              setEnd(entry.endDate);
               setRefusal(null);
               setEditing(false);
             }}
@@ -161,11 +143,8 @@ function HistoryRow({
           </button>
         </div>
 
-        <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
-          Leave the end date empty while the period is still going.
-        </p>
         {refusal && (
-          <p role="alert" className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+          <p role="alert" className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
             {refusal}
           </p>
         )}

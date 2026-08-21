@@ -530,7 +530,24 @@ export const habitCompletionId = (habitId: string, dayId: ISODate) => `${habitId
  * Optional, private, and deliberately kept apart from planning and focus
  * records. Estimates come only from the user's own logged history.
  */
-export type CycleSettings = { enabled: boolean; optedInAt: string | null };
+/**
+ * `cycleLength` is the length the user *told* Claro, in days.
+ *
+ * It exists so somebody who has logged one period does not have to wait three
+ * cycles before the calendar shows them anything. It is their own figure, not a
+ * population default, and it is always labelled as the number they entered. The
+ * moment there is enough logged history, the median of their real gaps takes
+ * over: a remembered figure is a starting point, not a better answer than the
+ * dates themselves.
+ */
+export type CycleSettings = {
+  enabled: boolean;
+  optedInAt: string | null;
+  cycleLength: number | null;
+};
+
+export const MIN_STATED_CYCLE_DAYS = 15;
+export const MAX_STATED_CYCLE_DAYS = 60;
 
 /**
  * One recorded period, as a date range.
@@ -584,6 +601,24 @@ export const ENERGY_LABELS: Record<EnergyLevel, string> = {
  * different vocabularies, and overwriting the old one would throw away entries
  * people already wrote.
  */
+/**
+ * How heavy a day was, in the user's own words.
+ *
+ * Recorded and read back, never interpreted. Claro does not say that a heavy
+ * day is too heavy or a light one too light, and nothing in the app changes
+ * because of what is chosen here.
+ */
+export type Flow = "spotting" | "light" | "medium" | "heavy";
+
+export const FLOWS: Flow[] = ["spotting", "light", "medium", "heavy"];
+
+export const FLOW_META: Record<Flow, { label: string; marks: number }> = {
+  spotting: { label: "Spotting", marks: 1 },
+  light: { label: "Light", marks: 2 },
+  medium: { label: "Medium", marks: 3 },
+  heavy: { label: "Heavy", marks: 4 },
+};
+
 export type Feeling =
   | "focused"
   | "scattered"
@@ -637,6 +672,8 @@ export type CycleCheckIn = {
   stress: StressLevel | null;
   /** Additive: a word for the day, alongside the older mood face. */
   feeling: Feeling | null;
+  /** How heavy the day was, on a day the user was bleeding. */
+  flow: Flow | null;
   /** The user's own words. Never parsed, searched or interpreted. */
   note: string;
   /** Filled in at the end of the day, if the user wants to. */

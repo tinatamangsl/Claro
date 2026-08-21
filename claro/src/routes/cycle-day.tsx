@@ -10,8 +10,10 @@ import { DayLog } from "@/components/cycle/day/DayLog";
 import { DayRecalibrate } from "@/components/cycle/day/DayRecalibrate";
 import { useNow } from "@/hooks/use-now";
 import { useClaro } from "@/lib/claro-store";
-import { checkInOn } from "@/lib/cycle";
-import { isEveningDone, isLogged } from "@/lib/cycle-log";
+import { addPeriod, checkInOn, endPeriod, ongoingPeriod } from "@/lib/cycle";
+import { isEveningDone, isLogged, type PeriodAnswer } from "@/lib/cycle-log";
+import { shiftDayId } from "@/lib/dates";
+import { newId } from "@/lib/id";
 import { changesSince, snapshotNow } from "@/lib/cycle-recalibration";
 
 /** The end-of-day check-in is offered from six, not demanded at any hour. */
@@ -53,6 +55,7 @@ export function CycleDay() {
     day,
     writeCycleCheckIn,
     acknowledgeCycleEstimate,
+    setCycleEntries,
     setCycleEnabled,
   } = useClaro();
   const { view } = Route.useSearch();
@@ -68,6 +71,31 @@ export function CycleDay() {
   const [landing] = useState<View>(() => (isLogged(note) ? "guide" : "log"));
 
   const go = (next: View) => navigate({ to: "/cycle-day", search: { view: next } });
+
+  /**
+   * The period answer from the first step of the log.
+   *
+   * It goes through the same `addPeriod` and `endPeriod` rules as the calendar,
+   * so a duplicate or an overlap is refused here exactly as it is there. A
+   * refusal is silent on this screen by design: the flow is three taps, and
+   * "that date is already logged" is not a thing to stop somebody for. The
+   * cycle calendar is where a conflict gets explained and resolved.
+   */
+  const logPeriod = (answer: PeriodAnswer) => {
+    if (answer.kind === "none") return;
+
+    if (answer.kind === "ended") {
+      const open = ongoingPeriod(cycle);
+      if (!open) return;
+      const closed = endPeriod(cycle, open.id, today, today);
+      if (closed.ok) setCycleEntries(closed.entries);
+      return;
+    }
+
+    const startDate = shiftDayId(today, -answer.daysAgo);
+    const added = addPeriod(cycle, { startDate, endDate: null }, newId(), new Date(), today);
+    if (added.ok) setCycleEntries(added.entries);
+  };
 
   if (!cycle.settings.enabled) return <NotOn onEnable={() => setCycleEnabled(true, new Date())} />;
 
@@ -98,6 +126,7 @@ export function CycleDay() {
           todayId={today}
           note={note}
           onWrite={(patch) => writeCycleCheckIn(today, patch, new Date())}
+          onPeriod={logPeriod}
           onDone={() => go("guide")}
         />
       )}
@@ -114,7 +143,12 @@ export function CycleDay() {
       )}
 
       {resolved === "forecast" && (
-        <DayForecast cycle={cycle} todayId={today} onBack={() => go("guide")} />
+        <DayForecast
+          cycle={cycle}
+          todayId={today}
+          priorityFor={(dayId) => day(dayId).priority1}
+          onBack={() => go("guide")}
+        />
       )}
 
       {resolved === "evening" && (

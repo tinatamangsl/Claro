@@ -52,6 +52,23 @@ import type {
 
 export type SaveStatus = "idle" | "saved" | "error";
 
+/**
+ * How many steps back the app can go.
+ *
+ * Every step holds a whole `ClaroState`, which is small enough that a bounded
+ * stack costs nothing worth measuring, and deep enough that a run of deletions
+ * can all be taken back.
+ */
+export const UNDO_LIMIT = 25;
+
+export type UndoStep = {
+  /** Ticks up, so a view can tell a fresh action from the same one re-rendered. */
+  id: number;
+  /** What is being undone, in the words the user would use. */
+  label: string;
+  state: ClaroState;
+};
+
 type ClaroContextValue = {
   /** False during SSR and the first client render. Views must not render until true. */
   ready: boolean;
@@ -59,6 +76,20 @@ type ClaroContextValue = {
   /** Today's date id. Empty string until `ready`. */
   today: ISODate;
   saveStatus: SaveStatus;
+
+  /**
+   * Taking something back.
+   *
+   * `recordUndo` snapshots the state *before* a destructive change, so the call
+   * site marks the change rather than the store guessing which ones matter.
+   * Editing text is not on the list: retyping is its own undo, and recording
+   * every keystroke would bury the deletion somebody actually wants back.
+   */
+  recordUndo: (label: string) => void;
+  undo: () => void;
+  canUndo: boolean;
+  /** The most recent undoable step, for the bar that offers it. */
+  lastUndo: { id: number; label: string } | null;
 
   quarter: (id: QuarterId) => Quarter;
   week: (id: WeekId) => Week;
@@ -116,6 +147,8 @@ type ClaroContextValue = {
   writeCycleCheckIn: (dayId: ISODate, patch: Partial<CycleCheckIn>, now: Date) => void;
   /** Marks the current estimate as seen, so a change is announced only once. */
   acknowledgeCycleEstimate: (snapshot: EstimateSnapshot) => void;
+  /** The typical length the user stated, used until their own gaps can speak. */
+  setCycleLength: (days: number | null) => void;
   deleteAllCycleData: () => void;
 
   sound: SoundPrefs;
@@ -207,6 +240,31 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", onHide);
     };
+  }, []);
+
+  // A mirror of the live snapshot, so recording an undo never has to depend on
+  // the state it is capturing and re-create every handler that uses it.
+  const snapRef = useRef<Snapshot | null>(null);
+  snapRef.current = snap;
+
+  const [undoStack, setUndoStack] = useState<UndoStep[]>([]);
+  const undoId = useRef(0);
+
+  const recordUndo = useCallback((label: string) => {
+    const current = snapRef.current;
+    if (!current) return;
+    undoId.current += 1;
+    const step: UndoStep = { id: undoId.current, label, state: current.state };
+    setUndoStack((stack) => [...stack, step].slice(-UNDO_LIMIT));
+  }, []);
+
+  const undo = useCallback(() => {
+    setUndoStack((stack) => {
+      const step = stack[stack.length - 1];
+      if (!step) return stack;
+      setSnap((prev) => (prev ? { ...prev, state: step.state } : prev));
+      return stack.slice(0, -1);
+    });
   }, []);
 
   const quarter = useCallback((id: QuarterId) => readQuarter(state, id), [state]);
@@ -361,6 +419,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const deleteHabit = useCallback((id: string) => {
+    recordUndo("Habit deleted");
     setSnap((prev) => {
       if (!prev) return prev;
       const habits = { ...prev.state.habits };
@@ -417,6 +476,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
           cycle: {
             ...prev.state.cycle,
             settings: {
+              ...prev.state.cycle.settings,
               enabled,
               // Opting out keeps the entries; only the explicit delete removes them.
               optedInAt: enabled ? (prev.state.cycle.settings.optedInAt ?? now.toISOString()) : prev.state.cycle.settings.optedInAt,
@@ -451,6 +511,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const deleteCycleEntry = useCallback((id: string) => {
+    recordUndo("Period deleted");
     setSnap((prev) => {
       if (!prev) return prev;
       const entries = { ...prev.state.cycle.entries };
@@ -482,6 +543,24 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  /** The cycle length the user typed in, or null to go back to their own gaps. */
+  const setCycleLength = useCallback((cycleLength: number | null) => {
+    setSnap((prev) =>
+      prev
+        ? {
+            ...prev,
+            state: {
+              ...prev.state,
+              cycle: {
+                ...prev.state.cycle,
+                settings: { ...prev.state.cycle.settings, cycleLength },
+              },
+            },
+          }
+        : prev,
+    );
+  }, []);
+
   /**
    * Records the estimate the user has just been shown, so the same change is
    * not reported again. Writes nothing but the snapshot.
@@ -496,6 +575,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
 
   /** Removes every cycle record and the opt-in itself. */
   const deleteAllCycleData = useCallback(() => {
+    recordUndo("All cycle data deleted");
     setSnap((prev) =>
       prev
         ? {
@@ -541,6 +621,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const deletePreset = useCallback((id: string) => {
+    recordUndo("Sound preset deleted");
     setSnap((prev) => {
       if (!prev) return prev;
       const soundPresets = { ...prev.state.soundPresets };
@@ -581,6 +662,13 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     () => ({
       ready,
       state,
+      recordUndo,
+      undo,
+      canUndo: undoStack.length > 0,
+      lastUndo:
+        undoStack.length > 0
+          ? { id: undoStack[undoStack.length - 1].id, label: undoStack[undoStack.length - 1].label }
+          : null,
       today: snap?.today ?? "",
       saveStatus,
       quarter,
@@ -611,6 +699,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       deleteCycleEntry,
       writeCycleCheckIn,
       acknowledgeCycleEstimate,
+      setCycleLength,
       deleteAllCycleData,
       sound: state.sound,
       setSound,
@@ -624,6 +713,9 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     [
       ready,
       state,
+      recordUndo,
+      undo,
+      undoStack,
       snap?.today,
       saveStatus,
       quarter,
@@ -651,6 +743,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       deleteCycleEntry,
       writeCycleCheckIn,
       acknowledgeCycleEstimate,
+      setCycleLength,
       deleteAllCycleData,
       setSound,
       addPreset,

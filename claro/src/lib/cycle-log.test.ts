@@ -16,6 +16,7 @@ const note = (patch: Partial<CycleCheckIn> = {}): CycleCheckIn => ({
   mood: null,
   stress: null,
   feeling: null,
+  flow: null,
   note: "",
   evening: null,
   updatedAt: "",

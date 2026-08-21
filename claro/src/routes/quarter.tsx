@@ -40,7 +40,7 @@ export const Route = createFileRoute("/quarter")({
 });
 
 function QuarterView() {
-  const { today, quarter, updateQuarter } = useClaro();
+  const { today, quarter, updateQuarter, recordUndo } = useClaro();
   const { q } = Route.useSearch();
   const navigate = useNavigate();
 
@@ -103,6 +103,7 @@ function QuarterView() {
             record={record}
             quarterId={quarterId}
             onUpdate={updateQuarter}
+            recordUndo={recordUndo}
           />
         ))}
       </div>
@@ -115,11 +116,13 @@ function QuarterColumn({
   record,
   quarterId,
   onUpdate,
+  recordUndo,
 }: {
   domain: Domain;
   record: Quarter;
   quarterId: QuarterId;
   onUpdate: (id: QuarterId, recipe: (q: Quarter) => Quarter) => void;
+  recordUndo: (label: string) => void;
 }) {
   const side = record[domain];
   const label = DOMAIN_META[domain].label;
@@ -187,7 +190,10 @@ function QuarterColumn({
           onCommit={(sq, value) =>
             patch((s) => ({ ...s, sideQuests: updateById(s.sideQuests, sq.id, { text: value }) }))
           }
-          onDelete={(sq) => patch((s) => ({ ...s, sideQuests: removeById(s.sideQuests, sq.id) }))}
+          onDelete={(sq) => {
+            recordUndo("Side quest deleted");
+            patch((s) => ({ ...s, sideQuests: removeById(s.sideQuests, sq.id) }));
+          }}
           trailing={(sq) => (
             <FocusOn
               compact

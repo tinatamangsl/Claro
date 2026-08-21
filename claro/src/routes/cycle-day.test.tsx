@@ -21,6 +21,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 import { CycleDay, Route } from "./cycle-day";
 import { ClaroProvider, useClaro } from "@/lib/claro-store";
+import { snapshotNow } from "@/lib/cycle-recalibration";
 import { shiftDayId, weekOfDay } from "@/lib/dates";
 import type { CycleEntry } from "@/lib/types";
 
@@ -59,7 +60,12 @@ const history = (todayId: string): Record<string, CycleEntry> =>
   Object.fromEntries(
     [61, 33, 5].map((back, i) => [
       `e${i}`,
-      { id: `e${i}`, startDate: shiftDayId(todayId, -back), endDate: null, loggedAt: "x" },
+      {
+        id: `e${i}`,
+        startDate: shiftDayId(todayId, -back),
+        endDate: shiftDayId(todayId, -back + 4),
+        loggedAt: "x",
+      },
     ]),
   );
 
@@ -81,24 +87,17 @@ describe("the daily flow", () => {
     act(() => {
       h.api.store!.setCycleEnabled(true, new Date());
       h.api.store!.setCycleEntries(history(h.api.store!.today));
-      // Acknowledge the estimate so the change screen is not in the way.
-      h.api.store!.acknowledgeCycleEstimate({
-        typicalGap: 28,
-        basedOn: 2,
-        durationMin: null,
-        durationMax: null,
-        observations: 0,
-        seenAt: "x",
-      });
     });
+    // Acknowledged from the real numbers, so the change screen is not in the
+    // way. A hand-written snapshot drifts from the seed and silently reopens it.
+    act(() => h.api.store!.acknowledgeCycleEstimate(snapshotNow(h.api.store!.cycle, new Date())));
     return h;
   };
 
   it("opens on the log when today has nothing on it", async () => {
-    const { container } = await enabled();
+    await enabled();
 
-    expect(container.textContent).toContain("Energy today");
-    expect(screen.getByRole("button", { name: "log it" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Has your period started?" })).toBeTruthy();
   });
 
   it("opens on what the notes show when today was already logged", async () => {
@@ -107,18 +106,11 @@ describe("the daily flow", () => {
     act(() => {
       h.api.store!.setCycleEnabled(true, new Date());
       h.api.store!.setCycleEntries(history(h.api.store!.today));
-      h.api.store!.acknowledgeCycleEstimate({
-        typicalGap: 28,
-        basedOn: 2,
-        durationMin: null,
-        durationMax: null,
-        observations: 0,
-        seenAt: "x",
-      });
       h.api.store!.writeCycleCheckIn(h.api.store!.today, { energy: 3 }, new Date());
       // The landing screen is chosen on arrival, so arrive again.
       search.view = "guide";
     });
+    act(() => h.api.store!.acknowledgeCycleEstimate(snapshotNow(h.api.store!.cycle, new Date())));
     h.rerender(
       <ClaroProvider>
         <CycleDay />
@@ -128,15 +120,25 @@ describe("the daily flow", () => {
     expect(screen.queryByRole("button", { name: "log it" })).toBeNull();
   });
 
-  it("stays on the log while fields are being tapped", async () => {
-    const { container } = await enabled();
+  it("stays inside the log while the steps are being answered", async () => {
+    await enabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "High" }));
+    fireEvent.click(screen.getByRole("button", { name: "No, not yet" }));
+    fireEvent.click(screen.getByRole("button", { name: /Motivated/ }));
 
-    // Writing one field must not throw the user onto the next screen: moving
-    // on is what "log it" is for.
-    expect(container.textContent).toContain("Energy today");
-    expect(screen.getByRole("button", { name: "log it" })).toBeTruthy();
+    // Writing a field must not throw the user onto the next screen: the last
+    // step is what finishes the log.
+    expect(screen.getByRole("heading", { name: "What's your energy like today?" })).toBeTruthy();
+  });
+
+  it("records a period start from the first step, through the same rules as the calendar", async () => {
+    const { api } = await enabled();
+    const todayId = api.store!.today;
+
+    fireEvent.click(screen.getByRole("button", { name: "Yes, today" }));
+
+    const starts = Object.values(api.store!.cycle.entries).map((e) => e.startDate);
+    expect(starts).toContain(todayId);
   });
 
   it("records the log without touching the plan", async () => {
@@ -155,8 +157,9 @@ describe("the daily flow", () => {
 
     const habits = JSON.stringify(api.store!.state.habits);
 
-    fireEvent.click(screen.getByRole("button", { name: "High" }));
+    fireEvent.click(screen.getByRole("button", { name: "No, not yet" }));
     fireEvent.click(screen.getByRole("button", { name: /Motivated/ }));
+    fireEvent.click(screen.getByRole("button", { name: /High/ }));
 
     expect(api.store!.cycle.checkIns[todayId].energy).toBe(4);
     expect(api.store!.cycle.checkIns[todayId].feeling).toBe("motivated");
