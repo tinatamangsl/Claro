@@ -573,14 +573,92 @@ export const ENERGY_LABELS: Record<EnergyLevel, string> = {
  * planning data, and "delete all cycle data" has to be able to remove every
  * trace of it without touching the day's own reflection.
  */
+/**
+ * A word for how the day felt, in the user's own vocabulary.
+ *
+ * These are things a person says about themselves, which is the only reason
+ * they are safe: Claro never asserts any of them, never predicts one, and never
+ * changes anything because one was chosen.
+ *
+ * A separate field from `mood` rather than a replacement for it. The two are
+ * different vocabularies, and overwriting the old one would throw away entries
+ * people already wrote.
+ */
+export type Feeling =
+  | "focused"
+  | "scattered"
+  | "calm"
+  | "anxious"
+  | "motivated"
+  | "exhausted";
+
+export const FEELINGS: Feeling[] = [
+  "focused",
+  "scattered",
+  "calm",
+  "anxious",
+  "motivated",
+  "exhausted",
+];
+
+export const FEELING_META: Record<Feeling, { emoji: string; label: string }> = {
+  focused: { emoji: "\u{1F3AF}", label: "Focused" },
+  scattered: { emoji: "\u{1F4AD}", label: "Scattered" },
+  calm: { emoji: "\u{1F33F}", label: "Calm" },
+  anxious: { emoji: "\u26A1", label: "Anxious" },
+  motivated: { emoji: "\u{1F525}", label: "Motivated" },
+  exhausted: { emoji: "\u{1FAAB}", label: "Exhausted" },
+};
+
+/** Whether the morning's reading held up, answered by the person who wrote it. */
+export type EveningMatch = "yes" | "roughly" | "no";
+
+export const EVENING_MATCHES: EveningMatch[] = ["yes", "roughly", "no"];
+
+export const EVENING_LABELS: Record<EveningMatch, string> = {
+  yes: "Yes, pretty much",
+  roughly: "Roughly",
+  no: "Not at all",
+};
+
+export type EveningNote = {
+  match: EveningMatch;
+  /** Free text. Never parsed. */
+  note: string;
+  /** One character the user picked for the day. Decoration, never data. */
+  emoji: string;
+  updatedAt: string;
+};
+
 export type CycleCheckIn = {
   dayId: ISODate;
   energy: EnergyLevel | null;
   mood: MoodFace | null;
   stress: StressLevel | null;
+  /** Additive: a word for the day, alongside the older mood face. */
+  feeling: Feeling | null;
   /** The user's own words. Never parsed, searched or interpreted. */
   note: string;
+  /** Filled in at the end of the day, if the user wants to. */
+  evening: EveningNote | null;
   updatedAt: string;
+};
+
+/**
+ * What the user was last shown, so a change in their own estimate can be
+ * reported once rather than appearing silently.
+ *
+ * Every number here is arithmetic on dates they typed. Nothing is learned about
+ * a body, and noticing a change never alters a plan.
+ */
+export type EstimateSnapshot = {
+  typicalGap: number | null;
+  basedOn: number;
+  durationMin: number | null;
+  durationMax: number | null;
+  /** How many descriptive observations their notes supported. */
+  observations: number;
+  seenAt: string;
 };
 
 export type CycleState = {
@@ -588,6 +666,8 @@ export type CycleState = {
   entries: Record<string, CycleEntry>;
   /** Keyed by day id, so a day has at most one private note. */
   checkIns: Record<string, CycleCheckIn>;
+  /** Null until the user has been shown an estimate at all. */
+  lastSeen: EstimateSnapshot | null;
 };
 
 // -------------------------------------------------------------- 3-3-3 plan

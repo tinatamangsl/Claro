@@ -63,7 +63,21 @@ export function emptyState(): ClaroState {
 }
 
 export function blankCycle(): CycleState {
-  return { settings: { enabled: false, optedInAt: null }, entries: {}, checkIns: {} };
+  return { settings: { enabled: false, optedInAt: null }, entries: {}, checkIns: {}, lastSeen: null };
+}
+
+/** A day's private note before anything has been written on it. */
+export function blankCheckIn(dayId: ISODate, now: Date): CycleCheckIn {
+  return {
+    dayId,
+    energy: null,
+    mood: null,
+    stress: null,
+    feeling: null,
+    note: "",
+    evening: null,
+    updatedAt: now.toISOString(),
+  };
 }
 
 export function blankSound(): SoundPrefs {
@@ -430,6 +444,35 @@ function readCycleEntries(raw: unknown): Record<string, CycleEntry> {
   return entries;
 }
 
+/**
+ * Fills in the note fields added after a record was written.
+ *
+ * A note saved before the word-for-the-day existed simply had none, and null
+ * says exactly that. Nothing is inferred from the older `mood` face: the two
+ * are different vocabularies, and translating between them would be Claro
+ * putting words in somebody's mouth.
+ */
+function readCheckIns(raw: unknown): Record<string, CycleCheckIn> {
+  if (!isRecord<CycleCheckIn>(raw)) return {};
+
+  const notes: Record<string, CycleCheckIn> = {};
+  for (const [dayId, value] of Object.entries(raw)) {
+    if (!value || typeof value !== "object") continue;
+    const note = value as Partial<CycleCheckIn>;
+    notes[dayId] = {
+      dayId: typeof note.dayId === "string" ? note.dayId : dayId,
+      energy: note.energy ?? null,
+      mood: note.mood ?? null,
+      stress: note.stress ?? null,
+      feeling: note.feeling ?? null,
+      note: typeof note.note === "string" ? note.note : "",
+      evening: note.evening ?? null,
+      updatedAt: typeof note.updatedAt === "string" ? note.updatedAt : "",
+    };
+  }
+  return notes;
+}
+
 function readCycle(raw: unknown): CycleState {
   const blank = blankCycle();
   if (!raw || typeof raw !== "object") return blank;
@@ -441,7 +484,8 @@ function readCycle(raw: unknown): CycleState {
     },
     entries: readCycleEntries(c.entries),
     // Additive: a store saved before check-ins existed simply arrives empty.
-    checkIns: isRecord<CycleCheckIn>(c.checkIns) ? c.checkIns : {},
+    checkIns: readCheckIns(c.checkIns),
+    lastSeen: c.lastSeen && typeof c.lastSeen === "object" ? c.lastSeen : null,
   };
 }
 

@@ -43,7 +43,7 @@ describe("blank records", () => {
       focusPrefs: DEFAULT_FOCUS_PREFS,
       habits: {},
       habitCompletions: {},
-      cycle: { settings: { enabled: false, optedInAt: null }, entries: {}, checkIns: {} },
+      cycle: { settings: { enabled: false, optedInAt: null }, entries: {}, checkIns: {}, lastSeen: null },
       sound: {
         volume: 0.4,
         muted: false,
@@ -737,6 +737,7 @@ describe("v7 → v8 period range migration", () => {
         e1: { id: "e1", startDate: "2026-06-29", loggedAt: "2026-06-29T09:00:00.000Z" },
       },
       checkIns: {},
+      lastSeen: null,
     },
   });
 
@@ -804,6 +805,7 @@ describe("period ranges survive a refresh", () => {
         },
       },
       checkIns: {},
+      lastSeen: null,
     },
   });
 

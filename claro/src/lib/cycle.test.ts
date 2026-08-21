@@ -48,6 +48,7 @@ const cycleWith = (...specs: Spec[]): CycleState => ({
     }),
   ),
   checkIns: {},
+  lastSeen: null,
 });
 
 describe("logged entries", () => {
@@ -136,11 +137,14 @@ const withCheckIns = (
         energy: (note?.energy ?? null) as never,
         mood: (note?.mood ?? null) as never,
         stress: (note?.stress ?? null) as never,
+        feeling: null,
         note: "",
+        evening: null,
         updatedAt: "x",
       },
     ]),
   ),
+  lastSeen: null,
 });
 
 describe("private daily notes", () => {
@@ -153,7 +157,9 @@ describe("private daily notes", () => {
       energy: null,
       mood: null,
       stress: null,
+      feeling: null,
       note: "",
+      evening: null,
       updatedAt: "",
     });
     // Reading must not materialise a record, or "delete all" would lie.

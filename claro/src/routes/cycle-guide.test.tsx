@@ -54,7 +54,9 @@ const note = (dayId: string): CycleCheckIn => ({
   energy: 2,
   mood: null,
   stress: null,
+  feeling: null,
   note: "Slept badly",
+  evening: null,
   updatedAt: "x",
 });
 

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as CycleRouteImport } from './routes/cycle'
+import { Route as CycleDayRouteImport } from './routes/cycle-day'
 import { Route as CycleGuideRouteImport } from './routes/cycle-guide'
 import { Route as QuarterRouteImport } from './routes/quarter'
 import { Route as QuarterPlanRouteImport } from './routes/quarter-plan'
@@ -31,6 +32,11 @@ const CalendarRoute = CalendarRouteImport.update({
 const CycleRoute = CycleRouteImport.update({
   id: '/cycle',
   path: '/cycle',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CycleDayRoute = CycleDayRouteImport.update({
+  id: '/cycle-day',
+  path: '/cycle-day',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CycleGuideRoute = CycleGuideRouteImport.update({
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/cycle': typeof CycleRoute
+  '/cycle-day': typeof CycleDayRoute
   '/cycle-guide': typeof CycleGuideRoute
   '/quarter': typeof QuarterRoute
   '/quarter-plan': typeof QuarterPlanRoute
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/cycle': typeof CycleRoute
+  '/cycle-day': typeof CycleDayRoute
   '/cycle-guide': typeof CycleGuideRoute
   '/quarter': typeof QuarterRoute
   '/quarter-plan': typeof QuarterPlanRoute
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/cycle': typeof CycleRoute
+  '/cycle-day': typeof CycleDayRoute
   '/cycle-guide': typeof CycleGuideRoute
   '/quarter': typeof QuarterRoute
   '/quarter-plan': typeof QuarterPlanRoute
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/calendar'
     | '/cycle'
+    | '/cycle-day'
     | '/cycle-guide'
     | '/quarter'
     | '/quarter-plan'
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/calendar'
     | '/cycle'
+    | '/cycle-day'
     | '/cycle-guide'
     | '/quarter'
     | '/quarter-plan'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/'
     | '/calendar'
     | '/cycle'
+    | '/cycle-day'
     | '/cycle-guide'
     | '/quarter'
     | '/quarter-plan'
@@ -127,6 +139,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CalendarRoute: typeof CalendarRoute
   CycleRoute: typeof CycleRoute
+  CycleDayRoute: typeof CycleDayRoute
   CycleGuideRoute: typeof CycleGuideRoute
   QuarterRoute: typeof QuarterRoute
   QuarterPlanRoute: typeof QuarterPlanRoute
@@ -155,6 +168,13 @@ declare module '@tanstack/react-router' {
       path: '/cycle'
       fullPath: '/cycle'
       preLoaderRoute: typeof CycleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cycle-day': {
+      id: '/cycle-day'
+      path: '/cycle-day'
+      fullPath: '/cycle-day'
+      preLoaderRoute: typeof CycleDayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cycle-guide': {
@@ -199,6 +219,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CalendarRoute: CalendarRoute,
   CycleRoute: CycleRoute,
+  CycleDayRoute: CycleDayRoute,
   CycleGuideRoute: CycleGuideRoute,
   QuarterRoute: QuarterRoute,
   QuarterPlanRoute: QuarterPlanRoute,

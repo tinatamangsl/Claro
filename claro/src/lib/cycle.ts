@@ -110,7 +110,11 @@ export function checkInOn(cycle: CycleState, dayId: ISODate): CycleCheckIn {
       energy: null,
       mood: null,
       stress: null,
+      feeling: null,
       note: "",
+      evening: null,
+      // Read during render, so no clock is touched here. A blank note has never
+      // been written and carries no time.
       updatedAt: "",
     }
   );

@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, BookOpen, Lock, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Lock, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
@@ -88,6 +88,20 @@ export function CycleNotes() {
           keeps this separate from your planning and never shares it.
         </p>
       </header>
+
+      {/* The daily flow: the way in most mornings, so it comes first. */}
+      <Link
+        to="/cycle-day"
+        className="surface-raised flex items-center justify-between gap-4 p-5 transition-colors hover:border-foreground/25"
+      >
+        <span className="min-w-0">
+          <span className="display block text-[1.35rem] leading-tight">Log today</span>
+          <span className="mt-0.5 block text-[0.85rem] text-muted-foreground">
+            Energy, a word for the day, and anything you want to remember.
+          </span>
+        </span>
+        <ArrowRight aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </Link>
 
       {/* 1. What Claro estimated, stated quietly and always labelled. */}
       <CycleGlance cycle={cycle} todayId={today} />

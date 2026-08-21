@@ -18,6 +18,7 @@ const cycleWith = (...specs: Spec[]): CycleState => ({
     }),
   ),
   checkIns: {},
+  lastSeen: null,
 });
 
 const TODAY: ISODate = "2026-08-19";

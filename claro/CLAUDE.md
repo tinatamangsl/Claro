@@ -77,6 +77,9 @@ src/lib/calendar.ts     month grid + habit aggregation (counts only, never a str
 src/lib/cycle.ts        logged period ranges, and estimates from the user's own history alone
 src/lib/cycle-calendar.ts   what each calendar day is: logged, estimated, or neither
 src/lib/cycle-guide.ts  the learning page's content and its cited sources
+src/lib/cycle-log.ts    the quick daily log: three energy taps over one stored reading
+src/lib/cycle-forecast.ts   the next seven days, with no forecast of how anyone will feel
+src/lib/cycle-recalibration.ts  what moved in the user's own estimate, said once
 src/lib/sound.ts        the single generated-ambient-sound engine
 src/hooks/use-sortable.ts   pointer + keyboard reordering, group-aware
 src/hooks/use-focus-session.ts  the one canonical session, shared by every route
@@ -329,6 +332,37 @@ duration and every gap drawn from them.
 not the same treatment at different opacities: a logged period is a solid amber band drawn
 continuously across the whole range, and the estimate is a dashed, unfilled outline. The band
 reaches into the grid gutter to close it, which is why the grid carries `px-0.5`.
+
+### The daily flow at `/cycle-day`
+
+Five screens on one route, driven by a `view` search param so each is linkable and
+browser-back is the way out: **log**, what your own notes show, the next seven days, the
+end-of-day check-in, and a **changed-estimate** screen that comes before the rest when there is
+something to report.
+
+It was built from a supplied design that had to be adapted in four places, and the adaptations
+are the point rather than an oversight:
+
+- The phase line is **positional**, not "Luteal phase". Same reason as everywhere else.
+- The insight card carries a **description of the user's own notes**, not "your brain is working
+  harder than usual, deep focus work will cost more today". Claro knows neither thing.
+- The seven-day strip has **no energy forecast and no descriptor**. `ForecastDay` has nowhere for
+  one to live, and a test asserts the shape. Announcing on Monday that Thursday will be hard is a
+  good way to make Thursday hard.
+- The changed-estimate screen says **"Your estimate has changed"**, not "Claro has learned
+  something", and ends in "got it" rather than "apply to my calendar". Nothing is applied because
+  a changed estimate changes a number on a page.
+
+Two implementation notes worth keeping. **The landing screen is chosen once, on arrival**
+(`useState` initialiser, not derived per render) or tapping the first control would count the day
+as logged and throw the user onto the next screen mid-sentence; moving on is what "log it" is for.
+And the three energy taps are a **view of the same 1 to 5 reading** the fuller page writes, not a
+second field beside it: `bandOf` and `levelForBand` project between them, and a level already
+inside the tapped band is kept, so a 5 entered elsewhere survives a tap on HIGH.
+
+`Feeling` and `EveningNote` are additive fields on `CycleCheckIn`, alongside the older `mood`
+rather than replacing it. They are different vocabularies, and translating between them would be
+Claro putting words in somebody's mouth.
 
 ### Understanding your menstrual cycle: the guide
 

@@ -11,6 +11,8 @@ import {
 
 import { formatDayId } from "./dates";
 import {
+  blankCheckIn,
+  blankCycle,
   blankMonthPlan,
   clearState,
   emptyState,
@@ -31,6 +33,7 @@ import type {
   CycleCheckIn,
   CycleEntry,
   CycleState,
+  EstimateSnapshot,
   Day,
   FocusPrefs,
   Habit,
@@ -111,6 +114,8 @@ type ClaroContextValue = {
   deleteCycleEntry: (id: string) => void;
   /** An optional private note about a day. Never written anywhere else. */
   writeCycleCheckIn: (dayId: ISODate, patch: Partial<CycleCheckIn>, now: Date) => void;
+  /** Marks the current estimate as seen, so a change is announced only once. */
+  acknowledgeCycleEstimate: (snapshot: EstimateSnapshot) => void;
   deleteAllCycleData: () => void;
 
   sound: SoundPrefs;
@@ -458,14 +463,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     (dayId: ISODate, patch: Partial<CycleCheckIn>, now: Date) => {
       setSnap((prev) => {
         if (!prev) return prev;
-        const current = prev.state.cycle.checkIns[dayId] ?? {
-          dayId,
-          energy: null,
-          mood: null,
-          stress: null,
-          note: "",
-          updatedAt: now.toISOString(),
-        };
+        const current = prev.state.cycle.checkIns[dayId] ?? blankCheckIn(dayId, now);
         return {
           ...prev,
           state: {
@@ -484,6 +482,18 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  /**
+   * Records the estimate the user has just been shown, so the same change is
+   * not reported again. Writes nothing but the snapshot.
+   */
+  const acknowledgeCycleEstimate = useCallback((snapshot: EstimateSnapshot) => {
+    setSnap((prev) =>
+      prev
+        ? { ...prev, state: { ...prev.state, cycle: { ...prev.state.cycle, lastSeen: snapshot } } }
+        : prev,
+    );
+  }, []);
+
   /** Removes every cycle record and the opt-in itself. */
   const deleteAllCycleData = useCallback(() => {
     setSnap((prev) =>
@@ -493,7 +503,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
             state: {
               ...prev.state,
               // Everything goes: entries, private notes and the opt-in itself.
-            cycle: { settings: { enabled: false, optedInAt: null }, entries: {}, checkIns: {} },
+            cycle: blankCycle(),
             },
           }
         : prev,
@@ -600,6 +610,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       setCycleEntries,
       deleteCycleEntry,
       writeCycleCheckIn,
+      acknowledgeCycleEstimate,
       deleteAllCycleData,
       sound: state.sound,
       setSound,
@@ -639,6 +650,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       setCycleEntries,
       deleteCycleEntry,
       writeCycleCheckIn,
+      acknowledgeCycleEstimate,
       deleteAllCycleData,
       setSound,
       addPreset,

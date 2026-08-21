@@ -20,6 +20,7 @@ const withStarts = (...starts: ISODate[]): CycleState => ({
     starts.map((startDate, i) => [`e${i}`, { id: `e${i}`, startDate, endDate: null, loggedAt: "x" }]),
   ),
   checkIns: {},
+  lastSeen: null,
 });
 
 const REGULAR = () => withStarts("2026-05-04", "2026-06-01", "2026-06-29", "2026-07-27");
@@ -32,7 +33,9 @@ const note = (
   energy: null,
   mood: null,
   stress: null,
+  feeling: null,
   note: "",
+  evening: null,
   updatedAt: "x",
   ...patch,
 });
