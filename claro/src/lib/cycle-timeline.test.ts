@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  BAND_LABELS,
-  CYCLE_BANDS,
   MIN_NOTES_FOR_PATTERN,
-  MIN_NOTES_IN_BAND,
-  notesInBand,
+  MIN_NOTES_IN_PHASE,
+  notesInPhase,
   observations,
   positionOn,
   summariseNote,
 } from "./cycle-timeline";
+import { CYCLE_PHASES, PHASE_META } from "./cycle-phases";
 import { blankCycle } from "./storage";
 import type { CycleCheckIn, CycleState, ISODate } from "./types";
 
@@ -56,10 +55,12 @@ describe("where a day falls", () => {
     expect(positionOn(REGULAR(), "2026-08-01")?.ofAbout).toBe(28);
   });
 
-  it("puts a day in one of three equal bands", () => {
-    expect(positionOn(REGULAR(), "2026-07-28")?.band).toBe("early");
-    expect(positionOn(REGULAR(), "2026-08-08")?.band).toBe("middle");
-    expect(positionOn(REGULAR(), "2026-08-20")?.band).toBe("later");
+  it("names the phase a day falls in", () => {
+    // 28 day cycle, 5 day period: bleeding to day 5, ovulation around 13 to 15.
+    expect(positionOn(REGULAR(), "2026-07-28")?.phase).toBe("menstrual");
+    expect(positionOn(REGULAR(), "2026-08-04")?.phase).toBe("follicular");
+    expect(positionOn(REGULAR(), "2026-08-09")?.phase).toBe("ovulation");
+    expect(positionOn(REGULAR(), "2026-08-20")?.phase).toBe("luteal");
   });
 
   it("says nothing at all without enough history to know a typical length", () => {
@@ -71,17 +72,28 @@ describe("where a day falls", () => {
     expect(positionOn(REGULAR(), "2026-01-01")).toBeNull();
   });
 
-  it("stops counting once it is far past a typical length", () => {
-    // Well beyond the estimate, the number would mean nothing.
-    expect(positionOn(REGULAR(), "2026-12-01")).toBeNull();
+  it("keeps counting into cycles nobody has logged, and says that is what it is", () => {
+    // The calendar has to be able to colour a whole year ahead, so the count
+    // projects rather than giving up. What it must not do is pretend the
+    // projection is a record.
+    const far = positionOn(REGULAR(), "2026-12-01")!;
+
+    expect(far.day).toBeGreaterThanOrEqual(1);
+    expect(far.day).toBeLessThanOrEqual(28);
+    expect(far.projected).toBe(true);
+
+    expect(positionOn(REGULAR(), "2026-08-01")!.projected).toBe(false);
   });
 
-  it("labels bands by position, never by physiology", () => {
-    const labels = CYCLE_BANDS.map((b) => BAND_LABELS[b].toLowerCase()).join(" ");
+  it("names the four phases, and nothing about capability or fertility", () => {
+    const labels = CYCLE_PHASES.map((p) => `${PHASE_META[p].label} ${PHASE_META[p].short}`)
+      .join(" ")
+      .toLowerCase();
 
-    expect(labels).toContain("estimated cycle");
-    // No physiological or fertility naming anywhere in the labels.
-    for (const forbidden of ["follicular", "luteal", "ovulat", "fertile", "hormone"]) {
+    expect(labels).toContain("follicular");
+    expect(labels).toContain("luteal");
+    // The names are allowed; what they must never imply is not.
+    for (const forbidden of ["fertile", "pregnan", "energy", "productive", "best time"]) {
       expect(labels).not.toContain(forbidden);
     }
   });
@@ -101,7 +113,7 @@ describe("personal observations", () => {
   });
 
   it("says nothing when a band has too few notes to describe", () => {
-    expect(MIN_NOTES_IN_BAND).toBe(3);
+    expect(MIN_NOTES_IN_PHASE).toBe(3);
 
     // Five notes overall, but spread so no band reaches three.
     const spread = withNotes(
@@ -122,13 +134,13 @@ describe("personal observations", () => {
       note("2026-07-28", { energy: 1 }),
       note("2026-07-29", { energy: 2 }),
       note("2026-07-30", { energy: 1 }),
-      note("2026-07-31", { energy: 4 }),
-      note("2026-08-01", { energy: 5 }),
+      note("2026-08-24", { energy: 4 }),
+      note("2026-08-25", { energy: 5 }),
     );
 
     const found = observations(early);
     expect(found).toHaveLength(1);
-    expect(found[0].band).toBe("early");
+    expect(found[0].phase).toBe("menstrual");
     expect(found[0].text).toBe(
       "You logged lower energy on 3 of your last 5 notes in this part of your cycle.",
     );
@@ -199,7 +211,7 @@ describe("looking up your own notes from this point before", () => {
     );
 
   it("returns the notes from the same band, most recent first", () => {
-    const found = notesInBand(REGULAR_NOTES(), "2026-07-28");
+    const found = notesInPhase(REGULAR_NOTES(), "2026-07-28");
 
     expect(found.map((n) => n.dayId)).toEqual(["2026-06-30", "2026-06-02"]);
   });
@@ -207,7 +219,7 @@ describe("looking up your own notes from this point before", () => {
   it("leaves out the cycle being asked about, so it really is past cycles", () => {
     // 30 June is day 2 of the cycle that began on the 29th, and so is the day
     // being asked about here. Only the earlier cycle's note comes back.
-    const found = notesInBand(REGULAR_NOTES(), "2026-06-30");
+    const found = notesInPhase(REGULAR_NOTES(), "2026-06-30");
 
     expect(found.map((n) => n.dayId)).toEqual(["2026-06-02"]);
   });
@@ -219,18 +231,18 @@ describe("looking up your own notes from this point before", () => {
       note("2026-06-30", { energy: 3, note: "Last cycle" }),
     );
 
-    const found = notesInBand(cycle, "2026-07-29");
+    const found = notesInPhase(cycle, "2026-07-29");
 
     expect(found.map((n) => n.note)).toEqual(["Last cycle"]);
   });
 
   it("returns nothing when there is no position to compare against", () => {
-    expect(notesInBand(blankCycle(), "2026-07-28")).toEqual([]);
+    expect(notesInPhase(blankCycle(), "2026-07-28")).toEqual([]);
   });
 
   it("ignores empty notes, which are not something the user recorded", () => {
     const cycle = withNotes(REGULAR(), note("2026-06-02"));
 
-    expect(notesInBand(cycle, "2026-07-28")).toEqual([]);
+    expect(notesInPhase(cycle, "2026-07-28")).toEqual([]);
   });
 });

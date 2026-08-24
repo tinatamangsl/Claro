@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 
 import { CYCLE_LENGTH_NOTE } from "@/lib/cycle";
-import { BAND_LABELS, observations, positionOn, summariseNote } from "@/lib/cycle-timeline";
+import { observations, positionOn, summariseNote } from "@/lib/cycle-timeline";
+import { PHASE_META } from "@/lib/cycle-phases";
 import { pastNotesFor } from "@/lib/cycle-forecast";
 import { SUPPORTIVE_PROMPTS } from "@/lib/cycle-guide";
 import { formatDayShort } from "@/lib/dates";
@@ -33,7 +34,7 @@ type Props = {
 export function DayGuide({ cycle, todayId, day, onForecast, onEvening, eveningReady }: Props) {
   const position = positionOn(cycle, todayId);
   const found = observations(cycle);
-  const here = found.filter((o) => o.band === position?.band);
+  const here = found.filter((o) => o.phase === position?.phase);
   const shown = here.length > 0 ? here : found;
   const past = pastNotesFor(cycle, todayId, 2);
   const anchor = day.priority1;
@@ -42,7 +43,7 @@ export function DayGuide({ cycle, todayId, day, onForecast, onEvening, eveningRe
     <div className="space-y-7">
       <p className="text-[10px] text-muted-foreground">
         {position
-          ? `${BAND_LABELS[position.band]} · Day ${position.day}`
+          ? `${PHASE_META[position.phase].label}, estimated · Day ${position.day}`
           : "Not enough logged dates for a day count"}
       </p>
 

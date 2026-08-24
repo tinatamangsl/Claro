@@ -1010,3 +1010,95 @@
     }
   }
 }
+
+/*
+ * Estimated cycle phases.
+ *
+ * Four washes, all faint enough that the paper still reads through them, and
+ * all clearly *behind* the marks for what the user actually logged. The
+ * hierarchy matters more than the hues: a solid amber band is a day somebody
+ * recorded, and a wash is arithmetic. If a wash ever competes with the band,
+ * the calendar has started presenting a guess as a fact.
+ *
+ * Projected cycles, past the one in progress, are drawn at roughly half again
+ * as faint. Further ahead means less certain, and the calendar should look it.
+ */
+@layer utilities {
+  :root {
+    --phase-menstrual: hsl(2 70% 62%);
+    --phase-follicular: hsl(150 45% 45%);
+    --phase-ovulation: hsl(196 60% 48%);
+    --phase-luteal: hsl(268 45% 58%);
+    --phase-wash: 16%;
+    --phase-wash-projected: 9%;
+  }
+
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --phase-wash: 26%;
+      --phase-wash-projected: 15%;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --phase-wash: 26%;
+    --phase-wash-projected: 15%;
+  }
+
+  .phase-menstrual {
+    background-color: color-mix(in srgb, var(--phase-menstrual) var(--phase-wash), transparent);
+  }
+  .phase-follicular {
+    background-color: color-mix(in srgb, var(--phase-follicular) var(--phase-wash), transparent);
+  }
+  .phase-ovulation {
+    background-color: color-mix(in srgb, var(--phase-ovulation) var(--phase-wash), transparent);
+  }
+  .phase-luteal {
+    background-color: color-mix(in srgb, var(--phase-luteal) var(--phase-wash), transparent);
+  }
+
+  /* Cycles that have not happened yet, drawn as the guesses they are. */
+  .phase-projected.phase-menstrual {
+    background-color: color-mix(
+      in srgb,
+      var(--phase-menstrual) var(--phase-wash-projected),
+      transparent
+    );
+  }
+  .phase-projected.phase-follicular {
+    background-color: color-mix(
+      in srgb,
+      var(--phase-follicular) var(--phase-wash-projected),
+      transparent
+    );
+  }
+  .phase-projected.phase-ovulation {
+    background-color: color-mix(
+      in srgb,
+      var(--phase-ovulation) var(--phase-wash-projected),
+      transparent
+    );
+  }
+  .phase-projected.phase-luteal {
+    background-color: color-mix(
+      in srgb,
+      var(--phase-luteal) var(--phase-wash-projected),
+      transparent
+    );
+  }
+
+  /* The legend swatches, so the key cannot drift from the calendar. */
+  .phase-key-menstrual {
+    background-color: color-mix(in srgb, var(--phase-menstrual) 45%, transparent);
+  }
+  .phase-key-follicular {
+    background-color: color-mix(in srgb, var(--phase-follicular) 45%, transparent);
+  }
+  .phase-key-ovulation {
+    background-color: color-mix(in srgb, var(--phase-ovulation) 45%, transparent);
+  }
+  .phase-key-luteal {
+    background-color: color-mix(in srgb, var(--phase-luteal) 45%, transparent);
+  }
+}

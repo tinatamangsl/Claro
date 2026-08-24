@@ -173,7 +173,7 @@ describe("the completion line", () => {
     }
   });
 
-  it("names where the day sits positionally, never physiologically", () => {
+  it("names the estimated phase, and says it is estimated", () => {
     vi.useFakeTimers();
     setup();
 
@@ -182,8 +182,11 @@ describe("the completion line", () => {
     fireEvent.click(screen.getByRole("button", { name: /Medium/ }));
 
     const line = screen.getByRole("status").textContent!.toLowerCase();
-    expect(line).toContain("in your estimated cycle");
-    for (const banned of ["luteal", "follicular", "ovulat", "menstrual phase"]) {
+
+    expect(line).toMatch(/menstrual|follicular|ovulation|luteal/);
+    // Named, and named as an estimate rather than as a fact about a body.
+    expect(line).toContain("estimated");
+    for (const banned of ["fertile", "pregnan", "you will"]) {
       expect(line).not.toContain(banned);
     }
   });

@@ -13,7 +13,8 @@
 
 import { estimatedWindow } from "./cycle-calendar";
 import { isPeriodDay } from "./cycle";
-import { notesInBand, positionOn, type CycleBand } from "./cycle-timeline";
+import { notesInPhase, positionOn } from "./cycle-timeline";
+import type { CyclePhase } from "./cycle-phases";
 import { shiftDayId } from "./dates";
 import type { CycleCheckIn, CycleState, EnergyLevel, Feeling, ISODate } from "./types";
 
@@ -21,7 +22,7 @@ export type ForecastDay = {
   dayId: ISODate;
   /** Estimated day of the cycle, or null without enough history. */
   cycleDay: number | null;
-  band: CycleBand | null;
+  phase: CyclePhase | null;
   /** A day the user actually logged a period on. */
   isPeriod: boolean;
   /** Inside the estimated next-period window. Never both. */
@@ -65,11 +66,11 @@ export function forecast(
     return {
       dayId,
       cycleDay: position?.day ?? null,
-      band: position?.band ?? null,
+      phase: position?.phase ?? null,
       isPeriod,
       // A confirmed day is never also an estimate, exactly as on the calendar.
       isEstimated: !isPeriod && window !== null && dayId >= window.from && dayId <= window.to,
-      hasPastNotes: notesInBand(cycle, dayId, 1).length > 0,
+      hasPastNotes: notesInPhase(cycle, dayId, 1).length > 0,
       loggedEnergy: note?.energy ?? null,
       feeling: note?.feeling ?? null,
       isToday: dayId === todayId,
@@ -98,7 +99,7 @@ export function pastNotesFor(cycle: CycleState, dayId: ISODate, limit = 3): Cycl
   const picked: CycleCheckIn[] = [];
 
   // Ask for a wide window, then thin it: the cap is per cycle, not per note.
-  for (const note of notesInBand(cycle, dayId, limit * 6)) {
+  for (const note of notesInPhase(cycle, dayId, limit * 6)) {
     const anchor = positionOn(cycle, note.dayId)?.since;
     if (!anchor || seen.has(anchor)) continue;
     seen.add(anchor);

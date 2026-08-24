@@ -17,11 +17,13 @@ import {
 } from "@/lib/dates";
 import { newId } from "@/lib/id";
 import { addCapped, removeById, toggleById, updateById } from "@/lib/mutations";
+import { formatMonthLong, monthsOfQuarter } from "@/lib/calendar";
 import {
   DOMAIN_META,
   DOMAINS,
   MAX_SIDE_QUESTS,
   type Domain,
+  type MonthPlan,
   type Quarter,
   type QuarterId,
 } from "@/lib/types";
@@ -40,7 +42,7 @@ export const Route = createFileRoute("/quarter")({
 });
 
 function QuarterView() {
-  const { today, quarter, updateQuarter, recordUndo } = useClaro();
+  const { today, quarter, updateQuarter, recordUndo, monthPlan, updateMonthPlan } = useClaro();
   const { q } = Route.useSearch();
   const navigate = useNavigate();
 
@@ -95,6 +97,29 @@ function QuarterView() {
         </p>
       )}
 
+      {/*
+        The three months this quarter is made of. Planning moved here from
+        Calendar, which CLAUDE.md defines as a review surface: writing a month's
+        intention is planning, and having it on the review page meant the
+        strategic level carried one heading while the review page carried seven.
+      */}
+      <section>
+        <div className="flex items-baseline gap-2.5">
+          <h2 className="eyebrow">The months in this quarter</h2>
+          <span className="text-[11px] text-muted-foreground">one intention each</span>
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          {monthsOfQuarter(quarterId).map((monthId) => (
+            <MonthIntention
+              key={monthId}
+              monthId={monthId}
+              plan={monthPlan(monthId)}
+              onWrite={(patch) => updateMonthPlan(monthId, (p) => ({ ...p, ...patch }))}
+            />
+          ))}
+        </div>
+      </section>
+
       <div className="grid items-stretch gap-8 md:grid-cols-2">
         {DOMAINS.map((domain) => (
           <QuarterColumn
@@ -107,6 +132,37 @@ function QuarterView() {
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * One month's intention, small enough that three sit side by side.
+ *
+ * The fuller monthly reflection stays where it was written; this is the line
+ * that belongs beside the quarter it serves.
+ */
+function MonthIntention({
+  monthId,
+  plan,
+  onWrite,
+}: {
+  monthId: string;
+  plan: MonthPlan;
+  onWrite: (patch: Partial<MonthPlan>) => void;
+}) {
+  return (
+    <div className="surface-quiet p-4">
+      <p className="eyebrow">{formatMonthLong(monthId)}</p>
+      <EditableText
+        value={plan.intention}
+        onCommit={(intention) => onWrite({ intention })}
+        multiline
+        rows={2}
+        ariaLabel={`Intention for ${formatMonthLong(monthId)}`}
+        placeholder="One intention for this month…"
+        className="-ml-2 mt-1.5 text-[0.9rem] leading-snug"
+      />
     </div>
   );
 }

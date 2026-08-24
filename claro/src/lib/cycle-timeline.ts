@@ -6,21 +6,25 @@
  * First, the only input is dates the user typed in. Nothing is inferred about a
  * body, and no external model, average or population figure is used anywhere.
  *
- * Second, the labels are **positional, not physiological**. A band is named for
- * where it falls in the user's own estimated cycle, not for what is supposedly
- * happening inside them. Naming bands after phases would be a claim about
- * physiology, and one common label is a fertility prediction, which Claro must
- * never make. "Early in your estimated cycle" is honest about being arithmetic
- * on dates; "follicular" would not be.
+ * Second, the phase is a **label on that arithmetic**, not a measurement.
+ * Claro names the four phases because the user asked for them and because they
+ * are the shape most people have for their own cycle, but every place one
+ * appears says it was estimated from logged dates. The one thing the naming
+ * must never become is a fertility prediction: see `OVULATION_NOTE`.
  *
- * Nothing here says what a band does to anyone, and nothing recommends food,
+ * Nothing here says what a phase does to anyone, and nothing recommends food,
  * exercise, work, sound or behaviour.
  */
 
 import { differenceInCalendarDays } from "date-fns";
 
 import { estimateNext, sortedEntries } from "./cycle";
-import { parseDayId } from "./dates";
+import {
+  CYCLE_PHASES,
+  phaseBands,
+  projectedDay,
+  type CyclePhase,
+} from "./cycle-phases";
 import {
   ENERGY_LABELS,
   MOOD_FACE_META,
@@ -31,31 +35,16 @@ import {
   type ISODate,
 } from "./types";
 
-/** Three equal bands of the user's own estimated cycle length. */
-export type CycleBand = "early" | "middle" | "later";
-
-export const CYCLE_BANDS: CycleBand[] = ["early", "middle", "later"];
-
-export const BAND_LABELS: Record<CycleBand, string> = {
-  early: "Early in your estimated cycle",
-  middle: "Middle of your estimated cycle",
-  later: "Later in your estimated cycle",
-};
-
-export const BAND_SHORT: Record<CycleBand, string> = {
-  early: "Early",
-  middle: "Middle",
-  later: "Later",
-};
-
 export type CyclePosition = {
   /** Day 1 is the logged start itself. */
   day: number;
-  /** The user's own median gap, which the bands are measured against. */
+  /** The cycle length the phases were divided from. */
   ofAbout: number;
-  band: CycleBand;
+  phase: CyclePhase;
   /** The logged date this is counted from. */
   since: ISODate;
+  /** True once the count has run into cycles nobody has logged yet. */
+  projected: boolean;
 };
 
 /**
@@ -65,40 +54,39 @@ export type CyclePosition = {
  * a typical length. Guessing either would be inventing information.
  */
 export function positionOn(cycle: CycleState, dayId: ISODate): CyclePosition | null {
-  const estimate = estimateNext(cycle);
-  if (!estimate) return null;
+  const projected = projectedDay(cycle, dayId);
+  if (!projected) return null;
 
   const previous = sortedEntries(cycle)
     .filter((entry) => entry.startDate <= dayId)
     .at(-1);
   if (!previous) return null;
 
-  const day = differenceInCalendarDays(parseDayId(dayId), parseDayId(previous.startDate)) + 1;
-  // Past the end of a typical length, the count stops meaning anything.
-  if (day < 1 || day > estimate.typicalGap + 14) return null;
-
-  const third = estimate.typicalGap / 3;
-  const band: CycleBand = day <= third ? "early" : day <= third * 2 ? "middle" : "later";
-
-  return { day, ofAbout: estimate.typicalGap, band, since: previous.startDate };
+  return {
+    day: projected.day,
+    ofAbout: projected.length,
+    phase: projected.phase,
+    since: previous.startDate,
+    projected: projected.projected,
+  };
 }
 
 // ------------------------------------------------------------- patterns
 
 /** Below this there is not enough of the user's own history to describe. */
 export const MIN_NOTES_FOR_PATTERN = 5;
-/** And this many within one band, or the description would be about noise. */
-export const MIN_NOTES_IN_BAND = 3;
+/** And this many within one phase, or the description would be about noise. */
+export const MIN_NOTES_IN_PHASE = 3;
 
 export type PatternObservation = {
-  band: CycleBand;
+  phase: CyclePhase;
   /** Plain description of what the user themselves recorded. */
   text: string;
-  /** How many notes in this band it was drawn from. */
+  /** How many notes in this phase it was drawn from. */
   of: number;
 };
 
-type Reading = { note: CycleCheckIn; band: CycleBand };
+type Reading = { note: CycleCheckIn; phase: CyclePhase };
 
 function readingsFor(cycle: CycleState): Reading[] {
   const readings: Reading[] = [];
@@ -106,7 +94,7 @@ function readingsFor(cycle: CycleState): Reading[] {
     if (note.energy === null && note.mood === null && note.stress === null) continue;
     const position = positionOn(cycle, note.dayId);
     if (!position) continue;
-    readings.push({ note, band: position.band });
+    readings.push({ note, phase: position.phase });
   }
   return readings;
 }
@@ -114,22 +102,22 @@ function readingsFor(cycle: CycleState): Reading[] {
 /** "3 of your last 5" style counts, for one band and one reading. */
 function describe(
   readings: Reading[],
-  band: CycleBand,
+  phase: CyclePhase,
   pick: (note: CycleCheckIn) => number | null,
   low: number,
   phrase: string,
 ): PatternObservation | null {
-  const inBand = readings.filter((r) => r.band === band && pick(r.note) !== null);
-  if (inBand.length < MIN_NOTES_IN_BAND) return null;
+  const inPhase = readings.filter((r) => r.phase === phase && pick(r.note) !== null);
+  if (inPhase.length < MIN_NOTES_IN_PHASE) return null;
 
-  const matching = inBand.filter((r) => (pick(r.note) as number) <= low).length;
+  const matching = inPhase.filter((r) => (pick(r.note) as number) <= low).length;
   // Only worth saying when it is most of them.
-  if (matching < Math.ceil(inBand.length / 2)) return null;
+  if (matching < Math.ceil(inPhase.length / 2)) return null;
 
   return {
-    band,
-    of: inBand.length,
-    text: `You logged ${phrase} on ${matching} of your last ${inBand.length} notes in this part of your cycle.`,
+    phase,
+    of: inPhase.length,
+    text: `You logged ${phrase} on ${matching} of your last ${inPhase.length} notes in this part of your cycle.`,
   };
 }
 
@@ -145,13 +133,13 @@ export function observations(cycle: CycleState): PatternObservation[] {
   if (readings.length < MIN_NOTES_FOR_PATTERN) return [];
 
   const found: PatternObservation[] = [];
-  for (const band of CYCLE_BANDS) {
-    const energy = describe(readings, band, (n) => n.energy, 2, "lower energy");
+  for (const phase of CYCLE_PHASES) {
+    const energy = describe(readings, phase, (n) => n.energy, 2, "lower energy");
     if (energy) found.push(energy);
 
     const stress = describe(
       readings,
-      band,
+      phase,
       (n) => (n.stress === null ? null : 6 - n.stress),
       2,
       "higher stress",
@@ -180,7 +168,7 @@ export function summariseNote(note: CycleCheckIn): string {
  * whenever there is no position to compare against, which is the honest answer
  * rather than a list of unrelated notes.
  */
-export function notesInBand(cycle: CycleState, dayId: ISODate, limit = 5): CycleCheckIn[] {
+export function notesInPhase(cycle: CycleState, dayId: ISODate, limit = 5): CycleCheckIn[] {
   const here = positionOn(cycle, dayId);
   if (!here) return [];
 
@@ -194,7 +182,7 @@ export function notesInBand(cycle: CycleState, dayId: ISODate, limit = 5): Cycle
     )
     .filter((note) => {
       const there = positionOn(cycle, note.dayId);
-      if (!there || there.band !== here.band) return false;
+      if (!there || there.phase !== here.phase) return false;
       // Past cycles only. A note from three days ago is not history, and
       // calling it that would misdescribe what the user is looking at.
       return there.since !== here.since;
@@ -205,9 +193,9 @@ export function notesInBand(cycle: CycleState, dayId: ISODate, limit = 5): Cycle
 
 // --------------------------------------------------- one band, described
 
-export type BandSummary = {
-  band: CycleBand;
-  /** Which estimated cycle days this band covers, or null without an estimate. */
+export type PhaseSummary = {
+  phase: CyclePhase;
+  /** Which estimated cycle days this phase covers, or null without an estimate. */
   days: { from: number; to: number } | null;
   /** How many of the user's notes fall in it. */
   notes: number;
@@ -218,7 +206,7 @@ export type BandSummary = {
 };
 
 /** Every note the user wrote in one band of their own estimated cycle. */
-export function notesForBand(cycle: CycleState, band: CycleBand): CycleCheckIn[] {
+export function notesForPhase(cycle: CycleState, phase: CyclePhase): CycleCheckIn[] {
   return Object.values(cycle.checkIns)
     .filter(
       (note) =>
@@ -228,7 +216,7 @@ export function notesForBand(cycle: CycleState, band: CycleBand): CycleCheckIn[]
         note.stress !== null ||
         note.note.trim() !== "",
     )
-    .filter((note) => positionOn(cycle, note.dayId)?.band === band)
+    .filter((note) => positionOn(cycle, note.dayId)?.phase === phase)
     .sort((a, b) => b.dayId.localeCompare(a.dayId));
 }
 
@@ -240,9 +228,8 @@ export function notesForBand(cycle: CycleState, band: CycleBand): CycleCheckIn[]
  * what somebody wrote does not support one: knowing they logged "exhausted"
  * four times says nothing about what they should have eaten.
  */
-export function summariseBand(cycle: CycleState, band: CycleBand): BandSummary {
-  const estimate = estimateNext(cycle);
-  const notes = notesForBand(cycle, band);
+export function summarisePhase(cycle: CycleState, phase: CyclePhase): PhaseSummary {
+  const notes = notesForPhase(cycle, phase);
 
   const counts = new Map<Feeling, number>();
   for (const note of notes) {
@@ -253,18 +240,21 @@ export function summariseBand(cycle: CycleState, band: CycleBand): BandSummary {
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
   const tied = ranked.length > 1 && ranked[0][1] === ranked[1][1];
 
-  let days: BandSummary["days"] = null;
-  if (estimate) {
-    const third = estimate.typicalGap / 3;
-    const index = CYCLE_BANDS.indexOf(band);
-    days = {
-      from: Math.floor(third * index) + 1,
-      to: index === CYCLE_BANDS.length - 1 ? estimate.typicalGap : Math.floor(third * (index + 1)),
-    };
-  }
+  // The days come from the same division the calendar paints, so the panel and
+  // the grid can never disagree about where a phase starts.
+  const bands = phaseBands(cycle);
+  const days = bands
+    ? phase === "menstrual"
+      ? bands.menstrual
+      : phase === "ovulation"
+        ? bands.ovulation
+        : phase === "follicular"
+          ? bands.follicular
+          : bands.luteal
+    : null;
 
   return {
-    band,
+    phase,
     days,
     notes: notes.length,
     commonFeeling: ranked.length > 0 && !tied ? ranked[0][0] : null,

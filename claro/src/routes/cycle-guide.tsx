@@ -15,7 +15,7 @@ import {
   type PhaseCard,
 } from "@/lib/cycle-guide";
 import { CYCLE_LENGTH_NOTE } from "@/lib/cycle";
-import { notesInBand, summariseNote } from "@/lib/cycle-timeline";
+import { notesInPhase, summariseNote } from "@/lib/cycle-timeline";
 import { formatDayDate, formatDayShort } from "@/lib/dates";
 import type { CycleState, ISODate } from "@/lib/types";
 
@@ -186,7 +186,7 @@ function PersonalNotes({ cycle, todayId }: { cycle: CycleState; todayId: ISODate
     );
   }
 
-  const notes = notesInBand(cycle, todayId);
+  const notes = notesInPhase(cycle, todayId);
 
   return (
     <section className="space-y-3">

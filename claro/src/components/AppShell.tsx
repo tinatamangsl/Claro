@@ -8,7 +8,7 @@ import { SoundControl } from "@/components/SoundControl";
 import { useClaro } from "@/lib/claro-store";
 import { cn } from "@/lib/utils";
 
-/** The whole of Claro's navigation. Three places, in hierarchy order reversed for daily use. */
+/** The planning hierarchy, in reverse: the level used most often comes first. */
 const NAV = [
   { to: "/today", label: "Daily" },
   { to: "/week", label: "Week" },
@@ -17,13 +17,23 @@ const NAV = [
 ] as const;
 
 /**
+ * Cycle is a real destination and the heaviest page in Claro, so hiding it
+ * behind links inside other screens misdescribed the product. It joins the nav
+ * once the user has turned it on, and not before: a fifth item on a fresh
+ * install would advertise an optional, private feature to somebody who never
+ * asked for it, which is the one thing this feature must not do.
+ */
+const CYCLE_NAV = { to: "/cycle", label: "Cycle" } as const;
+
+/**
  * `wide` opens the page out to the two-page spread's rhythm. Header, main and
  * footer all take it together, so the shell never looks misaligned with the
  * content it frames.
  */
 export function AppShell({ children, wide }: { children: ReactNode; wide?: boolean }) {
-  const { ready, saveStatus, today } = useClaro();
+  const { ready, saveStatus, today, cycle } = useClaro();
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const nav = cycle.settings.enabled ? [...NAV, CYCLE_NAV] : NAV;
   const page = cn("page", wide && "page-wide");
 
   return (
@@ -46,8 +56,10 @@ export function AppShell({ children, wide }: { children: ReactNode; wide?: boole
             aria-label="Main"
             className="order-3 flex w-full items-center gap-1 sm:order-none sm:w-auto sm:flex-1 sm:justify-center"
           >
-            {NAV.map((item) => {
-              const active = path === item.to;
+            {nav.map((item) => {
+              // Cycle's sub-routes still light the Cycle item, so the nav never
+              // looks like the user has left the app.
+              const active = path === item.to || path.startsWith(`${item.to}-`);
               return (
                 <Link
                   key={item.to}

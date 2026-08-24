@@ -64,13 +64,15 @@ describe("the next seven days", () => {
     // Today is day 6, so the run reads day 3 through day 9.
     expect(days.map((d) => d.cycleDay)).toEqual([3, 4, 5, 6, 7, 8, 9]);
     expect(days[3].cycleDay).toBe(6);
-    expect(days[0].band).toBe("early");
+    // Three days back from day 6 is day 3, still bleeding.
+    expect(days[0].phase).toBe("menstrual");
+    expect(days[3].phase).toBe("follicular");
   });
 
   it("says nothing about a cycle day without enough history to count from", () => {
     const days = forecast(cycleWith("2026-08-16"), TODAY);
 
-    expect(days.every((d) => d.cycleDay === null && d.band === null)).toBe(true);
+    expect(days.every((d) => d.cycleDay === null && d.phase === null)).toBe(true);
   });
 
   it("marks a logged period day, and never marks it as an estimate too", () => {
@@ -102,7 +104,8 @@ describe("the next seven days", () => {
     };
 
     const days = forecast(cycle, TODAY);
-    expect(days[0].hasPastNotes).toBe(true);
+    // The note is from the same phase as today, not as the day three back.
+    expect(days[todayIndex(days)].hasPastNotes).toBe(true);
     expect(pastNotesFor(cycle, TODAY).map((n) => n.dayId)).toEqual(["2026-07-24"]);
   });
 
@@ -115,7 +118,7 @@ describe("the next seven days", () => {
       new Set([
         "dayId",
         "cycleDay",
-        "band",
+        "phase",
         "isPeriod",
         "isEstimated",
         "hasPastNotes",

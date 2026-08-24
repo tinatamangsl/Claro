@@ -1,11 +1,13 @@
-import { Link } from "@tanstack/react-router";
 import { Lock } from "lucide-react";
+
+import { CycleLink } from "@/components/cycle/CycleLink";
 import { useState } from "react";
 
 import { useClaro } from "@/lib/claro-store";
 import { addPeriod, describeRefusal, durationOf, ongoingPeriod, endPeriod } from "@/lib/cycle";
 import { estimatedWindow } from "@/lib/cycle-calendar";
-import { BAND_LABELS, positionOn } from "@/lib/cycle-timeline";
+import { positionOn } from "@/lib/cycle-timeline";
+import { PHASE_META } from "@/lib/cycle-phases";
 import { formatDayShort } from "@/lib/dates";
 import { newId } from "@/lib/id";
 import { cn } from "@/lib/utils";
@@ -58,12 +60,7 @@ export function CycleWeekCard({ className }: { className?: string }) {
           <Lock aria-hidden className="h-3 w-3" />
           Cycle notes
         </h2>
-        <Link
-          to="/cycle"
-          className="text-[11px] text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
-        >
-          Open the cycle calendar
-        </Link>
+        <CycleLink />
       </div>
 
       <div className="mt-2.5 space-y-1">
@@ -75,7 +72,7 @@ export function CycleWeekCard({ className }: { className?: string }) {
         ) : position ? (
           <p className="text-[0.88rem] leading-relaxed">
             Day <span className="tnum">{position.day}</span> of about{" "}
-            <span className="tnum">{position.ofAbout}</span>. {BAND_LABELS[position.band]}.
+            <span className="tnum">{position.ofAbout}</span>. {PHASE_META[position.phase].label}, estimated.
           </p>
         ) : (
           <p className="text-[0.88rem] leading-relaxed text-muted-foreground">

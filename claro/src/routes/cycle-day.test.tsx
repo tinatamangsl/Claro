@@ -187,7 +187,7 @@ describe("the daily flow", () => {
     expect(container.textContent).toContain("your priority");
   });
 
-  it("never claims what a phase does to anyone, on any screen of the flow", async () => {
+  it("never claims what a phase does to anyone, nor predicts fertility, anywhere in the flow", async () => {
     const { api, container } = await enabled();
     const todayId = api.store!.today;
 
@@ -200,18 +200,24 @@ describe("the daily flow", () => {
       act(() => api.store!.writeCycleCheckIn(todayId, { note: "x" }, new Date()));
 
       const text = container.textContent!.toLowerCase();
+      // The phase names are allowed now. What they must never carry is a claim
+      // about capability or a fertility prediction.
       for (const banned of [
-        "luteal",
-        "follicular",
-        "ovulat",
-        "fertil",
         "your brain",
         "will cost more",
         "protect your energy",
         "high-stakes",
         "apply to my calendar",
+        "most fertile",
       ]) {
         expect(text).not.toContain(banned);
+      }
+
+      for (const sentence of text.split(/(?<=[.?!])\s+/)) {
+        for (const phrase of ["fertile window", "chance of pregnancy", "you will feel"]) {
+          if (!sentence.includes(phrase)) continue;
+          expect(sentence).toMatch(/\bnot\b|\bcannot\b|\bnever\b|does not/);
+        }
       }
     }
   });

@@ -49,14 +49,43 @@ Everything hangs off a single three-level hierarchy:
 QUARTER  Direction    → WEEK  Commitment  → DAY  Execution
 ```
 
-Nav is four items: **Today | Week | Quarter | Calendar**. The cycle routes are deliberately not
-among them: `/cycle` is reached from Calendar and from Daily, `/cycle-day` and `/cycle-guide` from
-`/cycle`. Cycle notes are off until turned on, and a nav item would announce the feature to
-somebody who never asked for it. Calendar was added deliberately as a
+Nav is **Daily | Week | Quarter | Calendar**, and gains a fifth item, **Cycle**, once cycle notes
+are turned on. Four items on a fresh install, five after: a nav item on an app nobody has opted
+into would advertise an optional private feature to somebody who never asked for it, and hiding a
+five-screen destination behind links inside other pages misdescribed the product. The sub-routes
+`/cycle-day` and `/cycle-guide` light the Cycle item, and `/quarter-plan` lights Quarter, so the
+nav never looks like the user has left the app. Calendar was added deliberately as a
 *review* surface, not a fifth planning level: it holds Month (the detailed view), Quarter and Year,
 all read from one shared aggregation in `lib/calendar.ts`. Quarter and Year are read only, and no
 view computes a total of its own. The planning Quarter in the nav is a different screen. The product thesis is still "fewer, more meaningful things", so answer most
 feature requests by deepening an existing screen rather than adding another.
+
+## Information architecture
+
+The shape was measured rather than assumed, and four faults drove the current layout. They are
+worth knowing because each is easy to reintroduce.
+
+**Weight and findability must match.** `/cycle` was 5.1 screens and 79 buttons while sitting
+outside the nav entirely, heavier than Week, Quarter and the quarterly plan combined. It is now in
+the nav once enabled, and split: the glance and the log stay, and Calendar / Numbers / Phases /
+History sit behind one control, which took it to 3.4 screens.
+
+**Depth follows frequency, not importance.** The three-tap daily log was three clicks deep while
+the cited sources were one. `CycleLink` now points at `/cycle-day` until today is logged and at
+`/cycle` after, so the thing done daily is one tap from Daily.
+
+**One destination, one affordance.** Five components linked to `/cycle`, each looking and reading
+differently, and two of them sat on Daily at once. There is now a single `CycleLink` and every
+screen uses it. A person cannot build a mental model of where something lives if each screen
+offers a differently-shaped door to it.
+
+**Planning belongs on planning surfaces.** "Plan this month" sat on Calendar, which this file
+defines as review-only, while Quarter carried a single heading. The three months of a quarter now
+live on Quarter as one intention each; Calendar went from 2.5 screens to 1.9 and Quarter from 1.6
+to 2.1. The review page got lighter and the strategic page got the weight it was missing.
+
+`/cycle-guide` is deliberately left long at 7.7 screens. It is a reference document read rarely
+and in full, and chunking a cited source list into tabs would make it harder to scan, not easier.
 
 ## Architecture
 
@@ -79,6 +108,7 @@ src/lib/schedule.ts     moving a schedule entry between hours, and the swap when
 src/lib/calendar.ts     month grid + habit aggregation (counts only, never a streak)
 src/lib/cycle.ts        logged period ranges, and estimates from the user's own history alone
 src/lib/cycle-calendar.ts   what each calendar day is: logged, estimated, or neither
+src/lib/cycle-phases.ts     the four estimated phases, projected across the calendar
 src/lib/cycle-guide.ts  the learning page's content and its cited sources
 src/lib/cycle-log.ts    the quick daily log: three energy taps over one stored reading
 src/lib/cycle-forecast.ts   the next seven days, with no forecast of how anyone will feel
@@ -389,6 +419,47 @@ per phase. A calendar estimate cannot know what a body needs, and a list of food
 label reads as instruction however gently it is written. The slot holds two things instead: what
 this person logged in that part of their own cycle, and the user-led questions. The physiology
 stays on the guide page, where it is cited.
+
+### Estimated phases on the calendar
+
+`lib/cycle-phases.ts` divides a cycle into **menstrual, follicular, ovulation and luteal** and
+projects them across the calendar, at both scales. Bleeding days come from the user's own recorded
+durations; ovulation is placed by the ordinary convention that the luteal phase runs about
+`LUTEAL_DAYS` (14), and is drawn as a short band rather than a day because a date cannot be
+pinned. Short cycles squeeze the follicular band to nothing, which the arithmetic survives rather
+than producing a band that runs backwards.
+
+**This reverses the earlier positional labelling, everywhere.** Claro used to say "Early / Middle
+/ Later in your estimated cycle" and a test forbade the phase names outright. The user asked for
+the physiological names three times, so they are now used, and `CycleBand` is gone rather than
+kept alongside: `positionOn`, `observations`, `notesInPhase` and `summarisePhase` all key on
+`CyclePhase`, and the glance bar, week card, week slider, daily flow and the "part by part" panel
+all read the same four names as the calendar. **Two vocabularies for one thing is what made the
+feature feel unintuitive**, and a phase division that lived in two places would eventually
+disagree with itself: `summarisePhase` takes its day ranges from `phaseBands`, the same function
+the calendar paints from.
+
+The boundary moved rather than disappeared:
+
+- Every phase is labelled as **estimated from logged dates**, with `PHASE_ESTIMATE_NOTE` beside
+  every place they are drawn. A colour on a calendar reads as a fact and this one is not.
+- **The ovulation band is never a fertility prediction.** `OVULATION_NOTE` travels with it and
+  says a calendar cannot confirm whether or when ovulation happened. There is no fertile window,
+  no chance of conception, no best time to try and no pregnancy language anywhere that reads this
+  module. The tests check that *per sentence*, so the words may appear in the refusal that stops
+  the feature becoming a fertility product but nowhere else.
+- No phase carries advice about food, movement, work or rest. The per-day panel shows the phase,
+  the cited educational paragraph already written for the guide, and what the user themselves
+  wrote at that point before. Nothing else.
+
+`projectedDay` counts **forward only**. Counting back past the first logged start would invent
+cycles nobody recorded, and the projection's whole claim is that it rests on dates that exist.
+Anything past the cycle in progress is flagged `projected` and drawn at roughly half the wash, so
+further ahead looks less certain.
+
+The washes sit *behind* everything logged: a solid amber band is still a day somebody recorded,
+and a tint is arithmetic. If a wash ever competes with the band, the calendar has started
+presenting a guess as a fact.
 
 ### Logging on the calendar itself
 

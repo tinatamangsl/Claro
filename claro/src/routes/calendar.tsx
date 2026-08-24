@@ -5,7 +5,6 @@ import { AppShell } from "@/components/AppShell";
 import { PeriodHeader } from "@/components/PeriodHeader";
 import { Breadcrumbs } from "@/components/calendar/Breadcrumbs";
 import { Legend } from "@/components/calendar/Legend";
-import { MonthPlanPanel } from "@/components/calendar/MonthPlanPanel";
 import { HabitMonth } from "@/components/calendar/HabitMonth";
 import { HabitConsistencyList, MonthStats } from "@/components/calendar/MonthStats";
 import { GoalProgressList } from "@/components/calendar/GoalProgressList";
@@ -69,8 +68,6 @@ function CalendarView() {
     today,
     state,
     cycle,
-    monthPlan,
-    updateMonthPlan,
     day,
   } = useClaro();
   const { d, v } = Route.useSearch();
@@ -264,12 +261,6 @@ function CalendarView() {
               </div>
             </section>
 
-            <MonthPlanPanel
-              monthId={monthId}
-              plan={monthPlan(monthId)}
-              onWrite={(patch) => updateMonthPlan(monthId, (p) => ({ ...p, ...patch }))}
-            />
-
             <section>
               <div className="flex items-baseline gap-2.5">
                 <h2 className="eyebrow">Cycle notes</h2>
@@ -282,7 +273,7 @@ function CalendarView() {
                     : "If it is useful to you, Claro can keep a private note of when a period starts."}
                 </p>
                 <Link to="/cycle" className="btn btn-sm btn-quiet mt-3">
-                  {cycle.settings.enabled ? "Open cycle notes" : "Learn more"}
+                  {cycle.settings.enabled ? "My cycle notes" : "Learn more"}
                 </Link>
               </div>
             </section>

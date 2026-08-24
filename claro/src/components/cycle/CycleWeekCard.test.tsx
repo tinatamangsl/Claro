@@ -63,7 +63,8 @@ describe("cycle context on the week", () => {
     act(() => api.store!.setCycleEnabled(true, new Date()));
 
     expect(screen.getByText("Cycle notes")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open the cycle calendar" })).toBeTruthy();
+    // The one shared affordance, not a fourth differently-worded door.
+    expect(screen.getByRole("link", { name: /cycle note/i })).toBeTruthy();
   });
 
   it("reports the estimate from the user's own dates, and labels it as one", async () => {

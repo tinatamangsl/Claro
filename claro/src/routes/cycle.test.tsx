@@ -79,16 +79,24 @@ describe("the screen once it is on", () => {
     const { container } = await enabled();
 
     const headings = [...container.querySelectorAll("h1, h2")].map((h) => h.textContent);
+    // Glance, the action, then one record surface at a time. The other three
+    // are a tap away rather than stacked below.
     expect(headings).toEqual([
       "Cycle at a glance",
       "Log a period start",
       "Your cycle calendar",
-      "Your numbers",
-      "Your cycle, part by part",
-      "Your logged periods",
       "How today felt",
       "Your data",
     ]);
+  });
+
+  it("keeps the records behind one control instead of five screens of stack", async () => {
+    const { container } = await enabled();
+
+    const tabs = [...container.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
+    expect(tabs).toEqual(["Calendar", "Numbers", "Phases", "History"]);
+    // Only the chosen one is mounted, which is what makes the page short.
+    expect(container.textContent).not.toContain("Your usual cycle length");
   });
 
   it("puts the three ways in side by side, none of them buried", async () => {
@@ -111,6 +119,7 @@ describe("the screen once it is on", () => {
 
   it("offers only calculators a calendar can actually support", async () => {
     const { container } = await enabled();
+    fireEvent.click(screen.getByRole("tab", { name: "Numbers" }));
     const text = container.textContent!.toLowerCase();
 
     expect(text).toContain("your usual cycle length");
@@ -124,6 +133,7 @@ describe("the screen once it is on", () => {
 
   it("answers the per-phase slot with questions, never with food or exercise", async () => {
     const { container } = await enabled();
+    fireEvent.click(screen.getByRole("tab", { name: "Phases" }));
     const text = container.textContent!.toLowerCase();
 
     expect(text).toContain("what feels supportive for you?");
@@ -166,6 +176,7 @@ describe("the screen once it is on", () => {
 
   it("offers only questions about planning, and changes nothing itself", async () => {
     const { container } = await enabled();
+    fireEvent.click(screen.getByRole("tab", { name: "Phases" }));
 
     expect(container.textContent).toContain("How is your energy today?");
     expect(container.textContent).toContain("Would you like to reduce, keep, or expand your plan?");
@@ -178,7 +189,7 @@ describe("the screen once it is on", () => {
     const folded = [...container.querySelectorAll("details")].map(
       (d) => d.querySelector("h2")?.textContent,
     );
-    expect(folded).toEqual(["Your logged periods", "How today felt"]);
+    expect(folded).toEqual(["How today felt"]);
     // Closed by default, and still findable by the browser's own search.
     expect([...container.querySelectorAll("details")].every((d) => !d.open)).toBe(true);
   });

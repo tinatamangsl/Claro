@@ -2,16 +2,14 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { SUPPORTIVE_PROMPTS } from "@/lib/cycle-guide";
+import { positionOn, summarisePhase, summariseNote, notesForPhase } from "@/lib/cycle-timeline";
 import {
-  BAND_LABELS,
-  BAND_SHORT,
-  CYCLE_BANDS,
-  positionOn,
-  summariseBand,
-  summariseNote,
-  notesForBand,
-  type CycleBand,
-} from "@/lib/cycle-timeline";
+  CYCLE_PHASES,
+  OVULATION_NOTE,
+  PHASE_ESTIMATE_NOTE,
+  PHASE_META,
+  type CyclePhase,
+} from "@/lib/cycle-phases";
 import { formatDayShort } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { FEELING_META, type CycleState, type ISODate } from "@/lib/types";
@@ -32,40 +30,52 @@ type Props = { cycle: CycleState; todayId: ISODate };
  */
 export function PhasePanel({ cycle, todayId }: Props) {
   const here = positionOn(cycle, todayId);
-  const [band, setBand] = useState<CycleBand>(here?.band ?? "early");
-  const summary = summariseBand(cycle, band);
-  const notes = notesForBand(cycle, band).slice(0, 3);
+  const [phase, setPhase] = useState<CyclePhase>(here?.phase ?? "menstrual");
+  const summary = summarisePhase(cycle, phase);
+  const notes = notesForPhase(cycle, phase).slice(0, 3);
 
   return (
     <div className="surface p-5">
-      <div className="flex gap-1.5" role="tablist" aria-label="Part of your estimated cycle">
-        {CYCLE_BANDS.map((option) => (
+      <div
+        className="grid grid-cols-2 gap-1.5 sm:grid-cols-4"
+        role="tablist"
+        aria-label="Estimated phase of your cycle"
+      >
+        {CYCLE_PHASES.map((option) => (
           <button
             key={option}
             type="button"
             role="tab"
-            aria-selected={band === option}
-            onClick={() => setBand(option)}
+            aria-selected={phase === option}
+            onClick={() => setPhase(option)}
             className={cn(
-              "flex-1 rounded-lg py-2 text-[0.85rem] transition-colors",
-              band === option
+              "flex items-center justify-center gap-1.5 rounded-lg py-2 text-[0.8rem] transition-colors",
+              phase === option
                 ? "bg-foreground text-background"
                 : "bg-muted text-muted-foreground hover:text-foreground",
             )}
           >
-            {BAND_SHORT[option]}
-            {here?.band === option && <span className="ml-1 text-[10px] opacity-70">now</span>}
+            <span aria-hidden className={cn("h-2 w-2 rounded-full", `phase-key-${option}`)} />
+            {PHASE_META[option].short}
+            {here?.phase === option && <span className="text-[10px] opacity-70">now</span>}
           </button>
         ))}
       </div>
 
       <div className="mt-4">
-        <p className="display text-[1.15rem] leading-snug italic">{BAND_LABELS[band]}</p>
+        <p className="display text-[1.15rem] leading-snug italic">
+          {PHASE_META[phase].label}, estimated
+        </p>
         <p className="tnum mt-1 text-[0.82rem] text-muted-foreground">
           {summary.days
             ? `About days ${summary.days.from} to ${summary.days.to} of your own estimated cycle.`
             : "Log a little more history and Claro can work out which days this covers."}
         </p>
+        {phase === "ovulation" && (
+          <p className="mt-2 rounded-md bg-muted/60 px-2.5 py-2 text-[10px] leading-relaxed text-muted-foreground">
+            {OVULATION_NOTE}
+          </p>
+        )}
       </div>
 
       {/* What you recorded here before. Counts, never a conclusion. */}
@@ -119,8 +129,9 @@ export function PhasePanel({ cycle, todayId }: Props) {
           ))}
         </ul>
         <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-          Claro does not tell you what to eat, how to move, or what work to take on. A calendar
-          estimate cannot know any of that, and your own notes above are the more useful record.{" "}
+          {PHASE_ESTIMATE_NOTE} Claro does not tell you what to eat, how to move, or what work to
+          take on: a calendar estimate cannot know any of that, and your own notes above are the
+          more useful record.{" "}
           <Link to="/cycle-guide" className="underline underline-offset-2 hover:text-foreground">
             The guide explains the phases, with sources.
           </Link>

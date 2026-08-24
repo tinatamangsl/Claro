@@ -183,7 +183,7 @@ describe("logging from the calendar", () => {
     expect(onDelete).toHaveBeenCalledWith("e0");
   });
 
-  it("never predicts fertility, ovulation or pregnancy anywhere on it", () => {
+  it("names the estimated phases, including ovulation, as phases", () => {
     const { container } = setup(
       cycleWith(
         ["2026-06-01", "2026-06-04"],
@@ -192,9 +192,48 @@ describe("logging from the calendar", () => {
       ),
     );
 
-    const text = container.textContent!.toLowerCase();
-    for (const banned of ["fertile", "fertility", "ovulation", "pregnan", "conceive"]) {
-      expect(text).not.toContain(banned);
+    const text = container.textContent!;
+    for (const phase of ["Menstrual", "Follicular", "Ovulation", "Luteal"]) {
+      expect(text).toContain(phase);
+    }
+  });
+
+  it("says the phases are estimated wherever it draws them", () => {
+    const { container } = setup(
+      cycleWith(
+        ["2026-06-01", "2026-06-04"],
+        ["2026-06-29", "2026-07-02"],
+        ["2026-07-27", "2026-07-30"],
+      ),
+    );
+
+    expect(container.textContent).toContain("estimated from the dates you logged");
+    expect(container.textContent).toContain("not a measurement");
+  });
+
+  it("never turns the ovulation band into a fertility prediction", () => {
+    // This is the line the phase colours must not cross. Naming a phase is a
+    // label on an estimate; a fertile window is a claim about a body.
+    const { container } = setup(
+      cycleWith(
+        ["2026-06-01", "2026-06-04"],
+        ["2026-06-29", "2026-07-02"],
+        ["2026-07-27", "2026-07-30"],
+      ),
+    );
+
+    const sentences = container.textContent!.toLowerCase().split(/(?<=[.?!])\s+/);
+    for (const sentence of sentences) {
+      for (const phrase of [
+        "fertile window",
+        "most fertile",
+        "chance of pregnancy",
+        "chance of conceiving",
+        "best time to",
+      ]) {
+        if (!sentence.includes(phrase)) continue;
+        expect(sentence).toMatch(/\bnot\b|\bcannot\b|\bnever\b|does not/);
+      }
     }
   });
 });

@@ -15,6 +15,9 @@ import {
   type LogResult,
 } from "@/lib/cycle";
 import { estimatedWindow, markFor } from "@/lib/cycle-calendar";
+import { PHASE_META, projectedDay } from "@/lib/cycle-phases";
+import { PhaseLegend } from "@/components/cycle/PhaseLegend";
+import { DayPhaseGuidance } from "@/components/cycle/DayPhaseGuidance";
 import { formatDayDate, formatDayLong, formatDayOfMonth, formatDayShort } from "@/lib/dates";
 import { newId } from "@/lib/id";
 import { cn } from "@/lib/utils";
@@ -178,6 +181,7 @@ export function CycleCalendar({
 
         {monthGrid(monthId).map((cell) => {
           const mark = markFor(cycle, cell.dayId, todayId);
+          const phase = projectedDay(cycle, cell.dayId);
           const isSelected = selected === cell.dayId;
 
           return (
@@ -205,6 +209,7 @@ export function CycleCalendar({
               aria-current={cell.dayId === todayId ? "date" : undefined}
               aria-label={[
                 formatDayLong(cell.dayId),
+                phase ? `estimated day ${phase.day}, ${PHASE_META[phase.phase].label.toLowerCase()}` : null,
                 mark.period
                   ? mark.ongoing
                     ? "logged period day, still ongoing"
@@ -218,6 +223,9 @@ export function CycleCalendar({
               className={cn(
                 "relative grid aspect-square place-items-center rounded-lg text-[0.8rem] transition-colors",
                 cell.inMonth ? "text-foreground" : "text-muted-foreground/40",
+                // The wash sits behind everything the user actually logged.
+                cell.inMonth && phase && `phase-${phase.phase}`,
+                cell.inMonth && phase?.projected && "phase-projected",
                 cell.dayId === todayId && "font-medium",
                 inDrag(cell.dayId) && "bg-primary/20",
                 isSelected && !drag && "ring-2 ring-ring ring-offset-1 ring-offset-card",
@@ -263,6 +271,7 @@ export function CycleCalendar({
       </div>
 
       <Key window={window} />
+      <PhaseLegend className="mt-3" />
 
       {selected && (
         <SelectedDay
@@ -348,6 +357,9 @@ function SelectedDay({
   return (
     <div className="paper-panel mt-4 p-4">
       <p className="text-[0.9rem] font-medium">{formatDayDate(dayId)}</p>
+
+      {/* What this day is, before what can be done with it. */}
+      <DayPhaseGuidance cycle={cycle} dayId={dayId} todayId={todayId} />
 
       {entry ? (
         <>

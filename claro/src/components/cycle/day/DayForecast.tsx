@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { forecast, pastNotesFor, todayIndex, type ForecastDay } from "@/lib/cycle-forecast";
 import { bandOf, ENERGY_BAND_LABELS } from "@/lib/cycle-log";
-import { BAND_LABELS, summariseNote } from "@/lib/cycle-timeline";
+import { summariseNote } from "@/lib/cycle-timeline";
+import { PHASE_META } from "@/lib/cycle-phases";
 import { SUPPORTIVE_PROMPTS } from "@/lib/cycle-guide";
 import { formatDayShort, formatDayWeekday, formatWeekdayShort } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -240,9 +241,9 @@ function DayCard({
           {formatDayShort(day.dayId)}
           {day.cycleDay ? ` · Day ${day.cycleDay}` : ""}
         </p>
-        {day.band && (
+        {day.phase && (
           <p className="mt-1.5 text-[9px] tracking-[0.12em] text-muted-foreground uppercase">
-            {BAND_LABELS[day.band]}
+            {PHASE_META[day.phase].label}
           </p>
         )}
       </header>

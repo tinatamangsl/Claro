@@ -10,7 +10,8 @@ import {
   type EnergyBand,
   type PeriodAnswer,
 } from "@/lib/cycle-log";
-import { BAND_LABELS, positionOn } from "@/lib/cycle-timeline";
+import { positionOn } from "@/lib/cycle-timeline";
+import { PHASE_META } from "@/lib/cycle-phases";
 import { ongoingPeriod } from "@/lib/cycle";
 import { cn } from "@/lib/utils";
 import {
@@ -81,7 +82,7 @@ export function DayLog({ cycle, todayId, note, onWrite, onPeriod, onDone }: Prop
         <p className="display text-[1.5rem] leading-snug italic">{LOGGED_LINE}</p>
         {position && (
           <p className="mt-3 text-[0.82rem] text-muted-foreground">
-            Day {position.day}. {BAND_LABELS[position.band]}.
+            Day {position.day}. {PHASE_META[position.phase].label}, estimated.
           </p>
         )}
       </div>

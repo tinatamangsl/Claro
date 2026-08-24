@@ -42,6 +42,18 @@ import {
   type StressLevel,
 } from "@/lib/types";
 
+/** The four record surfaces, behind one control instead of stacked five deep. */
+const CYCLE_TABS = ["calendar", "numbers", "phases", "history"] as const;
+
+type CycleTab = (typeof CYCLE_TABS)[number];
+
+const TAB_META: Record<CycleTab, { label: string; heading: string; hint: string }> = {
+  calendar: { label: "Calendar", heading: "Your cycle calendar", hint: "tap or drag any day" },
+  numbers: { label: "Numbers", heading: "Your numbers", hint: "from your own dates" },
+  phases: { label: "Phases", heading: "Your cycle, part by part", hint: "what you logged" },
+  history: { label: "History", heading: "Your logged periods", hint: "edit any of them" },
+};
+
 export const Route = createFileRoute("/cycle")({
   component: () => (
     <AppShell>
@@ -61,6 +73,7 @@ export const Route = createFileRoute("/cycle")({
  */
 export function CycleNotes() {
   const [scale, setScale] = useState<"month" | "year">("month");
+  const [tab, setTab] = useState<CycleTab>("calendar");
   /** The period just recorded, so the page can explain it once. */
   const [justLogged, setJustLogged] = useState<string | null>(null);
   const {
@@ -128,75 +141,86 @@ export function CycleNotes() {
         />
       )}
 
-      {/* 4. One calendar, two scales. */}
+      {/*
+        Four surfaces behind one control rather than stacked.
+        Together they ran to five screens on a phone, which made the page an
+        index nobody could hold in their head; separately each is one screen and
+        the glance and the log stay above them, always.
+      */}
       <section>
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-          <div className="flex items-baseline gap-2.5">
-            <h2 className="eyebrow">Your cycle calendar</h2>
-            <span className="text-[11px] text-muted-foreground">
-              {scale === "month" ? "tap any day" : "tap a month to open it"}
-            </span>
-          </div>
-          <ScaleToggle scale={scale} onChange={setScale} />
+          <h2 className="eyebrow">{TAB_META[tab].heading}</h2>
+          <span className="text-[11px] text-muted-foreground">{TAB_META[tab].hint}</span>
         </div>
+
+        <div
+          role="tablist"
+          aria-label="Your cycle records"
+          className="mt-2.5 grid grid-cols-4 gap-1 rounded-xl bg-muted p-1"
+        >
+          {CYCLE_TABS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              role="tab"
+              aria-selected={tab === option}
+              onClick={() => setTab(option)}
+              className={cn(
+                "rounded-lg py-1.5 text-[0.8rem] transition-colors",
+                tab === option
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {TAB_META[option].label}
+            </button>
+          ))}
+        </div>
+
         <div className="mt-3">
-          {scale === "month" ? (
-            <CycleCalendar
+          {tab === "calendar" && (
+            <>
+              <div className="mb-3 flex justify-end">
+                <ScaleToggle scale={scale} onChange={setScale} />
+              </div>
+              {scale === "month" ? (
+                <CycleCalendar
+                  cycle={cycle}
+                  todayId={today}
+                  onReplace={setCycleEntries}
+                  onDelete={deleteCycleEntry}
+                  onLogged={setJustLogged}
+                  noteOn={(dayId) => checkInOn(cycle, dayId)}
+                  onWriteNote={(dayId, patch) => writeCycleCheckIn(dayId, patch, new Date())}
+                />
+              ) : (
+                <YearCalendar cycle={cycle} todayId={today} onOpenMonth={() => setScale("month")} />
+              )}
+            </>
+          )}
+
+          {tab === "numbers" && (
+            <CycleNumbers cycle={cycle} todayId={today} onSetLength={setCycleLength} />
+          )}
+
+          {tab === "phases" && (
+            <>
+              <PhasePanel cycle={cycle} todayId={today} />
+              <Patterns cycle={cycle} />
+            </>
+          )}
+
+          {tab === "history" && (
+            <PeriodHistory
               cycle={cycle}
               todayId={today}
               onReplace={setCycleEntries}
               onDelete={deleteCycleEntry}
-              onLogged={setJustLogged}
-              noteOn={(dayId) => checkInOn(cycle, dayId)}
-              onWriteNote={(dayId, patch) => writeCycleCheckIn(dayId, patch, new Date())}
             />
-          ) : (
-            <YearCalendar cycle={cycle} todayId={today} onOpenMonth={() => setScale("month")} />
           )}
         </div>
       </section>
 
-      {/* 5. The numbers, all worked out from the user's own dates. */}
-      <section>
-        <div className="flex items-baseline gap-2.5">
-          <h2 className="eyebrow">Your numbers</h2>
-          <span className="text-[11px] text-muted-foreground">from your own dates</span>
-        </div>
-        <div className="mt-3">
-          <CycleNumbers cycle={cycle} todayId={today} onSetLength={setCycleLength} />
-        </div>
-      </section>
-
-      {/* 6. Each part of the cycle, as this person's own record of it. */}
-      <section>
-        <div className="flex items-baseline gap-2.5">
-          <h2 className="eyebrow">Your cycle, part by part</h2>
-          <span className="text-[11px] text-muted-foreground">what you logged, and questions</span>
-        </div>
-        <div className="mt-3">
-          <PhasePanel cycle={cycle} todayId={today} />
-        </div>
-      </section>
-
-      {/* 4. Every logged period, editable start and end. */}
-      <Disclosure summary="Your logged periods" hint="edit any of them">
-        <PeriodHistory
-          cycle={cycle}
-          todayId={today}
-          onReplace={setCycleEntries}
-          onDelete={deleteCycleEntry}
-        />
-      </Disclosure>
-
-      {/* 5. The user's own notes, and what they show. */}
-      <Patterns cycle={cycle} />
-
-      {/*
-        Folded away by default. The three-tap log at /cycle-day is how a day
-        gets recorded now; this is the fuller form for anyone who wants the
-        five-level readings, and it is long enough to bury everything under it
-        if it is left open.
-      */}
       <Disclosure summary="How today felt" hint="the fuller form">
         <CheckIn
           todayId={today}
@@ -404,7 +428,7 @@ function Patterns({ cycle }: { cycle: CycleState }) {
       <ul className="surface mt-3 space-y-2.5 p-4">
         {found.map((observation) => (
           <li
-            key={`${observation.band}:${observation.text}`}
+            key={`${observation.phase}:${observation.text}`}
             className="text-[0.88rem] leading-relaxed"
           >
             {observation.text}

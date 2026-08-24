@@ -1,6 +1,7 @@
 import { CYCLE_LENGTH_NOTE, durationHistory, estimateNext, formatWeeksAndDays } from "@/lib/cycle";
 import { estimatedWindow } from "@/lib/cycle-calendar";
-import { BAND_LABELS, BAND_SHORT, CYCLE_BANDS, positionOn } from "@/lib/cycle-timeline";
+import { positionOn } from "@/lib/cycle-timeline";
+import { CYCLE_PHASES, PHASE_ESTIMATE_NOTE, PHASE_META } from "@/lib/cycle-phases";
 import { NO_JUDGEMENT_NOTE } from "@/lib/cycle-guide";
 import { formatDayDate, formatDayShort } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -53,30 +54,37 @@ export function CycleGlance({ cycle, todayId }: { cycle: CycleState; todayId: IS
             </div>
           </div>
 
-          {/* Three equal bands of the user's own estimated length. */}
+          {/* The four estimated phases of the user's own cycle length. */}
           <div className="mt-5">
             <div aria-hidden className="flex gap-1">
-              {CYCLE_BANDS.map((band) => (
+              {CYCLE_PHASES.map((phase) => (
                 <span
-                  key={band}
+                  key={phase}
                   className={cn(
                     "h-1.5 flex-1 rounded-full",
-                    position?.band === band ? "bg-gold" : "bg-border",
+                    position?.phase === phase ? `phase-key-${phase}` : "bg-border",
                   )}
                 />
               ))}
             </div>
             <div className="mt-1.5 flex gap-1 text-[10px] text-muted-foreground">
-              {CYCLE_BANDS.map((band) => (
+              {CYCLE_PHASES.map((phase) => (
                 <span
-                  key={band}
-                  className={cn("flex-1", position?.band === band && "text-foreground")}
+                  key={phase}
+                  className={cn("flex-1", position?.phase === phase && "text-foreground")}
                 >
-                  {BAND_SHORT[band]}
+                  {PHASE_META[phase].short}
                 </span>
               ))}
             </div>
-            {position && <p className="mt-2 text-[0.85rem]">{BAND_LABELS[position.band]}</p>}
+            {position && (
+              <p className="mt-2 text-[0.85rem]">
+                {PHASE_META[position.phase].label}
+                <span className="text-muted-foreground">
+                  {position.projected ? ", in a cycle not yet logged" : ""}
+                </span>
+              </p>
+            )}
           </div>
 
           {/* The two numbers, deliberately labelled apart from each other. */}

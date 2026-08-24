@@ -2,6 +2,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 
 import { markFor } from "@/lib/cycle-calendar";
+import { projectedDay } from "@/lib/cycle-phases";
+import { PhaseLegend } from "@/components/cycle/PhaseLegend";
 import { formatMonthShort, monthGrid, monthsOfYear, yearOfMonth } from "@/lib/calendar";
 import { formatDayOfMonth, formatDayLong } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -71,6 +73,8 @@ export function YearCalendar({ cycle, todayId, onOpenMonth }: Props) {
           Estimated next period
         </span>
       </div>
+
+      <PhaseLegend className="mt-3" />
     </div>
   );
 }
@@ -98,6 +102,7 @@ function MiniMonth({
       <span className="mt-1.5 grid grid-cols-7 gap-[3px]">
         {monthGrid(monthId).map((cell) => {
           const mark = cell.inMonth ? markFor(cycle, cell.dayId, todayId) : null;
+          const phase = cell.inMonth ? projectedDay(cycle, cell.dayId) : null;
           return (
             <span
               key={cell.dayId}
@@ -105,6 +110,8 @@ function MiniMonth({
               className={cn(
                 "tnum grid aspect-square place-items-center rounded-[3px] text-[8px] leading-none",
                 !cell.inMonth && "text-transparent",
+                phase && `phase-${phase.phase}`,
+                phase?.projected && "phase-projected",
                 mark?.period && "bg-primary/45 font-medium",
                 mark?.estimated && "border border-dashed border-foreground/40",
                 cell.dayId === todayId && "ring-1 ring-gold",
