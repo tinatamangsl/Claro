@@ -3,10 +3,12 @@ import { DragHandle } from "@/components/DragHandle";
 import { ItemRow } from "@/components/ItemRow";
 import { SortAnnouncer } from "@/components/SortAnnouncer";
 import { useSortable } from "@/hooks/use-sortable";
+import { formatTimeLabel } from "@/lib/dates";
 import { newId } from "@/lib/id";
 import { removeById, toggleById, updateById } from "@/lib/mutations";
 import { BUCKETS, BUCKET_META, type ActionItem, type Bucket } from "@/lib/types";
 import { Picker } from "@/components/Picker";
+import { zoneAt } from "@/lib/drop-zones";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -15,6 +17,15 @@ type Props = {
   className?: string;
   /** Renders the three buckets side by side rather than stacked. */
   columns?: boolean;
+  /** Dropping a task onto an hour of the schedule. */
+  onSchedule?: (item: ActionItem, time: string) => void;
+  onHoverHour?: (time: string | null) => void;
+  /**
+   * The hours a block may still be put at. Given alongside `onSchedule`, each
+   * row gains a time control, which is the way to schedule something that does
+   * not involve dragging at all.
+   */
+  scheduleHours?: string[];
 };
 
 /**
@@ -25,8 +36,22 @@ type Props = {
  * One `useSortable` covers all three lanes, so a drag that starts in Tasks can
  * finish in Projects. The bucket picker on each row stays as the non-drag
  * fallback, and the grip's arrow keys move between lanes too.
+ *
+ * **Scheduling has a non-drag route for the same reason.** A drag needs a
+ * pointer, needs the grip to be found, and needs a target that is a page away
+ * on any stacked layout; the time picker on each row needs two taps, works at
+ * every width, and is the only path here that a keyboard could ever take.
+ * Dragging is the shortcut for people who discover it, not the entrance.
  */
-export function ActionLists({ actions, onChange, className, columns }: Props) {
+export function ActionLists({
+  actions,
+  onChange,
+  className,
+  columns,
+  onSchedule,
+  onHoverHour,
+  scheduleHours,
+}: Props) {
   const sortable = useSortable<ActionItem>({
     items: actions,
     label: (item) => item.text || BUCKET_META[item.bucket].short,
@@ -34,6 +59,15 @@ export function ActionLists({ actions, onChange, className, columns }: Props) {
     getGroup: (item) => item.bucket,
     setGroup: (item, bucket) => ({ ...item, bucket: bucket as Bucket }),
     groupNoun: "bucket",
+    // The same grip that moves a task between buckets can carry it out of the
+    // lists entirely and onto an hour of the day.
+    externalDrop: onSchedule
+      ? {
+          zoneAt,
+          onDrop: (item, zone) => onSchedule(item, zone.replace("hour:", "")),
+          onHover: (zone) => onHoverHour?.(zone ? zone.replace("hour:", "") : null),
+        }
+      : undefined,
   });
 
   return (
@@ -48,6 +82,8 @@ export function ActionLists({ actions, onChange, className, columns }: Props) {
           allActions={actions}
           sortable={sortable}
           onChange={onChange}
+          onSchedule={onSchedule}
+          scheduleHours={scheduleHours}
         />
       ))}
     </div>
@@ -60,12 +96,16 @@ function BucketColumn({
   allActions,
   sortable,
   onChange,
+  onSchedule,
+  scheduleHours,
 }: {
   bucket: Bucket;
   items: ActionItem[];
   allActions: ActionItem[];
   sortable: ReturnType<typeof useSortable<ActionItem>>;
   onChange: (actions: ActionItem[]) => void;
+  onSchedule?: (item: ActionItem, time: string) => void;
+  scheduleHours?: string[];
 }) {
   const meta = BUCKET_META[bucket];
   const doneCount = items.filter((i) => i.done).length;
@@ -109,11 +149,22 @@ function BucketColumn({
                 onCommit={(text) => onChange(updateById(allActions, item.id, { text }))}
                 onDelete={() => onChange(removeById(allActions, item.id))}
                 trailing={
-                  <BucketSwitcher
-                    value={item.bucket}
-                    onChange={(next) => onChange(updateById(allActions, item.id, { bucket: next }))}
-                    itemLabel={item.text || meta.short}
-                  />
+                  <>
+                    {onSchedule && scheduleHours ? (
+                      <TimeSwitcher
+                        hours={scheduleHours}
+                        itemLabel={item.text || meta.short}
+                        onPick={(time) => onSchedule(item, time)}
+                      />
+                    ) : null}
+                    <BucketSwitcher
+                      value={item.bucket}
+                      onChange={(next) =>
+                        onChange(updateById(allActions, item.id, { bucket: next }))
+                      }
+                      itemLabel={item.text || meta.short}
+                    />
+                  </>
                 }
               />
             </div>
@@ -144,6 +195,44 @@ function BucketColumn({
 }
 
 /** The non-drag way to recategorise: still just changing one field. */
+/**
+ * Put this on the day at an hour, without dragging anything.
+ *
+ * Unlike the bucket control beside it this is visible at rest rather than on
+ * hover, because hover does not exist on a phone and this is precisely the
+ * width where the drag is hardest: a target a page away, reached by holding
+ * still at the edge of the screen while the page scrolls. Two taps instead.
+ *
+ * Only free slots are offered, so the "that hour is taken" refusal is
+ * unreachable from here, exactly as it is from the calendar's planner, and the
+ * labels are the minute-accurate ones that planner uses: four slots collapsed
+ * to a single "3 PM" would put the same name on four options of one listbox.
+ */
+function TimeSwitcher({
+  hours,
+  itemLabel,
+  onPick,
+}: {
+  hours: string[];
+  itemLabel: string;
+  onPick: (time: string) => void;
+}) {
+  if (hours.length === 0) return null;
+
+  return (
+    <Picker
+      value={null}
+      onChange={onPick}
+      label={`Put "${itemLabel}" on the schedule`}
+      placeholder="Time"
+      align="right"
+      className="shrink-0"
+      triggerClassName="goal-trigger whitespace-nowrap text-muted-foreground"
+      options={hours.map((time) => ({ value: time, label: formatTimeLabel(time) }))}
+    />
+  );
+}
+
 function BucketSwitcher({
   value,
   onChange,

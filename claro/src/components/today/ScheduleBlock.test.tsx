@@ -285,8 +285,9 @@ describe("ScheduleBlock — quarter hours", () => {
     );
     expect(values).toContain("Call");
     expect(values).toContain("Follow up");
-    // And the one off the hour says which minute it is on.
-    expect(screen.getByText(":30")).toBeTruthy();
+    // And the one off the hour says which minute it is on, as a control that
+    // can move it within the hour.
+    expect(screen.getByRole("button", { name: "Time of the block at 1:30 PM" })).toBeTruthy();
   });
 
   it("offers the next free quarter on an hour that already has something", () => {

@@ -205,6 +205,24 @@ export function minutesOf(time: string): number {
   return Number(time.slice(3, 5));
 }
 
+/**
+ * A typed minute, or null when it is not one.
+ *
+ * The four quarters are the quick path, not the vocabulary: a stand-up at 9:05
+ * and a train at 4:37 are ordinary times and a fixed menu cannot say either.
+ * `ScheduleItem.time` was always a plain string, so this needs no migration —
+ * the restriction only ever lived in the list the picker offered.
+ *
+ * Refuses rather than clamps. Silently turning 75 into 59 moves somebody's
+ * block to a time they did not ask for, and they may not notice.
+ */
+export function parseMinutes(input: string): number | null {
+  const trimmed = input.trim();
+  if (!/^\d{1,2}$/.test(trimmed)) return null;
+  const minutes = Number(trimmed);
+  return minutes >= 0 && minutes <= 59 ? minutes : null;
+}
+
 export function atMinutes(hour: string, minutes: number): string {
   return `${hour.slice(0, 2)}:${String(minutes).padStart(2, "0")}`;
 }

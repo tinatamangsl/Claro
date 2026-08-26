@@ -6,7 +6,13 @@ import { Confetti } from "@/components/Confetti";
 import { DragHandle } from "@/components/DragHandle";
 import { SortAnnouncer } from "@/components/SortAnnouncer";
 import { useSortable } from "@/hooks/use-sortable";
-import { formatDayLong, formatDayOfMonth, formatWeekdayShort } from "@/lib/dates";
+import { Picker } from "@/components/Picker";
+import {
+  formatDayLong,
+  formatDayOfMonth,
+  formatTimeLabel,
+  formatWeekdayShort,
+} from "@/lib/dates";
 import {
   activeHabits,
   archivedHabits,
@@ -15,6 +21,7 @@ import {
   isDoneOn,
 } from "@/lib/habits";
 import type { Habit, HabitCompletion, ISODate } from "@/lib/types";
+import { zoneAt } from "@/lib/drop-zones";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -32,6 +39,11 @@ type Props = {
   onArchive: (habitId: string) => void;
   onRestore: (habitId: string) => void;
   onDelete: (habitId: string) => void;
+  /** Dropping a habit onto an hour of the schedule. */
+  onSchedule?: (habit: Habit, time: string) => void;
+  onHoverHour?: (time: string | null) => void;
+  /** Free hours, which give each row a way to be scheduled without dragging. */
+  scheduleHours?: string[];
 };
 
 /**
@@ -51,6 +63,9 @@ export function HabitsBlock({
   onArchive,
   onRestore,
   onDelete,
+  onSchedule,
+  onHoverHour,
+  scheduleHours,
 }: Props) {
   const [showArchived, setShowArchived] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
@@ -61,6 +76,15 @@ export function HabitsBlock({
     items: active,
     label: (habit) => habit.name,
     onReorder,
+    // A habit can be given an hour by dragging it onto one, the same way a
+    // task can.
+    externalDrop: onSchedule
+      ? {
+          zoneAt,
+          onDrop: (habit, zone) => onSchedule(habit, zone.replace("hour:", "")),
+          onHover: (zone) => onHoverHour?.(zone ? zone.replace("hour:", "") : null),
+        }
+      : undefined,
   });
 
   const allDone =
@@ -157,6 +181,23 @@ export function HabitsBlock({
               <span className="tnum hidden w-[5.5rem] shrink-0 text-right text-[10px] text-muted-foreground sm:block">
                 {consistencyLabel(countCompletions(completions, habit.id, weekDayIds), "week")}
               </span>
+
+              {/* The way to put a habit on an hour that does not need a drag. */}
+              {onSchedule && scheduleHours && scheduleHours.length > 0 ? (
+                <Picker
+                  value={null}
+                  onChange={(time) => onSchedule(habit, time)}
+                  label={`Put "${habit.name}" on the schedule`}
+                  placeholder="Time"
+                  align="right"
+                  className="shrink-0"
+                  triggerClassName="goal-trigger whitespace-nowrap text-muted-foreground"
+                  options={scheduleHours.map((time) => ({
+                    value: time,
+                    label: formatTimeLabel(time),
+                  }))}
+                />
+              ) : null}
 
               <button
                 type="button"

@@ -23,6 +23,7 @@ import {
   weekDayIds,
   weekOfDay,
 } from "@/lib/dates";
+import { freeHours, nextFreeSlot } from "@/lib/day-plan";
 import { parkDistraction, selectFocus } from "@/lib/focus";
 import { activeHabits, createHabit, reorderHabits } from "@/lib/habits";
 import { SoundPanel } from "@/components/SoundPanel";
@@ -45,7 +46,12 @@ import {
   writePriority,
   type PriorityTarget,
 } from "@/lib/priorities";
-import { scheduleHabitToggle, toggleScheduleItem } from "@/lib/schedule";
+import {
+  linkedItem,
+  sameLink,
+  scheduleHabitToggle,
+  toggleScheduleItem,
+} from "@/lib/schedule";
 import { CloseDay } from "@/components/today/CloseDay";
 import { CyclePrompt } from "@/components/today/CyclePrompt";
 import { CycleLink } from "@/components/cycle/CycleLink";
@@ -75,7 +81,7 @@ import {
   mainElapsedMs,
 } from "@/lib/focus-session";
 import { cn } from "@/lib/utils";
-import { FOCUS_BLOCK_MS, PRIORITY_KEYS, priorityKey } from "@/lib/types";
+import { FOCUS_BLOCK_MS, PRIORITY_KEYS, priorityKey, type ScheduleLink } from "@/lib/types";
 import type {
   Day,
   FocusSession,
@@ -168,6 +174,40 @@ function TodayView() {
 
   const [closing, setClosing] = useState(false);
   const [cycleDismissed, setCycleDismissed] = useState(false);
+  /** The hour a drag from the lists is hovering, for the schedule to light up. */
+  const [dropHour, setDropHour] = useState<string | null>(null);
+
+  /*
+   * The hours a task or habit can still be put at. Offering only free ones is
+   * what keeps the "that hour is taken" refusal unreachable from the row
+   * controls, the same way the calendar's planner avoids it.
+   */
+  const openHours = freeHours(record);
+
+  /**
+   * Giving an existing record an hour.
+   *
+   * A linked row rather than a copy: the schedule points at the task or habit
+   * that already exists, so the words stay in one place and ticking either
+   * ticks both. Dropping on an hour that is taken lands on its next free
+   * quarter rather than being refused, because the gesture already said which
+   * hour was meant.
+   */
+  const scheduleAt = (link: ScheduleLink, snapshot: string, hour: string) =>
+    updateDay(dayId, (current) => {
+      const already = current.scheduleItems.some(
+        (item) => item.carriedTo == null && sameLink(item.link, link),
+      );
+      if (already) return current;
+
+      return {
+        ...current,
+        scheduleItems: [
+          ...current.scheduleItems,
+          linkedItem(nextFreeSlot(current, hour), link, snapshot),
+        ],
+      };
+    });
 
   const focus = useFocusSession();
   const { session, now, openInterruption } = focus;
@@ -458,6 +498,7 @@ function TodayView() {
               completions={state.habitCompletions}
               onChange={(scheduleItems) => patch({ scheduleItems })}
               onToggle={toggleScheduleRow}
+              dropHour={dropHour}
             />
             <WellbeingBlock day={record} onPatch={patch} />
 
@@ -490,6 +531,11 @@ function TodayView() {
               <ActionLists
                 actions={record.actions}
                 onChange={(actions) => patch({ actions })}
+                onSchedule={(action, hour) =>
+                  scheduleAt({ kind: "action", actionId: action.id }, action.text, hour)
+                }
+                onHoverHour={setDropHour}
+                scheduleHours={openHours}
                 className="mt-2"
               />
             </section>
@@ -510,6 +556,11 @@ function TodayView() {
                 }
               }}
               onToggle={(habitId, on) => toggleHabitDone(habitId, on, new Date())}
+              onSchedule={(habit, hour) =>
+                scheduleAt({ kind: "habit", habitId: habit.id }, habit.name, hour)
+              }
+              onHoverHour={setDropHour}
+              scheduleHours={openHours}
               onArchive={(habitId) =>
                 patchHabit(habitId, { archivedAt: new Date().toISOString() })
               }

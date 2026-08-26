@@ -18,6 +18,8 @@ import { blockItem, resolveSchedule, settleHours, type ResolvedSchedule } from "
 import { Plus } from "lucide-react";
 import { useState } from "react";
 
+import { Picker } from "@/components/Picker";
+import { registerZone } from "@/lib/drop-zones";
 import { nextFreeSlot } from "@/lib/day-plan";
 import { cn } from "@/lib/utils";
 import type { Day, Habit, HabitCompletion, ScheduleItem } from "@/lib/types";
@@ -29,6 +31,8 @@ type Props = {
   onChange: (items: ScheduleItem[]) => void;
   /** Ticking a row. The route decides where the write actually lands. */
   onToggle: (itemId: string) => void;
+  /** The hour a drag from elsewhere on the page is currently hovering. */
+  dropHour?: string | null;
   className?: string;
 };
 
@@ -56,6 +60,7 @@ export function ScheduleBlock({
   onChange,
   onToggle,
   className,
+  dropHour,
 }: Props) {
   const resolved = resolveSchedule(day, habits, completions);
   const byTime = new Map(resolved.map((row) => [row.item.time, row]));
@@ -126,7 +131,13 @@ export function ScheduleBlock({
           return (
             <div
               key={time}
-              ref={sortable.groupRef(time)}
+              ref={(el) => {
+                sortable.groupRef(time)(el);
+                // Also a place a task or a habit can be dropped from elsewhere
+                // on the page.
+                registerZone(`hour:${time}`, el);
+              }}
+              data-over={dropHour === time ? "true" : undefined}
               data-filled={rows.length > 0 ? "true" : "false"}
               className={cn("schedule-row group", dragging && "bg-gold/8")}
             >
@@ -141,11 +152,17 @@ export function ScheduleBlock({
                       className="mt-[1px]"
                     />
                     <span ref={sortable.itemRef(row.item.id)} className="flex min-w-0 flex-1 gap-1.5">
-                      {minutesOf(row.item.time) > 0 && (
-                        <span className="tnum mt-[1px] shrink-0 text-[10px] text-muted-foreground">
-                          :{String(minutesOf(row.item.time)).padStart(2, "0")}
-                        </span>
-                      )}
+                      <MinutePicker
+                        time={row.item.time}
+                        day={day}
+                        onChange={(next) =>
+                          onChange(
+                            day.scheduleItems.map((i) =>
+                              i.id === row.item.id ? { ...i, time: next } : i,
+                            ),
+                          )
+                        }
+                      />
                       <ScheduleRow
                         row={row}
                         hour={formatTimeLabel(row.item.time)}
@@ -192,7 +209,13 @@ export function ScheduleBlock({
                       type="button"
                       onClick={() => setAdding(time)}
                       aria-label={`Add another at ${hour}`}
-                      className="mt-0.5 flex w-fit items-center gap-1 rounded px-1 text-[10px] text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                      // Visible at rest, not on hover. An hour that already
+                      // holds something showed nothing but that block's own
+                      // field, so the only apparent way to add a second was to
+                      // type into the first and overwrite it — and on touch,
+                      // where there is no hover, the plus could not be reached
+                      // at all.
+                      className="mt-0.5 flex w-fit items-center gap-1 rounded px-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground"
                     >
                       <Plus aria-hidden className="h-2.5 w-2.5" />
                       {formatTimeLabel(nextFreeSlot(day, time))}
@@ -205,6 +228,49 @@ export function ScheduleBlock({
         })}
       </div>
     </section>
+  );
+}
+
+/**
+ * Moving a block within its hour.
+ *
+ * The minute is the control rather than a label: an entry that landed on the
+ * hour and belongs at quarter past should be draggable there in one tap, not
+ * deleted and retyped. On the hour it stays almost invisible until the row is
+ * hovered, because eighteen ":00"s down the page is noise.
+ */
+function MinutePicker({
+  time,
+  day,
+  onChange,
+}: {
+  time: string;
+  day: Day;
+  onChange: (time: string) => void;
+}) {
+  const hour = hourOf(time);
+  const taken = new Set(
+    day.scheduleItems
+      .filter((item) => item.carriedTo == null && item.time !== time)
+      .map((item) => item.time),
+  );
+  const minutes = minutesOf(time);
+
+  return (
+    <Picker
+      value={time}
+      onChange={onChange}
+      label={`Time of the block at ${formatTimeLabel(time)}`}
+      placeholder={formatTimeLabel(time)}
+      className="shrink-0"
+      triggerClassName={cn(
+        "minute-trigger",
+        minutes === 0 && "opacity-0 focus-visible:opacity-100 group-hover:opacity-60",
+      )}
+      options={SCHEDULE_MINUTES.map((m) => atMinutes(hour, m))
+        .filter((slot) => !taken.has(slot))
+        .map((slot) => ({ value: slot, label: formatTimeLabel(slot) }))}
+    />
   );
 }
 

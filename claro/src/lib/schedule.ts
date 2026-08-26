@@ -198,3 +198,18 @@ export function scheduleHabitToggle(day: Day, itemId: string): string | null {
 export function canEditText(item: ScheduleItem): boolean {
   return item.link === null;
 }
+
+/**
+ * Whether two links point at the same record.
+ *
+ * Used to stop a task being given two hours by being dropped twice. The same
+ * work in two places on one day is the thing the linked-row model exists to
+ * prevent.
+ */
+export function sameLink(a: ScheduleLink | null, b: ScheduleLink | null): boolean {
+  if (!a || !b || a.kind !== b.kind) return false;
+  if (a.kind === "priority" && b.kind === "priority") return a.priorityId === b.priorityId;
+  if (a.kind === "action" && b.kind === "action") return a.actionId === b.actionId;
+  if (a.kind === "habit" && b.kind === "habit") return a.habitId === b.habitId;
+  return false;
+}

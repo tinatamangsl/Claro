@@ -187,6 +187,13 @@ It type-augments `Register` against `getRouter` in `router.tsx`, so that export 
 Colocated route tests are kept out of the scan by `router.routeFileIgnorePattern` in
 `vite.config.ts`; without it the generator warns that `src/routes/*.test.ts` exports no Route.
 
+**3a. Scroll restoration is off, and must stay off.** `scrollRestoration: true` in `router.tsx`
+fights invariant 1: the store is null on the first client render, so when the browser restores a
+position the document is still the skeleton and a fraction of its real height. The offset is
+clamped to that height, the real content then expands underneath it, and the reader lands
+somewhere they were never looking — measured at 58px, 98px and 297px for the same 900px scroll,
+purely as a function of viewport width. A position that cannot be honoured is better not promised.
+
 **4. `validateSearch` must return a genuinely optional key** (`(s): {q?: string} => ... ? {q} : {}`),
 not `{q: undefined}`. The latter makes `search` a *required* prop on every `<Link>` to that route.
 
@@ -273,10 +280,83 @@ valid time and always was. **An hour is a frame, not a slot.** The eighteen rows
 seventy-two quarter-hour rows is a spreadsheet rather than a day, but a row now holds every block
 whose `hourOf` matches, sorted by minute, and shows ":30" beside anything off the hour.
 
+The minute is a **control, not a label**. An entry that landed on the hour and belongs at quarter
+past moves there in one tap rather than being deleted and retyped, and on the hour the control
+stays invisible until the row is hovered, because eighteen ":00"s down the page is noise.
+
 An empty hour offers its line straight away. An hour that already holds something offers a quiet
 plus naming the next free quarter, and opens one line at a time: a second textarea in all eighteen
 rows would fill the page with fields nobody asked for. Dragging still moves between hours and
 keeps the minute it was on.
+
+## Dragging across the day, not just within a list
+
+`useSortable` reorders one set of items, which is the right shape for a list and the wrong shape
+for "put this task at four o'clock": the source and the target are separate components holding
+separate records, and neither can own the other's coordinates.
+
+`externalDrop` is the seam. A list passes `zoneAt`, `onDrop` and `onHover`; while the pointer is
+over an outside zone the preview stops following it, and on release the reorder is **abandoned
+rather than committed**, because the item did not move within the list, it left it. The same grip
+that moves a task between buckets carries it onto an hour.
+
+**A drag needs the page to scroll under it, or it only works when the grip and its target are
+already on screen together.** On Today they never are: the schedule and the action lists are a
+page apart, so at 1280x800 the wanted hour sits below the fold and on a phone it is several hundred
+pixels above the viewport. `lib/auto-scroll.ts` runs a **frame loop, not a pointer-move handler**:
+holding still near the edge is the whole gesture, and a stationary pointer fires no `pointermove`
+at all, so a move-driven scroll stops the instant the user does the one thing they are trying to
+do. That mistake shipped once and made the feature look completely broken.
+
+It scrolls the **window first**. The spread's pages scroll internally from `lg` up, so the
+container under the pointer is usually the *actions* column while the target is an hour in the
+*schedule* column beside it: scrolling what the pointer is over moves the wrong pane and never
+reveals the target. The inner pane only takes over once the window has run out.
+
+**A drag is followed on the window, not on the grip.** `setPointerCapture` looks like it makes
+that unnecessary, and above `lg` it does. But capture belongs to a DOM node, and this hook's whole
+purpose is moving an item between lanes, which commits to the store immediately, remounts the row
+under its new bucket and destroys the node holding the capture. The browser fires
+`lostpointercapture` and every later move goes wherever the pointer happens to be.
+
+Below `lg` the buckets stack, so dragging an action *up* towards the schedule crosses the other
+buckets on the way and triggers exactly that. The result was a drag that worked perfectly at
+1280px and died silently mid-gesture at every width under 1024px, including every phone — measured
+as capture lost at y=320 with `target=undefined`, after which nothing highlighted and nothing
+dropped. The window is the only node in this picture that cannot be unmounted. Capture is still
+taken, because it stops touch scrolling the page out from under the gesture, but it is now optional
+rather than load-bearing and is called with `?.` — bare, one throw stopped the drag ever starting,
+and jsdom has no such method, which is why this hook had no test at all until it had a bug.
+
+**The top auto-scroll edge starts below the header.** The header is sticky and 65px on a laptop,
+89px on a phone, so a band measured from zero is almost entirely covered by it: the place you must
+hold to scroll up is a place where nothing can be dropped. The band is measured from the header's
+bottom instead. The rate is derived from `EDGE` rather than a divisor picked separately, which had
+been quietly capping travel at under half of `MAX_STEP`.
+
+**Dragging is the shortcut, not the entrance.** It needs a pointer, needs the grip to be found,
+and needs a target that is a page away on any stacked layout. Every action and habit row therefore
+carries a time `Picker` offering the day's free slots: two taps, at every width, and the only path
+here a keyboard can take. Only free slots are offered, so the taken-hour refusal is unreachable,
+and the labels are `formatTimeLabel`'s minute-accurate ones — `formatHourLabel` collapsed four
+quarter slots onto a single "3 PM" and put one name on four options of the same listbox.
+
+`Picker` opens its list upward when the trigger is nearer the bottom of the viewport than the
+panel is tall. It is 15rem and was always hung below, which is fine halfway up a page and useless
+for a control on the last row of a phone: the list drew off-screen entirely. The panel also
+carries a floor width, because matching a narrow trigger truncated every option to "5:1...".
+
+`lib/drop-zones.ts` is a plain module registry, not a context, because the only thing shared is
+where some elements are on screen. That is a DOM fact that changes on every scroll, and threading
+it through the tree as state would mean re-rendering the page to answer a question
+`getBoundingClientRect` already answers. It reads the rectangle **at the moment of the question**:
+a drag can scroll the page under itself, and a cached rectangle drops work on the wrong hour. A
+zone with an empty rectangle is skipped, or a collapsed element would match every point.
+
+A drop creates a **linked row, never a copy** — the schedule points at the task or habit that
+already exists, so the words stay in one place and ticking either ticks both. `sameLink` stops the
+same record being given two hours by being dropped twice. Dropping on a taken hour lands on its
+next free quarter rather than being refused: the gesture already said which hour was meant.
 
 ## Planning a day from the calendar
 

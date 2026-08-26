@@ -5,7 +5,9 @@ import {
   formatDayDate,
   formatDayId,
   formatDayWeekday,
+  atMinutes,
   formatHourLabel,
+  parseMinutes,
   formatQuarterId,
   formatQuarterMonths,
   formatQuarterShort,
@@ -191,5 +193,34 @@ describe("schedule grid", () => {
     expect(formatHourLabel("12:00")).toBe("12 PM"); // not "0 PM"
     expect(formatHourLabel("13:00")).toBe("1 PM");
     expect(formatHourLabel("22:00")).toBe("10 PM");
+  });
+});
+
+describe("parseMinutes", () => {
+  it("takes any minute of the hour, not only the quarters", () => {
+    expect(parseMinutes("0")).toBe(0);
+    expect(parseMinutes("5")).toBe(5);
+    expect(parseMinutes("37")).toBe(37);
+    expect(parseMinutes("59")).toBe(59);
+  });
+
+  it("refuses a minute that is not one, rather than moving the block quietly", () => {
+    expect(parseMinutes("60")).toBeNull();
+    expect(parseMinutes("75")).toBeNull();
+    expect(parseMinutes("-5")).toBeNull();
+    expect(parseMinutes("4.5")).toBeNull();
+    expect(parseMinutes("half past")).toBeNull();
+    expect(parseMinutes("")).toBeNull();
+    expect(parseMinutes("   ")).toBeNull();
+  });
+
+  it("tolerates the padding and spacing a person actually types", () => {
+    expect(parseMinutes(" 07 ")).toBe(7);
+    expect(parseMinutes("00")).toBe(0);
+  });
+
+  it("builds the time a typed minute means", () => {
+    expect(atMinutes("16:00", parseMinutes("37")!)).toBe("16:37");
+    expect(atMinutes("09:00", parseMinutes("5")!)).toBe("09:05");
   });
 });

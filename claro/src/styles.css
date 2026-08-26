@@ -1155,13 +1155,24 @@
     left: 0;
     z-index: 50;
     max-height: 15rem;
-    min-width: 100%;
+    /*
+     * Wide enough for the longest option this app puts in one, which is a time
+     * like "10:45 PM". Matching a narrow trigger exactly ("Time") truncated
+     * every option to "5:1…" and made the list unreadable.
+     */
+    min-width: max(100%, 7.5rem);
     overflow-y: auto;
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
     background: var(--card);
     padding: 0.25rem;
     box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.28);
+  }
+
+  /* Opens upward when the trigger is too near the bottom for 15rem below it. */
+  .picker-panel-above {
+    top: auto;
+    bottom: calc(100% + 0.25rem);
   }
 
   .picker-option {
@@ -1191,5 +1202,31 @@
     font-size: 11px;
     color: var(--color-muted-foreground);
     background: transparent;
+  }
+}
+
+@layer utilities {
+  /* The minute on a schedule row: a control, but a very quiet one. */
+  .minute-trigger {
+    width: auto;
+    gap: 0.125rem;
+    border-color: transparent;
+    background: transparent;
+    padding: 0 0.125rem;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-muted-foreground);
+  }
+
+  .minute-trigger:hover {
+    border-color: var(--color-border);
+  }
+}
+
+@layer utilities {
+  /* An hour a task or habit is about to be dropped on. */
+  .schedule-row[data-over="true"] {
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+    box-shadow: inset 2px 0 0 var(--primary);
   }
 }
