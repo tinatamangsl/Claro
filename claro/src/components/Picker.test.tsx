@@ -27,7 +27,8 @@ const triggerAt = (top: number) => {
 };
 
 const open = () => fireEvent.click(screen.getByRole("button", { name: "Pick one" }));
-const list = () => screen.getByRole("listbox");
+/** The positioned panel, which is the listbox's parent now that it may also hold a footer. */
+const panel = () => screen.getByRole("listbox").parentElement!;
 
 describe("which way the list opens", () => {
   beforeEach(() => {
@@ -40,7 +41,7 @@ describe("which way the list opens", () => {
     render(<Picker value={null} options={options} onChange={vi.fn()} placeholder="Pick" label="Pick one" />);
 
     open();
-    expect(list().className).not.toContain("picker-panel-above");
+    expect(panel().className).not.toContain("picker-panel-above");
   });
 
   it("opens upward when the trigger is too near the bottom to show the list", () => {
@@ -49,7 +50,7 @@ describe("which way the list opens", () => {
     render(<Picker value={null} options={options} onChange={vi.fn()} placeholder="Pick" label="Pick one" />);
 
     open();
-    expect(list().className).toContain("picker-panel-above");
+    expect(panel().className).toContain("picker-panel-above");
   });
 
   it("stays downward when neither side has room, rather than swapping one clipped edge for another", () => {
@@ -59,7 +60,7 @@ describe("which way the list opens", () => {
     render(<Picker value={null} options={options} onChange={vi.fn()} placeholder="Pick" label="Pick one" />);
 
     open();
-    expect(list().className).not.toContain("picker-panel-above");
+    expect(panel().className).not.toContain("picker-panel-above");
   });
 
   it("measures again on each opening, so a scrolled page is not answered from memory", () => {
@@ -67,11 +68,11 @@ describe("which way the list opens", () => {
     render(<Picker value={null} options={options} onChange={vi.fn()} placeholder="Pick" label="Pick one" />);
 
     open();
-    expect(list().className).not.toContain("picker-panel-above");
+    expect(panel().className).not.toContain("picker-panel-above");
     fireEvent.keyDown(screen.getByRole("button", { name: "Pick one" }), { key: "Escape" });
 
     triggerAt(716);
     open();
-    expect(list().className).toContain("picker-panel-above");
+    expect(panel().className).toContain("picker-panel-above");
   });
 });

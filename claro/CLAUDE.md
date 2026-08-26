@@ -289,6 +289,32 @@ plus naming the next free quarter, and opens one line at a time: a second textar
 rows would fill the page with fields nobody asked for. Dragging still moves between hours and
 keeps the minute it was on.
 
+**That plus is visible at rest, not on hover.** Hover-gated, a filled hour showed nothing but the
+text field belonging to the block already there, so the only apparent way to add a second was to
+type into the first — which overwrites it. On touch, where there is no hover at all, the plus
+could not be reached by any means. An affordance that exists and cannot be seen is not an
+affordance.
+
+**The four quarters are the quick path, not the vocabulary.** A stand-up at 9:05 and a train at
+4:37 are ordinary times and a fixed menu cannot say either, so `MinutePicker`'s panel carries a
+field for any minute of the hour beneath its options. This is the same shape as the focus block's
+plain minutes field beside its four named presets, and for the same reason: `ScheduleItem.time`
+was always a string, so "16:37" was always storable and the restriction only ever lived in the
+list the picker offered. No migration, no schema change.
+
+`parseMinutes` **refuses rather than clamps**. Turning 75 into 59 would move somebody's block to a
+time they did not choose and may not notice. A minute already occupied is refused by name too,
+rather than silently swapping the two blocks. The four options still include the block's own
+current minute, or opening the picker on a 1:37 block would offer four times, none of them the one
+it is on.
+
+`Picker` grew a `footer` slot to hold that field. The panel is the positioned box and the
+`listbox` sits *inside* it, because a listbox may contain nothing but options. The footer receives
+`close`, since a field that commits has finished the same job an option does and a panel left
+standing open reads as though nothing happened; and the panel's key handling stands aside inside
+an input, or the list would swallow every digit and Enter would choose an option instead of
+committing what was typed.
+
 ## Dragging across the day, not just within a list
 
 `useSortable` reorders one set of items, which is the right shape for a list and the wrong shape

@@ -31,8 +31,12 @@ type Props<T extends string> = {
    * named presets. It sits inside the one panel rather than beside the trigger
    * so there is still a single control, and a second listbox implementation is
    * not needed to hold one input.
+   *
+   * Given `close`, because a footer that commits has finished the same job an
+   * option does and should leave the same way: a panel still standing open
+   * over the page after the choice was made reads as though nothing happened.
    */
-  footer?: React.ReactNode;
+  footer?: (api: { close: () => void }) => React.ReactNode;
 };
 
 /**
@@ -169,39 +173,53 @@ export function Picker<T extends string>({
 
       {open && (
         <div
-          id={listId}
-          role="listbox"
-          aria-label={label}
           className={cn(
             "picker-panel",
             align === "right" && "right-0 left-auto",
             dropUp && "picker-panel-above",
           )}
         >
-          {options.map((option, i) => {
-            const selected = option.value === value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                onPointerEnter={() => setActive(i)}
-                onClick={() => choose(option)}
-                className={cn("picker-option", i === active && "picker-option-active")}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{option.label}</span>
-                  {option.hint && (
-                    <span className="block truncate text-[10px] text-muted-foreground">
-                      {option.hint}
-                    </span>
-                  )}
-                </span>
-                {selected && <Check aria-hidden className="h-3 w-3 shrink-0 text-primary" />}
-              </button>
-            );
-          })}
+          {/*
+            The listbox is inside the panel rather than being it, because a
+            `listbox` may hold nothing but options and the footer is a field.
+          */}
+          <div id={listId} role="listbox" aria-label={label} className="picker-list">
+            {options.map((option, i) => {
+              const selected = option.value === value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onPointerEnter={() => setActive(i)}
+                  onClick={() => choose(option)}
+                  className={cn("picker-option", i === active && "picker-option-active")}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{option.label}</span>
+                    {option.hint && (
+                      <span className="block truncate text-[10px] text-muted-foreground">
+                        {option.hint}
+                      </span>
+                    )}
+                  </span>
+                  {selected && <Check aria-hidden className="h-3 w-3 shrink-0 text-primary" />}
+                </button>
+              );
+            })}
+          </div>
+
+          {footer ? (
+            <div className="picker-footer">
+              {footer({
+                close: () => {
+                  setOpen(false);
+                  trigger.current?.focus();
+                },
+              })}
+            </div>
+          ) : null}
         </div>
       )}
     </div>

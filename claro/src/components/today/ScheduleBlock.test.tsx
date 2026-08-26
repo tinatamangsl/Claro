@@ -324,3 +324,105 @@ describe("ScheduleBlock — quarter hours", () => {
     expect(screen.getByLabelText("What happens at 2:15 PM")).toBeTruthy();
   });
 });
+
+describe("ScheduleBlock — adding a second block to an hour", () => {
+  it("shows the way to add another without needing a hover", () => {
+    renderSchedule(dayWith([block("a", "13:00", "Call")]));
+
+    const add = screen.getByRole("button", { name: "Add another at 1 PM" });
+    // Hover-gated is unreachable on touch, and on a filled hour the only other
+    // visible field belongs to the block already there: people typed into that
+    // and overwrote it, because nothing else looked like a way in.
+    expect(add.className).not.toContain("opacity-0");
+  });
+
+  it("does not overwrite what is already at the hour", () => {
+    const { spies } = renderSchedule(dayWith([block("a", "13:00", "Call")]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add another at 1 PM" }));
+    const field = screen.getByLabelText("What happens at 1:15 PM");
+    fireEvent.change(field, { target: { value: "Follow up" } });
+    fireEvent.blur(field);
+
+    const written = spies.onChange.mock.calls[0][0] as ScheduleItem[];
+    expect(written.map((i) => i.text)).toEqual(["Call", "Follow up"]);
+  });
+});
+
+describe("ScheduleBlock — a minute that is not a quarter", () => {
+  const openMinutes = (label: string) =>
+    fireEvent.click(screen.getByRole("button", { name: `Time of the block at ${label}` }));
+
+  const minuteField = () => screen.getByLabelText("Minutes past 1 PM");
+
+  it("takes any minute of the hour", () => {
+    const { spies } = renderSchedule(dayWith([block("a", "13:00", "Call")]));
+
+    openMinutes("1 PM");
+    fireEvent.change(minuteField(), { target: { value: "37" } });
+    fireEvent.keyDown(minuteField(), { key: "Enter" });
+
+    const written = spies.onChange.mock.calls[0][0] as ScheduleItem[];
+    expect(written[0].time).toBe("13:37");
+  });
+
+  it("commits on blur too, so tapping away does not lose the number", () => {
+    const { spies } = renderSchedule(dayWith([block("a", "13:00", "Call")]));
+
+    openMinutes("1 PM");
+    fireEvent.change(minuteField(), { target: { value: "5" } });
+    fireEvent.blur(minuteField());
+
+    const written = spies.onChange.mock.calls[0][0] as ScheduleItem[];
+    expect(written[0].time).toBe("13:05");
+  });
+
+  it("refuses a minute that is not one rather than correcting it quietly", () => {
+    const { spies } = renderSchedule(dayWith([block("a", "13:00", "Call")]));
+
+    openMinutes("1 PM");
+    fireEvent.change(minuteField(), { target: { value: "75" } });
+    fireEvent.keyDown(minuteField(), { key: "Enter" });
+
+    // 75 must not become 59, or the block moves to a time nobody chose.
+    expect(spies.onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("status").textContent).toContain("0 to 59");
+  });
+
+  it("says when the minute typed is already occupied", () => {
+    const { spies } = renderSchedule(
+      dayWith([block("a", "13:00", "Call"), block("b", "13:20", "Follow up")]),
+    );
+
+    openMinutes("1 PM");
+    fireEvent.change(minuteField(), { target: { value: "20" } });
+    fireEvent.keyDown(minuteField(), { key: "Enter" });
+
+    expect(spies.onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("status").textContent).toContain("1:20 PM");
+  });
+
+  it("keeps an off-quarter block listed as its own current time", () => {
+    renderSchedule(dayWith([block("a", "13:37", "Call")]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Time of the block at 1:37 PM" }));
+
+    // Its own minute belongs in the list, or opening the picker would offer
+    // four times, none of them the one the block is actually on.
+    expect(screen.getByRole("option", { name: "1:37 PM" })).toBeTruthy();
+  });
+
+  it("leaves typing to the field, so a digit does not choose an option", () => {
+    const { spies } = renderSchedule(dayWith([block("a", "13:00", "Call")]));
+
+    openMinutes("1 PM");
+    const field = minuteField();
+    fireEvent.change(field, { target: { value: "8" } });
+    // Enter inside the field commits the minute; it must not pick the option
+    // the panel happens to be highlighting.
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    const written = spies.onChange.mock.calls[0][0] as ScheduleItem[];
+    expect(written[0].time).toBe("13:08");
+  });
+});
