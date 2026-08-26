@@ -26,6 +26,7 @@ const cycleWith = (...specs: Spec[]): CycleState => ({
   ),
   checkIns: {},
   lastSeen: null,
+  guidanceMatches: {},
 });
 
 const TODAY: ISODate = "2026-08-19";
@@ -163,6 +164,7 @@ describe("marks for a run of days", () => {
           flow: null,
           note: "",
           evening: null,
+  noticed: "",
           updatedAt: "2026-08-14T20:00:00.000Z",
         },
       },

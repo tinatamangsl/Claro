@@ -20,6 +20,7 @@ const withStarts = (...starts: ISODate[]): CycleState => ({
   ),
   checkIns: {},
   lastSeen: null,
+  guidanceMatches: {},
 });
 
 const REGULAR = () => withStarts("2026-05-04", "2026-06-01", "2026-06-29", "2026-07-27");
@@ -36,6 +37,7 @@ const note = (
   flow: null,
   note: "",
   evening: null,
+  noticed: "",
   updatedAt: "x",
   ...patch,
 });

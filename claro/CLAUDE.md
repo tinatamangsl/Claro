@@ -612,6 +612,42 @@ Every one is a fertility or pregnancy prediction. What Claro offers instead is a
 can check: cycle length, recorded durations, the next estimate, and which cycle day a date falls
 on.
 
+### Eat, Move and Do: how guidance ships without a claim
+
+**This reverses the refusal below, and the shape of the reversal is the point.** The user asked
+twice for per-phase eat, move and do guidance. Put to them that it collided with their own
+standing rules and with `cycle-guide.test.ts`, they neither waived the rules nor dropped the
+feature: they specified a third way, and `lib/cycle-guidance.ts` is it. **Every guardrail test
+still passes.** Nothing was deleted to make room for this.
+
+- **Hedged, never prescribed.** The register is "some people find these helpful", "worth trying",
+  "you might notice". Never "eat this", "avoid that", "you should". At this distance from a person
+  the framing *is* the content: the same sentence is honest or dishonest depending only on whether
+  it claims to know the reader. A test bans the imperative forms outright.
+- **Cards open with a question.** `PHASE_QUESTIONS` replaced the supplied insight copy, which read
+  "your brain is working harder than usual" and "energy is building". Under the question sits what
+  *this person* logged around this point before, and nothing when they logged nothing.
+- **The reader outranks the guidance.** Every card carries `MatchPrompt`: yes, not really, or
+  opposite. `hasDrifted` is two misses inside the last three answers for that card *and* phase, at
+  which point the card stops suggesting and asks what they are noticing instead. Deliberately not
+  one miss, or a card would flinch at a single bad day; deliberately a window rather than a running
+  total, or a card wrong in June could never come back.
+- **The answers are inert everywhere else.** They change the wording of the card that was answered.
+  Nothing sums them, no other surface reads them, and no plan moves.
+- **`noticed` on `CycleCheckIn`** is the free field the drifted cards defer to. Separate from
+  `note`, which answers Claro's questions; this one answers nothing.
+
+The supplied palette (`#E8622A`, `#F3EFE7`) is close to Claro's but not it, so `.phase-badge`,
+`.guidance-card` and `.stat-chip` take the tokens instead. Hardcoding would leave the one page
+nobody can theme outside the system, with the dark block not following.
+
+**The order changed too.** The calendar was first, on the reasoning that it is what the page is
+for. It is what the page is made *of*; what somebody opens it for is "what about today?". So the
+phase card, the guidance and the log now precede it, and the daily note is open rather than folded
+at the foot of the page. The calendar's phase key also moved above the grid: below the dates it
+was off the bottom of a phone, so the one thing explaining the colours was the one thing nobody
+saw.
+
 **"Your cycle, part by part" is where a food and movement plan would go, and does not.** The
 reference app fills that slot with "eat protein-rich meals, fresh vegetables, fermented foods"
 per phase. A calendar estimate cannot know what a body needs, and a list of foods beside a phase

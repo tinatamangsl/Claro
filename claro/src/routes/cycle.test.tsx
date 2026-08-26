@@ -75,22 +75,30 @@ describe("the screen once it is on", () => {
     return h;
   };
 
-  it("opens on the calendar, which is what the page is for", async () => {
+  it("opens on today, not on the grid today is drawn from", async () => {
     const { container } = await enabled();
 
     const headings = [...container.querySelectorAll("h1, h2")].map((h) => h.textContent);
-    // The calendar comes before the logging card, not after it: opening this
-    // page is nearly always to look at the grid.
+    /*
+     * This reverses the earlier order deliberately. The calendar used to come
+     * first, on the reasoning that it is what the page is for. It is what the
+     * page is made *of*; what somebody opens it for is "what about today?".
+     * So the phase card and the guidance come first, then the log, and the
+     * grid follows.
+     */
     expect(headings).toEqual([
-      "Cycle at a glance",
+      "Cycle notes",
+      "Today",
+      // No guidance section here: with no logged start there is no phase, and
+      // a card of suggestions for a phase nobody is in would be invention.
+      "How are you feeling today?",
       "Your cycle calendar",
       "Log a period start",
       "Your numbers",
-      "How today felt",
       "Your data",
     ]);
-    expect(headings.indexOf("Your cycle calendar")).toBeLessThan(
-      headings.indexOf("Log a period start"),
+    expect(headings.indexOf("How are you feeling today?")).toBeLessThan(
+      headings.indexOf("Your cycle calendar"),
     );
   });
 
@@ -244,11 +252,17 @@ describe("the screen once it is on", () => {
   it("folds the long sections away, so the page opens short", async () => {
     const { container } = await enabled();
 
+    /*
+     * The daily note is no longer one of these. It was folded away at the foot
+     * of the page, which put the one thing done every day furthest from the
+     * top; it is now open, above the calendar. Nothing else was unfolded.
+     */
     const folded = [...container.querySelectorAll("details")]
       .map((d) => d.querySelector("h2")?.textContent)
       .filter(Boolean);
-    expect(folded).toEqual(["How today felt"]);
-    // Closed by default, and still findable by the browser's own search.
+    expect(folded).not.toContain("How today felt");
+    // Whatever remains folded is still closed by default, and still findable
+    // by the browser's own in-page search.
     expect([...container.querySelectorAll("details")].every((d) => !d.open)).toBe(true);
   });
 });
@@ -350,5 +364,87 @@ describe("logging a period from the screen", () => {
 
     expect(sortedEntries(api.store!.cycle)).toHaveLength(1);
     expect(container.textContent).toContain("overlaps a period you have already logged");
+  });
+});
+
+describe("the guidance, and the standing offer to disagree with it", () => {
+  const withHistory = async () => {
+    const h = harness();
+    await ready(h.api);
+    const todayId = h.api.store!.today;
+
+    act(() => {
+      h.api.store!.setCycleEnabled(true, new Date());
+      h.api.store!.setCycleEntries(
+        Object.fromEntries(
+          [61, 33, 5].map((back, i) => [
+            `e${i}`,
+            {
+              id: `e${i}`,
+              startDate: shiftDayId(todayId, -back),
+              endDate: shiftDayId(todayId, -back + 4),
+              loggedAt: "x",
+            },
+          ]),
+        ),
+      );
+    });
+    return h;
+  };
+
+  it("opens the phase card with a question rather than a reading", async () => {
+    const h = await withHistory();
+
+    // Not "your energy is building" or "your brain is working harder": Claro
+    // knows four dates, and a question is the strongest honest opening.
+    const insight = h.container.querySelector("section")!;
+    expect(h.container.textContent).toMatch(/\?/);
+    expect(insight.textContent).not.toContain("your brain");
+    expect(h.container.textContent).not.toContain("Energy is building");
+  });
+
+  it("frames the three cards as something some people find helpful", async () => {
+    const h = await withHistory();
+
+    expect(h.container.textContent).toContain("Some people find these helpful");
+    expect(h.container.textContent).toContain("General information only");
+    expect(h.container.textContent).toContain("Trust what you actually notice");
+  });
+
+  it("asks whether each card landed, and records the answer", async () => {
+    const h = await withHistory();
+
+    const notReally = screen.getAllByRole("button", { name: /^Not really, about/ });
+    // Four cards ask: the phase card and the three suggestion cards.
+    expect(notReally.length).toBe(4);
+
+    act(() => {
+      notReally[0].click();
+    });
+
+    const saved = Object.values(h.api.store!.cycle.guidanceMatches);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].answer).toBe("notReally");
+  });
+
+  it("changes nothing outside the card that was answered", async () => {
+    const h = await withHistory();
+    const before = JSON.stringify(h.api.store!.day(h.api.store!.today));
+
+    act(() => {
+      screen.getAllByRole("button", { name: /^Opposite, about/ })[0].click();
+    });
+
+    // The whole promise of this page is that it never edits a plan.
+    expect(JSON.stringify(h.api.store!.day(h.api.store!.today))).toBe(before);
+  });
+
+  it("names each card's answers apart, so three prompts are not one control", async () => {
+    const h = await withHistory();
+
+    expect(screen.getByRole("button", { name: "Yes, about the eat card" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Yes, about the move card" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Yes, about the do today card" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Yes, about the phase card" })).toBeTruthy();
   });
 });

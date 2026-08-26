@@ -149,6 +149,10 @@ export function checkInOn(cycle: CycleState, dayId: ISODate): CycleCheckIn {
       flow: null,
       note: "",
       evening: null,
+      // Every field of a blank note has to be here. A missing one arrives as
+      // `undefined`, which is not `null` and not `""`, and anything asking
+      // "has this been filled in?" then answers yes for a note nobody wrote.
+      noticed: "",
       // Read during render, so no clock is touched here. A blank note has never
       // been written and carries no time.
       updatedAt: "",

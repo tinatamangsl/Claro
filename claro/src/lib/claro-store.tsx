@@ -26,9 +26,12 @@ import {
   scheduleSave,
   type SaveResult,
 } from "./storage";
+import { matchKey } from "./cycle-guidance";
 import { removeHabitCompletions, toggleCompletion } from "./habits";
 import { queueCarried, takeCarried } from "./rollover";
 import type {
+  GuidanceCard,
+  MatchAnswer,
   ClaroState,
   CycleCheckIn,
   CycleEntry,
@@ -142,6 +145,13 @@ type ClaroContextValue = {
   logCycleStart: (entry: CycleEntry) => void;
   /** Replaces the logged starts wholesale. Used by add, edit and delete. */
   setCycleEntries: (entries: Record<string, CycleEntry>) => void;
+  writeGuidanceMatch: (
+    card: GuidanceCard,
+    phase: string,
+    dayId: ISODate,
+    answer: MatchAnswer,
+    now: Date,
+  ) => void;
   deleteCycleEntry: (id: string) => void;
   /** An optional private note about a day. Never written anywhere else. */
   writeCycleCheckIn: (dayId: ISODate, patch: Partial<CycleCheckIn>, now: Date) => void;
@@ -543,6 +553,44 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  /**
+   * What the reader said about one card today.
+   *
+   * Answering again on the same day corrects the earlier answer rather than
+   * stacking beside it, which is what the `card:dayId` key buys. Nothing else
+   * in the app reads this: it changes the wording of the card that was
+   * answered, and nothing more.
+   */
+  const writeGuidanceMatch = useCallback(
+    (card: GuidanceCard, phase: string, dayId: ISODate, answer: MatchAnswer, now: Date) => {
+      setSnap((prev) => {
+        if (!prev) return prev;
+        const key = matchKey(card, dayId);
+        return {
+          ...prev,
+          state: {
+            ...prev.state,
+            cycle: {
+              ...prev.state.cycle,
+              guidanceMatches: {
+                ...prev.state.cycle.guidanceMatches,
+                [key]: {
+                  id: key,
+                  card,
+                  phase,
+                  dayId,
+                  answer,
+                  answeredAt: now.toISOString(),
+                },
+              },
+            },
+          },
+        };
+      });
+    },
+    [],
+  );
+
   /** The cycle length the user typed in, or null to go back to their own gaps. */
   const setCycleLength = useCallback((cycleLength: number | null) => {
     setSnap((prev) =>
@@ -696,6 +744,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       setCycleEnabled,
       logCycleStart,
       setCycleEntries,
+      writeGuidanceMatch,
       deleteCycleEntry,
       writeCycleCheckIn,
       acknowledgeCycleEstimate,

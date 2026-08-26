@@ -160,11 +160,12 @@ export function CycleCalendar({
       </div>
 
       {/*
-        A period band reaches into the gutter to close the gap between cells, so
-        the row needs that much room back or the grid gains a 2px scroll of its
-        own. Padding rather than `overflow-hidden`, which would clip the
-        selection ring.
+        The key sits above the grid, not under it.
+        Below the dates it was off the bottom of a phone screen, so the one
+        thing that explains what the colours mean was the one thing nobody saw.
       */}
+      <PhaseLegend className="mt-3" />
+
       {/*
         A period band reaches into the gutter to close the gap between cells, so
         the row needs that much room back or the grid gains a small scroll of
@@ -172,7 +173,7 @@ export function CycleCalendar({
         selection ring.
       */}
       <div
-        className="cycle-grid mt-4 grid grid-cols-7 gap-1 px-0.5 select-none"
+        className="cycle-grid mt-3 grid grid-cols-7 gap-1 px-0.5 select-none"
         onPointerUp={commitDrag}
         onPointerLeave={commitDrag}
       >
@@ -285,7 +286,6 @@ export function CycleCalendar({
       </div>
 
       <Key window={window} gap={estimateNext(cycle)?.typicalGap ?? 0} />
-      <PhaseLegend className="mt-3" />
 
       {selected && (
         <SelectedDay

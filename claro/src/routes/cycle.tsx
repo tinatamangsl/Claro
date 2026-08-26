@@ -7,6 +7,8 @@ import { useClaro } from "@/lib/claro-store";
 import { EditableText } from "@/components/EditableText";
 import { CycleCalendar } from "@/components/cycle/CycleCalendar";
 import { CycleGlance } from "@/components/cycle/CycleGlance";
+import { GuidanceCards } from "@/components/cycle/GuidanceCards";
+import { PhaseInsight } from "@/components/cycle/PhaseInsight";
 import { CycleNumbers } from "@/components/cycle/CycleNumbers";
 import { PeriodHistory } from "@/components/cycle/PeriodHistory";
 import { LoggedMeaning } from "@/components/cycle/LoggedMeaning";
@@ -85,6 +87,7 @@ export function CycleNotes() {
     writeCycleCheckIn,
     setCycleLength,
     deleteAllCycleData,
+    writeGuidanceMatch,
   } = useClaro();
 
   if (!cycle.settings.enabled) {
@@ -104,17 +107,55 @@ export function CycleNotes() {
             Back to Calendar
           </Link>
         </div>
-        <h1 className="display mt-3 text-[2.4rem] sm:text-[2.9rem]">Cycle at a glance</h1>
-        <p className="mt-1.5 text-[0.88rem] text-muted-foreground">
-          Private, and kept apart from your planning.
-        </p>
+        {/*
+          No "Cycle at a glance" heading and no second privacy line.
+          The lock badge above already says it is private, and the phase card
+          below says what day it is: a title repeating both cost a screen of
+          height on a phone to tell the reader nothing they could not see.
+        */}
+        <h1 className="sr-only">Cycle notes</h1>
       </header>
 
       {/*
-        The calendar is what this page is for, so it is the first thing on it.
-        The strip above is the one reading the grid cannot give at a glance:
-        which day of the cycle today is, and when the next period is estimated.
+        The order, which is the product decision on this page.
+
+        The calendar used to be first, on the reasoning that it is what the
+        page is for. It is what the page is *made of*; what somebody opens it
+        for is "what about today?". So today comes first, as a question rather
+        than a reading, then what some people find helpful, then the log, and
+        only then the grid the rest of it is drawn from.
       */}
+      <PhaseInsight
+        cycle={cycle}
+        todayId={today}
+        onAnswer={(phase, answer) =>
+          writeGuidanceMatch("phase", phase, today, answer, new Date())
+        }
+      />
+
+      <GuidanceCards
+        cycle={cycle}
+        todayId={today}
+        onAnswer={(card, phase, answer) =>
+          writeGuidanceMatch(card, phase, today, answer, new Date())
+        }
+      />
+
+      <section>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+          <h2 className="eyebrow">How are you feeling today?</h2>
+          <span className="text-[11px] text-muted-foreground">private to you</span>
+        </div>
+        <div className="mt-3">
+          <CheckIn
+            todayId={today}
+            note={checkInOn(cycle, today)}
+            recent={recentCheckIns(cycle, 5)}
+            onWrite={(patch) => writeCycleCheckIn(today, patch, new Date())}
+          />
+        </div>
+      </section>
+
       <CycleGlance cycle={cycle} todayId={today} />
 
       <section>
@@ -229,15 +270,6 @@ export function CycleNotes() {
           )}
         </div>
       </section>
-
-      <Disclosure summary="How today felt" hint="the fuller form">
-        <CheckIn
-          todayId={today}
-          note={checkInOn(cycle, today)}
-          recent={recentCheckIns(cycle, 5)}
-          onWrite={(patch) => writeCycleCheckIn(today, patch, new Date())}
-        />
-      </Disclosure>
 
       {/* 6. A quiet way through to the guidance, never in place of the actions. */}
       <section className="border-t border-border/70 pt-6">
@@ -525,6 +557,28 @@ function CheckIn({
               ariaLabel="A note about today"
               placeholder="Optional, and entirely your own words."
               className="ruled-text -ml-2 py-0"
+            />
+          </div>
+        </label>
+
+        {/*
+          Separate from the note above on purpose.
+          That one answers Claro's questions. This one answers nothing: it is
+          where somebody whose day does not match the general picture can say
+          what is actually true, and it is the field the guidance cards defer
+          to when they stop fitting.
+        */}
+        <label className="block">
+          <span className="block text-[0.85rem]">What I actually notice</span>
+          <div className="paper-panel mt-2 px-3 pb-2">
+            <EditableText
+              value={note.noticed}
+              onCommit={(text) => onWrite({ noticed: text })}
+              multiline
+              rows={2}
+              ariaLabel="What I actually notice today"
+              placeholder="what I actually notice"
+              className="-ml-2 py-0 italic placeholder:italic"
             />
           </div>
         </label>

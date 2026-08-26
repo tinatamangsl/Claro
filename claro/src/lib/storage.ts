@@ -68,6 +68,7 @@ export function blankCycle(): CycleState {
     entries: {},
     checkIns: {},
     lastSeen: null,
+    guidanceMatches: {},
   };
 }
 
@@ -82,6 +83,7 @@ export function blankCheckIn(dayId: ISODate, now: Date): CycleCheckIn {
     flow: null,
     note: "",
     evening: null,
+    noticed: "",
     updatedAt: now.toISOString(),
   };
 }
@@ -474,6 +476,7 @@ function readCheckIns(raw: unknown): Record<string, CycleCheckIn> {
       flow: note.flow ?? null,
       note: typeof note.note === "string" ? note.note : "",
       evening: note.evening ?? null,
+      noticed: typeof note.noticed === "string" ? note.noticed : "",
       updatedAt: typeof note.updatedAt === "string" ? note.updatedAt : "",
     };
   }
@@ -497,6 +500,10 @@ function readCycle(raw: unknown): CycleState {
     // Additive: a store saved before check-ins existed simply arrives empty.
     checkIns: readCheckIns(c.checkIns),
     lastSeen: c.lastSeen && typeof c.lastSeen === "object" ? c.lastSeen : null,
+    // Additive: a store saved before the cards asked whether they fit arrives
+    // with nothing said either way, which is the truth about it.
+    guidanceMatches:
+      c.guidanceMatches && typeof c.guidanceMatches === "object" ? c.guidanceMatches : {},
   };
 }
 

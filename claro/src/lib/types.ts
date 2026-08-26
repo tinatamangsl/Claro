@@ -678,7 +678,54 @@ export type CycleCheckIn = {
   note: string;
   /** Filled in at the end of the day, if the user wants to. */
   evening: EveningNote | null;
+  /**
+   * Additive: what the user actually noticed, in their own words.
+   *
+   * Deliberately separate from `note`. That one answers the app's questions;
+   * this one answers nothing, and exists so somebody whose experience does not
+   * match the general guidance has somewhere to say so. Never parsed.
+   */
+  noticed: string;
   updatedAt: string;
+};
+
+// ------------------------------------------------- does the guidance fit you
+
+/** The cards that carry a suggestion, and therefore ask whether it landed. */
+export const GUIDANCE_CARDS = ["phase", "eat", "move", "do"] as const;
+export type GuidanceCard = (typeof GUIDANCE_CARDS)[number];
+
+/**
+ * What the reader said about a card.
+ *
+ * "Opposite" is a real and separate answer rather than a stronger "no": being
+ * told energy is building on a day it is draining is a different experience
+ * from the guidance simply missing, and collapsing the two would lose that.
+ */
+export const MATCH_ANSWERS = ["yes", "notReally", "opposite"] as const;
+export type MatchAnswer = (typeof MATCH_ANSWERS)[number];
+
+export const MATCH_ANSWER_LABELS: Record<MatchAnswer, string> = {
+  yes: "Yes",
+  notReally: "Not really",
+  opposite: "Opposite",
+};
+
+/**
+ * One reader's answer about one card on one day.
+ *
+ * Kept so a card that keeps missing can stop asserting and start asking. It is
+ * never read as a score, a trend or a fact about a body, and nothing outside
+ * the card that was answered ever changes because of it.
+ */
+export type GuidanceMatch = {
+  id: string;
+  card: GuidanceCard;
+  /** The phase the card was showing when it was answered. */
+  phase: string;
+  dayId: ISODate;
+  answer: MatchAnswer;
+  answeredAt: string;
 };
 
 /**
@@ -705,6 +752,11 @@ export type CycleState = {
   checkIns: Record<string, CycleCheckIn>;
   /** Null until the user has been shown an estimate at all. */
   lastSeen: EstimateSnapshot | null;
+  /**
+   * Additive: keyed `card:dayId`, so answering again on the same day corrects
+   * the earlier answer rather than stacking a second one beside it.
+   */
+  guidanceMatches: Record<string, GuidanceMatch>;
 };
 
 // -------------------------------------------------------------- 3-3-3 plan

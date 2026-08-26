@@ -1171,6 +1171,56 @@
     box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.28);
   }
 
+  /*
+   * The cycle page's guidance surfaces.
+   *
+   * The supplied design specified #E8622A, #F3EFE7, #111010 and #545048. Those
+   * are close to Claro's palette but not it, and hardcoding them would put the
+   * one page nobody can theme outside the token system: the dark block would
+   * not follow, and the orange would sit a shade off the amber used everywhere
+   * else. The intent is kept, the values come from the tokens.
+   */
+  .phase-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--radius-sm);
+    background: var(--primary);
+    padding: 0.2rem 0.6rem;
+    font-family: var(--font-sans);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--primary-foreground);
+  }
+
+  .stat-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    background: var(--muted);
+    padding: 0.2rem 0.65rem;
+    font-size: 11px;
+    color: var(--color-muted-foreground);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .guidance-card {
+    border-radius: 10px;
+    border-left: 3px solid var(--primary);
+    background: var(--muted);
+    padding: 0.9rem 1rem;
+  }
+
+  .guidance-bullet {
+    margin-top: 0.45rem;
+    height: 4px;
+    width: 4px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--primary);
+  }
+
   /* The options scroll; anything under them stays put and stays reachable. */
   .picker-list {
     min-height: 0;
