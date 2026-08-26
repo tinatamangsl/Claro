@@ -11,7 +11,7 @@
  * window Claro has not been given the dates for.
  */
 
-import { addDays } from "date-fns";
+import { addDays, differenceInCalendarDays } from "date-fns";
 
 import {
   confirmedRange,
@@ -34,9 +34,16 @@ export type CycleDayMark = {
   isEnd: boolean;
   /** True while that period has no end date yet. */
   ongoing: boolean;
-  /** Estimated next-period day. Never true where `period` is true. */
+  /** An estimated period day. Never true where `period` is true. */
   estimated: boolean;
   estimatedStart: boolean;
+  /**
+   * How many cycles ahead this estimate is: 0 is the next period, 1 the one
+   * after, and so on. Later ones are drawn fainter, because an estimate five
+   * cycles out rests on the same handful of dates as the first and should not
+   * look as though it rests on more.
+   */
+  estimatedAhead: number;
   /** The user wrote a private note on this day. */
   note: boolean;
 };
@@ -48,6 +55,7 @@ const BLANK: Omit<CycleDayMark, "dayId"> = {
   ongoing: false,
   estimated: false,
   estimatedStart: false,
+  estimatedAhead: 0,
   note: false,
 };
 
@@ -62,12 +70,50 @@ export function estimatedWindow(cycle: CycleState): DayRange | null {
   const estimate = estimateNext(cycle);
   if (!estimate) return null;
 
-  const history = durationHistory(cycle);
-  const length = history ? history.typical : 1;
-
   return {
     from: estimate.nextStart,
-    to: formatDayId(addDays(parseDayId(estimate.nextStart), length - 1)),
+    to: formatDayId(addDays(parseDayId(estimate.nextStart), estimatedPeriodLength(cycle) - 1)),
+  };
+}
+
+/**
+ * How long an estimated period is drawn for.
+ *
+ * The user's own median where they have closed a period, and a single day where
+ * they have not: Claro will not guess how long somebody bleeds for.
+ */
+export function estimatedPeriodLength(cycle: CycleState): number {
+  return durationHistory(cycle)?.typical ?? 1;
+}
+
+export type EstimatedDay = { inWindow: boolean; isStart: boolean; ahead: number };
+
+const NOT_ESTIMATED: EstimatedDay = { inWindow: false, isStart: false, ahead: 0 };
+
+/**
+ * Whether a day falls in *any* estimated period, however far ahead.
+ *
+ * A calendar somebody scrolls through to plan a year needs every projected
+ * period on it, not only the next one. Worked out with modular arithmetic
+ * rather than by building a list, so marking a day in 2029 costs the same as
+ * marking tomorrow.
+ *
+ * Forward only: the estimate is projected from the last logged start, and
+ * running it backwards would draw periods over months the user actually lived
+ * and may have logged differently.
+ */
+export function estimatedPeriodOn(cycle: CycleState, dayId: ISODate): EstimatedDay {
+  const estimate = estimateNext(cycle);
+  if (!estimate) return NOT_ESTIMATED;
+
+  const delta = differenceInCalendarDays(parseDayId(dayId), parseDayId(estimate.nextStart));
+  if (delta < 0) return NOT_ESTIMATED;
+
+  const offset = delta % estimate.typicalGap;
+  return {
+    inWindow: offset < estimatedPeriodLength(cycle),
+    isStart: offset === 0,
+    ahead: Math.floor(delta / estimate.typicalGap),
   };
 }
 
@@ -88,15 +134,15 @@ export function markFor(cycle: CycleState, dayId: ISODate, todayId: ISODate): Cy
     };
   }
 
-  const window = estimatedWindow(cycle);
-  const estimated = window !== null && dayId >= window.from && dayId <= window.to;
+  const ahead = estimatedPeriodOn(cycle, dayId);
 
   return {
     ...BLANK,
     dayId,
     note,
-    estimated,
-    estimatedStart: estimated && dayId === window.from,
+    estimated: ahead.inWindow,
+    estimatedStart: ahead.inWindow && ahead.isStart,
+    estimatedAhead: ahead.ahead,
   };
 }
 

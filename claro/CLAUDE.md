@@ -84,6 +84,45 @@ defines as review-only, while Quarter carried a single heading. The three months
 live on Quarter as one intention each; Calendar went from 2.5 screens to 1.9 and Quarter from 1.6
 to 2.1. The review page got lighter and the strategic page got the weight it was missing.
 
+**Estimated periods repeat as far ahead as anybody scrolls.** `estimatedWindow` gives the next
+one, for the places that name a date; `estimatedPeriodOn` answers "is this day in *any* estimated
+period" with modular arithmetic against the user's own gap, so marking a day in 2029 costs the
+same as marking tomorrow and a year view needs no list built for it. It projects forward only:
+running it backwards would draw periods over months the user actually lived and may have logged
+differently. `estimatedAhead` counts how many cycles out a projection is, and anything past the
+next one is drawn at `.cycle-estimate-far`, because the fifth projected period rests on exactly
+the same handful of logged dates as the first and must not look as though it rests on more.
+
+**Today is a ring, not bold type.** Once every cell carried a phase wash, weight alone was
+invisible and today became unfindable on the grid. It is `ring-2 ring-foreground/70` plus
+`aria-current="date"` plus "today" in the accessible name, and the key names it.
+
+**The calendar is the first thing on `/cycle`.** It used to sit two and a half screens down,
+behind a glance card carrying the day, the phase, the cycle length, the recorded durations and two
+paragraphs of caveat. Most of that was already visible in the grid below it or in the Numbers tab,
+so the card pushed the thing people open the page for below the fold in order to repeat what that
+thing already showed. `CycleGlance` is now a four-line strip with the one reading a grid cannot
+give at a glance: which cycle day today is, which phase, and when the next period is estimated.
+Logging follows the calendar rather than preceding it, and Numbers / Phases / History keep the
+segmented control. `/cycle` went from 5,742px to 2,944px on a phone, with the grid inside the
+first screen at both widths.
+
+**Say a promise once, in full, rather than a third of it five times.** The cycle page reached 43%
+of its words in long prose against 18% everywhere else in Claro, because every safety commitment
+had been repeated under every card: 87 words of caveat on the glance alone, 41 more on the
+calendar, 20 on the log. Each was true and each was there for a reason, and together they made the
+page something to read rather than something to use.
+
+`WhatClaroDoes` now carries the whole statement once, at the foot of the page, in a `<details>`
+that stays in the document when collapsed so it is searchable and reachable by a screen reader.
+The cards keep a short line each ("From your own dates. An estimate, not medical advice"). Nothing
+was dropped, and a test asserts every promise is still present in full. `/cycle` went from 452
+words to 307 and from 43% prose to 0% long prose.
+
+The contextual notes that stayed are the ones tied to a specific control: `OVULATION_NOTE` beside
+the ovulation band, the refusal messages beside the field that was refused. A promise about the
+whole feature belongs at feature level; a warning about one control belongs on it.
+
 `/cycle-guide` is deliberately left long at 7.7 screens. It is a reference document read rarely
 and in full, and chunking a cited source list into tabs would make it harder to scan, not easier.
 
@@ -208,6 +247,60 @@ keyboard route has no timer: Command-Z reaches the whole stack, so a run of dele
 walked back one at a time long after the bar has gone. It stands aside inside inputs and
 textareas, where the browser's own undo is the right one and hijacking it would make retyping a
 sentence resurrect a deleted habit. Shift-Command-Z does nothing, because Claro does not redo.
+
+## There are no native selects left
+
+A `<select>` styles its trigger and nothing else. The list that drops out of it is drawn by the
+operating system, in system grey, and no CSS reaches it, so the one moment the user is actually
+looking at the control was the moment Claro's design stopped. `Picker` draws the list instead, and
+every choice in the app goes through it: the goal on a priority, the bucket on an action, the time
+on a calendar block.
+
+What that costs is the behaviour a native select gets free, and it is paid back deliberately: the
+trigger is a real button with `aria-expanded`, the list is a `listbox` of `option`s, arrow keys
+move, Enter and Space choose, Escape closes and returns focus, and a pointer down outside
+dismisses. **Two controls must never share a name** — the "add another" button and the field it
+opens were both called "Add another at 1 PM", which is two things a screen reader cannot tell
+apart; the field is named for the slot it writes.
+
+A dangling goal passes `value={null}` rather than `""`, so the trigger shows "That goal is no
+longer set" instead of the label of the clear option.
+
+## The schedule holds quarter hours
+
+`ScheduleItem.time` was always a string, so finer placement needed no schema change: "16:30" is a
+valid time and always was. **An hour is a frame, not a slot.** The eighteen rows stay, because
+seventy-two quarter-hour rows is a spreadsheet rather than a day, but a row now holds every block
+whose `hourOf` matches, sorted by minute, and shows ":30" beside anything off the hour.
+
+An empty hour offers its line straight away. An hour that already holds something offers a quiet
+plus naming the next free quarter, and opens one line at a time: a second textarea in all eighteen
+rows would fill the page with fields nobody asked for. Dragging still moves between hours and
+keeps the minute it was on.
+
+## Planning a day from the calendar
+
+Tapping a day in the month grid opens `DayPlanner` in place rather than navigating to Today. It
+lists what is on that day and adds to it, and the records it writes are the day's own
+`scheduleItems` — **there is no separate store of calendar events**. Two stores of the same thing
+is how a planner and a calendar start disagreeing about what is happening on Thursday.
+
+**A block can be a priority rather than merely mention one.** The add form asks, at the moment the
+question is answerable, and ticking it writes the priority *and* links the block to it through the
+`ScheduleLink` that already existed. One piece of work, named once: the row reads its title
+through the priority, so renaming either renames both and ticking either ticks both.
+
+**Three slots full does not lose what was typed.** `planBlock` still records the block, reports
+`slotsFull`, and the panel says the three priorities are taken and offers to open the day. The cap
+is a product feature and must not break; it also must not eat somebody's sentence.
+
+One thing per hour stays the rule, so `freeHours` drives the time picker and only offers hours
+that are empty. A refusal exists for the taken-hour case, but the picker cannot reach it.
+
+The month cell shows **how many blocks a day carries, as a number in the corner** rather than a
+fourth dot. Three marks was already the limit of what a 46px cell can hold, and "how much is on"
+is a count rather than a yes or no. It sits apart from the day number, because "24" beside "5"
+reads as 245.
 
 ## Reordering
 

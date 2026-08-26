@@ -114,7 +114,7 @@ function MiniMonth({
                 phase?.projected && "phase-projected",
                 mark?.period && "bg-primary/45 font-medium",
                 mark?.estimated && "border border-dashed border-foreground/40",
-                cell.dayId === todayId && "ring-1 ring-gold",
+                cell.dayId === todayId && "font-semibold ring-1 ring-foreground/70",
               )}
             >
               {cell.inMonth ? formatDayOfMonth(cell.dayId) : "·"}

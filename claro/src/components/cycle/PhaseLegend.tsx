@@ -1,4 +1,4 @@
-import { CYCLE_PHASES, PHASE_ESTIMATE_NOTE, PHASE_META } from "@/lib/cycle-phases";
+import { CYCLE_PHASES, PHASE_META } from "@/lib/cycle-phases";
 import { cn } from "@/lib/utils";
 
 /**
@@ -18,9 +18,9 @@ export function PhaseLegend({ className }: { className?: string }) {
           </span>
         ))}
       </div>
-      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-        {PHASE_ESTIMATE_NOTE} Cycles further ahead are drawn fainter, because they are further from
-        anything you have logged.
+      {/* The full statement lives once at the foot of the page. */}
+      <p className="mt-2 text-[10px] text-muted-foreground">
+        Estimated. Fainter means further ahead.
       </p>
     </div>
   );

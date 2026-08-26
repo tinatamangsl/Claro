@@ -104,7 +104,7 @@ describe("PrioritiesBlock — goal context", () => {
   it("offers a link on every slot that has no goal", () => {
     renderBlock(dayWith({ priority1: p("Ship it") }));
 
-    expect(screen.getAllByText("Link a goal")).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: /Link priority \d to a goal/ })).toHaveLength(3);
   });
 
   it("says so plainly when the linked goal has since gone", () => {
@@ -112,20 +112,40 @@ describe("PrioritiesBlock — goal context", () => {
       dayWith({ priority1: p("Ship it", { goal: { category: "lifeMain" } }) }),
     );
 
-    expect(screen.getByText("That goal is no longer set")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Link priority 1 to a goal" }).textContent).toContain(
+      "That goal is no longer set",
+    );
   });
 
-  it("keeps the picker operable as a real select", () => {
+  it("opens a Claro list rather than the operating system's grey one", () => {
+    // A native select hands its dropdown to the OS, and no CSS reaches it. The
+    // list is drawn in the app instead, so it has to behave like a listbox.
     const { spies } = renderBlock(dayWith({ priority1: p("Ship it") }));
 
-    fireEvent.change(screen.getByLabelText("Link priority 1 to a goal"), {
-      target: { value: "workSide:s1" },
-    });
+    const trigger = screen.getByRole("button", { name: "Link priority 1 to a goal" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("listbox", { name: "Link priority 1 to a goal" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("option", { name: /Write the launch note/ }));
 
     expect(spies.onPatch).toHaveBeenCalledWith(
       { id: "Ship it" },
       { goal: { category: "workSide", sideQuestId: "s1" } },
     );
+  });
+
+  it("closes on Escape and hands focus back", () => {
+    renderBlock(dayWith({ priority1: p("Ship it") }));
+
+    const trigger = screen.getByRole("button", { name: "Link priority 1 to a goal" });
+    fireEvent.click(trigger);
+    fireEvent.keyDown(trigger, { key: "Escape" });
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 });
 

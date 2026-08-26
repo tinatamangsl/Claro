@@ -274,3 +274,52 @@ describe("ScheduleBlock completion", () => {
     ).toBe("true");
   });
 });
+
+describe("ScheduleBlock — quarter hours", () => {
+  it("keeps a block at half past in its own hour's row", () => {
+    renderSchedule(dayWith([block("a", "13:00", "Call"), block("b", "13:30", "Follow up")]));
+
+    // Both sit under 1 PM rather than one of them vanishing.
+    const values = [...document.querySelectorAll("textarea")].map(
+      (t) => (t as HTMLTextAreaElement).value,
+    );
+    expect(values).toContain("Call");
+    expect(values).toContain("Follow up");
+    // And the one off the hour says which minute it is on.
+    expect(screen.getByText(":30")).toBeTruthy();
+  });
+
+  it("offers the next free quarter on an hour that already has something", () => {
+    renderSchedule(dayWith([block("a", "13:00", "Call")]));
+
+    expect(screen.getByRole("button", { name: "Add another at 1 PM" })).toBeTruthy();
+    // An empty hour needs no such affordance: its line is already there.
+    expect(screen.queryByRole("button", { name: "Add another at 2 PM" })).toBeNull();
+  });
+
+  it("writes the new block at the next free quarter, not over the one there", () => {
+    const { spies } = renderSchedule(dayWith([block("a", "13:00", "Call")]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add another at 1 PM" }));
+    const field = screen.getByLabelText("What happens at 1:15 PM");
+    fireEvent.change(field, { target: { value: "Follow up" } });
+    fireEvent.blur(field);
+
+    const written = spies.onChange.mock.calls[0][0] as ScheduleItem[];
+    expect(written.map((i) => `${i.time} ${i.text}`)).toEqual([
+      "13:00 Call",
+      "13:15 Follow up",
+    ]);
+  });
+
+  it("adds one extra line at a time, so the page stays calm", () => {
+    renderSchedule(dayWith([block("a", "13:00", "Call"), block("b", "14:00", "Review")]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add another at 1 PM" }));
+    expect(screen.getByLabelText("What happens at 1:15 PM")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add another at 2 PM" }));
+    expect(screen.queryByLabelText("What happens at 1:15 PM")).toBeNull();
+    expect(screen.getByLabelText("What happens at 2:15 PM")).toBeTruthy();
+  });
+});

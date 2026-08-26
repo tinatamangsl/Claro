@@ -4,6 +4,7 @@ import { CheckToggle } from "@/components/CheckToggle";
 import { DragHandle } from "@/components/DragHandle";
 import { EditableText } from "@/components/EditableText";
 import { GoalTag } from "@/components/GoalTag";
+import { Picker } from "@/components/Picker";
 import { SortAnnouncer } from "@/components/SortAnnouncer";
 import { useSortable } from "@/hooks/use-sortable";
 import { formatDayShort } from "@/lib/dates";
@@ -204,11 +205,12 @@ function PriorityEntry({
 /**
  * Ties a priority to any one goal in the quarter.
  *
- * The goal's own words appear exactly once. A native `<select>` always renders
- * its chosen option's text, so showing the tag *and* the select repeated the
- * Main Quest twice on the same line — instead the tag is the visible control
- * and the real select sits transparently over it, keeping the keyboard and
- * screen-reader behaviour a plain select already has.
+ * The goal's own words appear exactly once: the tag *is* the trigger, rather
+ * than a tag with a select laid over it repeating the same Main Quest.
+ *
+ * `Picker` rather than a native `<select>` because a native one draws its list
+ * in system grey, outside Claro's design entirely, which is the one moment the
+ * user is actually looking at it.
  */
 function GoalPicker({
   priority,
@@ -225,32 +227,26 @@ function GoalPicker({
   const linked = resolveGoal(priority.goal, quarter);
 
   return (
-    <span className="relative inline-flex max-w-full items-center">
-      {linked ? (
-        <GoalTag category={linked.category} title={linked.title} short />
-      ) : (
-        <span className="field-select inline-flex items-center gap-1 border border-dashed border-border">
-          {priority.goal ? "That goal is no longer set" : "Link a goal"}
-          <ChevronDown aria-hidden className="h-3 w-3" />
-        </span>
+    <Picker
+      // Null rather than "" when nothing resolves, so the trigger shows the
+      // invitation or the warning instead of the label of the clear option.
+      value={linked ? goalKey(priority.goal as GoalRef) : null}
+      onChange={(key) => onPatch({ goal: parseGoalKey(key) })}
+      label={`Link priority ${position} to a goal`}
+      placeholder={priority.goal ? "That goal is no longer set" : "Link a goal"}
+      className="max-w-full"
+      triggerClassName={cn(
+        "goal-trigger",
+        !linked && "border-dashed text-muted-foreground",
       )}
-
-      <label className="sr-only" htmlFor={`priority-${position}-goal`}>
-        Link priority {position} to a goal
-      </label>
-      <select
-        id={`priority-${position}-goal`}
-        value={linked ? goalKey(priority.goal as GoalRef) : ""}
-        onChange={(e) => onPatch({ goal: parseGoalKey(e.target.value) })}
-        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-      >
-        <option value="">No linked goal</option>
-        {options.map((option) => (
-          <option key={option.key} value={option.key}>
-            {GOAL_CATEGORY_META[option.category].label}: {option.title}
-          </option>
-        ))}
-      </select>
-    </span>
+      options={[
+        { value: "", label: "No linked goal" },
+        ...options.map((option) => ({
+          value: option.key,
+          label: option.title,
+          hint: GOAL_CATEGORY_META[option.category].label,
+        })),
+      ]}
+    />
   );
 }

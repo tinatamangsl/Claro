@@ -1,7 +1,9 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { NotebookPen } from "lucide-react";
+import { useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { DayPlanner } from "@/components/calendar/DayPlanner";
 import { PeriodHeader } from "@/components/PeriodHeader";
 import { Breadcrumbs } from "@/components/calendar/Breadcrumbs";
 import { Legend } from "@/components/calendar/Legend";
@@ -64,14 +66,12 @@ export const Route = createFileRoute("/calendar")({
 });
 
 function CalendarView() {
-  const {
-    today,
-    state,
-    cycle,
-    day,
-  } = useClaro();
+  const { today, state, cycle, day, updateDay } = useClaro();
   const { d, v } = Route.useSearch();
   const navigate = useNavigate();
+
+  /** The day opened for planning, in place, rather than by leaving the month. */
+  const [planning, setPlanning] = useState<ISODate | null>(null);
 
   /**
    * One anchored day drives every view. Year, quarter, month and week are all
@@ -208,9 +208,21 @@ function CalendarView() {
                   cycle={cycle.settings.enabled ? cycle : null}
                   summary={month}
                   reflectionOn={(dayId) => hasReflection(day(dayId))}
-                  onOpenDay={(dayId: ISODate) => navigate({ to: "/today", search: { d: dayId } })}
+                  onOpenDay={(dayId: ISODate) =>
+                    setPlanning((current) => (current === dayId ? null : dayId))
+                  }
                 />
               </div>
+
+              {planning && (
+                <DayPlanner
+                  dayId={planning}
+                  day={day(planning)}
+                  habits={state.habits}
+                  completions={state.habitCompletions}
+                  onUpdate={(recipe) => updateDay(planning, recipe)}
+                />
+              )}
               <div className="mt-2">
                 <Legend />
               </div>

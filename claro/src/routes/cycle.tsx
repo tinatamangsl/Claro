@@ -11,6 +11,7 @@ import { CycleNumbers } from "@/components/cycle/CycleNumbers";
 import { PeriodHistory } from "@/components/cycle/PeriodHistory";
 import { LoggedMeaning } from "@/components/cycle/LoggedMeaning";
 import { PhasePanel } from "@/components/cycle/PhasePanel";
+import { WhatClaroDoes } from "@/components/cycle/WhatClaroDoes";
 import { RangeStepper } from "@/components/cycle/RangeStepper";
 import { YearCalendar } from "@/components/cycle/YearCalendar";
 import {
@@ -43,12 +44,11 @@ import {
 } from "@/lib/types";
 
 /** The four record surfaces, behind one control instead of stacked five deep. */
-const CYCLE_TABS = ["calendar", "numbers", "phases", "history"] as const;
+const CYCLE_TABS = ["numbers", "phases", "history"] as const;
 
 type CycleTab = (typeof CYCLE_TABS)[number];
 
 const TAB_META: Record<CycleTab, { label: string; heading: string; hint: string }> = {
-  calendar: { label: "Calendar", heading: "Your cycle calendar", hint: "tap or drag any day" },
   numbers: { label: "Numbers", heading: "Your numbers", hint: "from your own dates" },
   phases: { label: "Phases", heading: "Your cycle, part by part", hint: "what you logged" },
   history: { label: "History", heading: "Your logged periods", hint: "edit any of them" },
@@ -73,7 +73,7 @@ export const Route = createFileRoute("/cycle")({
  */
 export function CycleNotes() {
   const [scale, setScale] = useState<"month" | "year">("month");
-  const [tab, setTab] = useState<CycleTab>("calendar");
+  const [tab, setTab] = useState<CycleTab>("numbers");
   /** The period just recorded, so the page can explain it once. */
   const [justLogged, setJustLogged] = useState<string | null>(null);
   const {
@@ -105,25 +105,55 @@ export function CycleNotes() {
           </Link>
         </div>
         <h1 className="display mt-3 text-[2.4rem] sm:text-[2.9rem]">Cycle at a glance</h1>
-        <p className="mt-2 max-w-prose text-[0.92rem] leading-relaxed text-muted-foreground">
-          A place to record when a period starts and ends and, if you want to, how a day felt. Claro
-          keeps this separate from your planning and never shares it.
+        <p className="mt-1.5 text-[0.88rem] text-muted-foreground">
+          Private, and kept apart from your planning.
         </p>
       </header>
 
-      {/* 1. What Claro estimated, stated quietly and always labelled. */}
+      {/*
+        The calendar is what this page is for, so it is the first thing on it.
+        The strip above is the one reading the grid cannot give at a glance:
+        which day of the cycle today is, and when the next period is estimated.
+      */}
       <CycleGlance cycle={cycle} todayId={today} />
 
-      {/* 2. The three ways in, side by side, so nothing is buried. */}
-      <QuickActions />
+      <section>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+          <div className="flex items-baseline gap-2.5">
+            <h2 className="eyebrow">Your cycle calendar</h2>
+            <span className="text-[11px] text-muted-foreground">
+              {scale === "month" ? "tap or drag any day" : "tap a month to open it"}
+            </span>
+          </div>
+          <ScaleToggle scale={scale} onChange={setScale} />
+        </div>
 
-      {/* 3. The action, and the loudest thing on the page. */}
+        <div className="mt-3">
+          {scale === "month" ? (
+            <CycleCalendar
+              cycle={cycle}
+              todayId={today}
+              onReplace={setCycleEntries}
+              onDelete={deleteCycleEntry}
+              onLogged={setJustLogged}
+              noteOn={(dayId) => checkInOn(cycle, dayId)}
+              onWriteNote={(dayId, patch) => writeCycleCheckIn(dayId, patch, new Date())}
+            />
+          ) : (
+            <YearCalendar cycle={cycle} todayId={today} onOpenMonth={() => setScale("month")} />
+          )}
+        </div>
+      </section>
+
+      {/* Then the action, and the three ways on. */}
       <LogPeriod
         cycle={cycle}
         todayId={today}
         onReplace={setCycleEntries}
         onLogged={setJustLogged}
       />
+
+      <QuickActions />
 
       {/* What was just written down, and what it does and does not mean. */}
       {justLogged && (
@@ -156,7 +186,7 @@ export function CycleNotes() {
         <div
           role="tablist"
           aria-label="Your cycle records"
-          className="mt-2.5 grid grid-cols-4 gap-1 rounded-xl bg-muted p-1"
+          className="mt-2.5 grid grid-cols-3 gap-1 rounded-xl bg-muted p-1"
         >
           {CYCLE_TABS.map((option) => (
             <button
@@ -178,27 +208,6 @@ export function CycleNotes() {
         </div>
 
         <div className="mt-3">
-          {tab === "calendar" && (
-            <>
-              <div className="mb-3 flex justify-end">
-                <ScaleToggle scale={scale} onChange={setScale} />
-              </div>
-              {scale === "month" ? (
-                <CycleCalendar
-                  cycle={cycle}
-                  todayId={today}
-                  onReplace={setCycleEntries}
-                  onDelete={deleteCycleEntry}
-                  onLogged={setJustLogged}
-                  noteOn={(dayId) => checkInOn(cycle, dayId)}
-                  onWriteNote={(dayId, patch) => writeCycleCheckIn(dayId, patch, new Date())}
-                />
-              ) : (
-                <YearCalendar cycle={cycle} todayId={today} onOpenMonth={() => setScale("month")} />
-              )}
-            </>
-          )}
-
           {tab === "numbers" && (
             <CycleNumbers cycle={cycle} todayId={today} onSetLength={setCycleLength} />
           )}
@@ -240,6 +249,8 @@ export function CycleNotes() {
           Understanding your menstrual cycle: guidance and sources
         </Link>
       </section>
+
+      <WhatClaroDoes />
 
       <DeleteAll
         enabled={hasAnyCycleData(cycle)}
@@ -326,9 +337,7 @@ function LogPeriod({
   return (
     <section className="surface-raised p-5">
       <h2 className="display text-[1.5rem] leading-tight">Log a period start</h2>
-      <p className="mt-1 text-[0.85rem] text-muted-foreground">
-        Today, or any dates in the past you remember. Add the end date whenever you know it.
-      </p>
+      <p className="mt-1 text-[0.85rem] text-muted-foreground">Today, or any day you remember.</p>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {ongoing ? (

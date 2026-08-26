@@ -5,8 +5,20 @@ import { DragHandle } from "@/components/DragHandle";
 import { EditableText } from "@/components/EditableText";
 import { SortAnnouncer } from "@/components/SortAnnouncer";
 import { useSortable } from "@/hooks/use-sortable";
-import { SCHEDULE_HOURS, formatHourLabel } from "@/lib/dates";
+import {
+  SCHEDULE_HOURS,
+  SCHEDULE_MINUTES,
+  atMinutes,
+  formatHourLabel,
+  formatTimeLabel,
+  hourOf,
+  minutesOf,
+} from "@/lib/dates";
 import { blockItem, resolveSchedule, settleHours, type ResolvedSchedule } from "@/lib/schedule";
+import { Plus } from "lucide-react";
+import { useState } from "react";
+
+import { nextFreeSlot } from "@/lib/day-plan";
 import { cn } from "@/lib/utils";
 import type { Day, Habit, HabitCompletion, ScheduleItem } from "@/lib/types";
 
@@ -48,13 +60,31 @@ export function ScheduleBlock({
   const resolved = resolveSchedule(day, habits, completions);
   const byTime = new Map(resolved.map((row) => [row.item.time, row]));
 
+  /*
+   * An hour is a frame, not a slot. A block placed at 4:15 belongs to the four
+   * o'clock row alongside anything at 4:00, so the row holds a list rather than
+   * one entry and sorts its contents by the minute they sit on.
+   */
+  const byHour = new Map<string, typeof resolved>();
+  for (const row of resolved) {
+    const hour = hourOf(row.item.time);
+    byHour.set(hour, [...(byHour.get(hour) ?? []), row]);
+  }
+  for (const rows of byHour.values()) {
+    rows.sort((a, b) => minutesOf(a.item.time) - minutesOf(b.item.time));
+  }
+
+  /** Which hour has its extra line open. One at a time keeps the page calm. */
+  const [adding, setAdding] = useState<string | null>(null);
+
   const sortable = useSortable<ScheduleItem>({
     items: day.scheduleItems,
     label: (item) => byTime.get(item.time)?.title || item.text,
     // A move can land two entries on one hour; `settleHours` swaps them apart.
     onReorder: (next) => onChange(settleHours(day.scheduleItems, next)),
-    getGroup: (item) => item.time,
-    setGroup: (item, time) => ({ ...item, time }),
+    // Dragging still moves between hours; the minute within an hour is kept.
+    getGroup: (item) => hourOf(item.time),
+    setGroup: (item, hour) => ({ ...item, time: atMinutes(hour, minutesOf(item.time)) }),
     groupNoun: "hour",
     verticalGroups: true,
   });
@@ -89,36 +119,51 @@ export function ScheduleBlock({
         <SortAnnouncer message={sortable.announcement} />
 
         {SCHEDULE_HOURS.map((time) => {
-          const row = byTime.get(time);
+          const rows = byHour.get(time) ?? [];
           const hour = formatHourLabel(time);
-          const dragging = row && sortable.draggingId === row.item.id;
+          const dragging = rows.some((r) => sortable.draggingId === r.item.id);
 
           return (
             <div
               key={time}
               ref={sortable.groupRef(time)}
-              data-filled={row ? "true" : "false"}
+              data-filled={rows.length > 0 ? "true" : "false"}
               className={cn("schedule-row group", dragging && "bg-gold/8")}
             >
               <span className="schedule-time">{hour}</span>
 
-              {row ? (
-                <span ref={sortable.itemRef(row.item.id)} className="schedule-body">
-                  <DragHandle
-                    {...sortable.handleProps(row.item)}
-                    dragging={dragging}
-                    className="mt-[1px]"
-                  />
-                  <ScheduleRow
-                    row={row}
-                    hour={hour}
-                    onToggle={() => onToggle(row.item.id)}
-                    onCommit={(text) => writeBlock(time, text)}
-                    onRemove={() => removeRow(row.item.id)}
-                  />
-                </span>
-              ) : (
-                <span className="schedule-body">
+              <span className="schedule-body flex-col items-stretch gap-0.5">
+                {rows.map((row) => (
+                  <span key={row.item.id} className="flex items-start gap-1.5">
+                    <DragHandle
+                      {...sortable.handleProps(row.item)}
+                      dragging={sortable.draggingId === row.item.id}
+                      className="mt-[1px]"
+                    />
+                    <span ref={sortable.itemRef(row.item.id)} className="flex min-w-0 flex-1 gap-1.5">
+                      {minutesOf(row.item.time) > 0 && (
+                        <span className="tnum mt-[1px] shrink-0 text-[10px] text-muted-foreground">
+                          :{String(minutesOf(row.item.time)).padStart(2, "0")}
+                        </span>
+                      )}
+                      <ScheduleRow
+                        row={row}
+                        hour={formatTimeLabel(row.item.time)}
+                        onToggle={() => onToggle(row.item.id)}
+                        onCommit={(text) => writeBlock(row.item.time, text)}
+                        onRemove={() => removeRow(row.item.id)}
+                      />
+                    </span>
+                  </span>
+                ))}
+
+                {/*
+                  An empty hour offers its line straight away. An hour that
+                  already holds something offers a quiet plus instead: putting a
+                  second textarea in all eighteen rows would fill the page with
+                  fields nobody asked for, and duplicate every row's label.
+                */}
+                {rows.length === 0 ? (
                   <EditableText
                     value=""
                     onCommit={(text) => writeBlock(time, text)}
@@ -126,8 +171,35 @@ export function ScheduleBlock({
                     ariaLabel={`Schedule at ${hour}`}
                     className="-ml-2 min-w-0 flex-1 py-0 text-[0.8rem] leading-snug"
                   />
-                </span>
-              )}
+                ) : adding === time ? (
+                  <EditableText
+                    value=""
+                    onCommit={(text) => {
+                      writeBlock(nextFreeSlot(day, time), text);
+                      setAdding(null);
+                    }}
+                    wrap
+                    autoFocus
+                    // Named for the slot it will write, not for the button that
+                    // opened it: two controls with one name is two things a
+                    // screen reader cannot tell apart.
+                    ariaLabel={`What happens at ${formatTimeLabel(nextFreeSlot(day, time))}`}
+                    className="-ml-2 min-w-0 flex-1 py-0 text-[0.8rem] leading-snug"
+                  />
+                ) : (
+                  nextFreeSlot(day, time) !== time && (
+                    <button
+                      type="button"
+                      onClick={() => setAdding(time)}
+                      aria-label={`Add another at ${hour}`}
+                      className="mt-0.5 flex w-fit items-center gap-1 rounded px-1 text-[10px] text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      <Plus aria-hidden className="h-2.5 w-2.5" />
+                      {formatTimeLabel(nextFreeSlot(day, time))}
+                    </button>
+                  )
+                )}
+              </span>
             </div>
           );
         })}

@@ -86,6 +86,9 @@ export function HabitMonth({
                       formatDayLong(cell.dayId),
                       `${day.done} of ${day.total} habits kept`,
                       `${completedCount} things completed`,
+                      stats.scheduleTotal > 0
+                        ? `${stats.scheduleTotal} scheduled`
+                        : null,
                       stats.focusMs > 0 ? `${formatFocusTotal(stats.focusMs)} focused` : null,
                       reflected ? "reflection captured" : null,
                     ]
@@ -114,11 +117,26 @@ export function HabitMonth({
                 {formatDayOfMonth(cell.dayId)}
               </span>
 
+              {/*
+                What is booked, as a number rather than a fourth dot. Three
+                marks was already the limit of what a 46px cell can carry, and
+                "how much is on that day" is a count, not a yes or no.
+              */}
+              {cell.inMonth && (stats?.scheduleTotal ?? 0) > 0 && (
+                <span
+                  // Set apart from the day number, which it otherwise reads as
+                  // part of: "24" beside "5" is 245.
+                  className="tnum absolute top-0.5 right-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-foreground/10 px-1 text-[9px] leading-none text-muted-foreground"
+                >
+                  {stats!.scheduleTotal}
+                </span>
+              )}
+
               {/* A day that held completed work carries a quiet dot. */}
               {cell.inMonth && completedCount > 0 && (
                 <span
                   aria-hidden
-                  className="absolute top-1 left-1 h-1 w-1 rounded-full bg-foreground/40"
+                  className="absolute bottom-1 left-1 h-1 w-1 rounded-full bg-foreground/40"
                 />
               )}
               {/* And one that held a focus block carries the gold mark. */}
@@ -139,7 +157,7 @@ export function HabitMonth({
                 <span
                   aria-hidden
                   title="Logged start"
-                  className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary"
+                  className="absolute right-1 bottom-1 h-1.5 w-1.5 rounded-full bg-primary"
                 />
               )}
             </button>

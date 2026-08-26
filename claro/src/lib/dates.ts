@@ -187,6 +187,42 @@ export const SCHEDULE_HOURS: string[] = Array.from(
   (_, i) => `${String(i + 5).padStart(2, "0")}:00`,
 );
 
+/**
+ * How finely a block can be placed inside its hour.
+ *
+ * The schedule is still eighteen hours tall, because a grid of seventy-two
+ * quarter-hour rows is a spreadsheet rather than a day. An hour is the *frame*;
+ * within it a block can sit at any quarter, and several can share the hour.
+ */
+export const SCHEDULE_MINUTES = [0, 15, 30, 45] as const;
+
+/** "16:30" belongs to the "16:00" row. */
+export function hourOf(time: string): string {
+  return `${time.slice(0, 2)}:00`;
+}
+
+export function minutesOf(time: string): number {
+  return Number(time.slice(3, 5));
+}
+
+export function atMinutes(hour: string, minutes: number): string {
+  return `${hour.slice(0, 2)}:${String(minutes).padStart(2, "0")}`;
+}
+
+/** Every quarter-hour of the schedule, for a picker that offers them all. */
+export function scheduleSlots(): string[] {
+  return SCHEDULE_HOURS.flatMap((hour) => SCHEDULE_MINUTES.map((m) => atMinutes(hour, m)));
+}
+
+/** "4:15 PM", and just "4 PM" on the hour. */
+export function formatTimeLabel(time: string): string {
+  const minutes = minutesOf(time);
+  const base = formatHourLabel(hourOf(time));
+  if (minutes === 0) return base;
+  const [value, suffix] = base.split(" ");
+  return `${value}:${String(minutes).padStart(2, "0")} ${suffix}`;
+}
+
 /** "5 AM", "12 PM", "10 PM" — friendlier than 24h in the left rail. */
 export function formatHourLabel(time: string): string {
   const hour = Number(time.split(":")[0]);

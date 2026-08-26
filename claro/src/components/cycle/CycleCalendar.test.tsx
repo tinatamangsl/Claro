@@ -89,17 +89,43 @@ describe("the cycle calendar", () => {
       ),
     );
 
-    // 24th through 27th August, estimated from the user's own dates.
-    expect(container.querySelectorAll(".cycle-estimate")).toHaveLength(4);
+    // 24th through 27th August is the next one, and the projection carries on
+    // past it: a calendar somebody plans a year on needs every future period,
+    // not only the one after this.
+    expect(container.querySelectorAll(".cycle-estimate").length).toBeGreaterThanOrEqual(4);
     expect(container.querySelectorAll(".cycle-band.cycle-estimate")).toHaveLength(0);
-    expect(screen.getByText(/Estimated 24 Aug to 27 Aug/)).toBeTruthy();
+    expect(screen.getByText(/Next 24 Aug to 27 Aug, then every 28 days/)).toBeTruthy();
+  });
+
+  it("draws later projections fainter than the next one", () => {
+    const { container } = setup(
+      cycleWith(
+        ["2026-06-01", "2026-06-04"],
+        ["2026-06-29", "2026-07-02"],
+        ["2026-07-27", "2026-07-30"],
+      ),
+    );
+
+    // September's period is a cycle further out than August's.
+    fireEvent.click(screen.getByRole("button", { name: "Next month" }));
+    expect(container.querySelectorAll(".cycle-estimate-far").length).toBeGreaterThan(0);
+  });
+
+  it("marks today so it survives a phase colour behind it", () => {
+    // Bold type alone disappeared once every cell carried a wash.
+    const { container } = setup(cycleWith());
+
+    const today = container.querySelector('[aria-current="date"]')!;
+    expect(today.className).toContain("ring-2");
+    expect(today.getAttribute("aria-label")).toContain("today");
   });
 
   it("names both treatments in a key beside the grid", () => {
     setup(cycleWith(["2026-08-03", "2026-08-06"]));
 
     expect(screen.getByText("Logged by you")).toBeTruthy();
-    expect(screen.getByText("Estimated next period")).toBeTruthy();
+    expect(screen.getByText("Estimated periods")).toBeTruthy();
+    expect(screen.getByText("Today")).toBeTruthy();
   });
 
   it("says in the accessible name what a day is", () => {
@@ -207,8 +233,10 @@ describe("logging from the calendar", () => {
       ),
     );
 
-    expect(container.textContent).toContain("estimated from the dates you logged");
-    expect(container.textContent).toContain("not a measurement");
+    // The word is on the calendar itself; the full statement is said once at
+    // page level, where the route test checks it.
+    expect(container.textContent).toContain("Estimated");
+    expect(container.textContent).toContain("Fainter means further ahead");
   });
 
   it("never turns the ovulation band into a fertility prediction", () => {

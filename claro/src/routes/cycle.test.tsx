@@ -75,28 +75,33 @@ describe("the screen once it is on", () => {
     return h;
   };
 
-  it("opens with the glance, then the action, then the calendar", async () => {
+  it("opens on the calendar, which is what the page is for", async () => {
     const { container } = await enabled();
 
     const headings = [...container.querySelectorAll("h1, h2")].map((h) => h.textContent);
-    // Glance, the action, then one record surface at a time. The other three
-    // are a tap away rather than stacked below.
+    // The calendar comes before the logging card, not after it: opening this
+    // page is nearly always to look at the grid.
     expect(headings).toEqual([
       "Cycle at a glance",
-      "Log a period start",
       "Your cycle calendar",
+      "Log a period start",
+      "Your numbers",
       "How today felt",
       "Your data",
     ]);
+    expect(headings.indexOf("Your cycle calendar")).toBeLessThan(
+      headings.indexOf("Log a period start"),
+    );
   });
 
   it("keeps the records behind one control instead of five screens of stack", async () => {
     const { container } = await enabled();
 
     const tabs = [...container.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
-    expect(tabs).toEqual(["Calendar", "Numbers", "Phases", "History"]);
-    // Only the chosen one is mounted, which is what makes the page short.
-    expect(container.textContent).not.toContain("Your usual cycle length");
+    // The calendar left the control when it moved to the top of the page.
+    expect(tabs).toEqual(["Numbers", "Phases", "History"]);
+    // Only the chosen one is mounted, which is what keeps the page short.
+    expect(container.textContent).not.toContain("Your cycle, part by part");
   });
 
   it("puts the three ways in side by side, none of them buried", async () => {
@@ -119,15 +124,19 @@ describe("the screen once it is on", () => {
 
   it("offers only calculators a calendar can actually support", async () => {
     const { container } = await enabled();
-    fireEvent.click(screen.getByRole("tab", { name: "Numbers" }));
     const text = container.textContent!.toLowerCase();
 
     expect(text).toContain("your usual cycle length");
     expect(text).toContain("which cycle day is a date?");
     // Every calculator the reference apps offer here is a fertility or
     // pregnancy prediction, and none of them can come from a calendar.
-    for (const banned of ["ovulation calculator", "fertile", "implantation", "hcg", "due date"]) {
+    for (const banned of ["ovulation calculator", "implantation", "hcg", "due date"]) {
       expect(text).not.toContain(banned);
+    }
+    // "Fertile" now appears once, in the sentence that rules it out.
+    for (const sentence of text.split(/(?<=[.?!])\s+/)) {
+      if (!sentence.includes("fertile")) continue;
+      expect(sentence).toMatch(/\bnot\b|\bcannot\b|\bnever\b|does not/);
     }
   });
 
@@ -157,11 +166,60 @@ describe("the screen once it is on", () => {
     expect(container.textContent).not.toContain("Learn more");
   });
 
-  it("states that the estimate comes from the user's own dates", async () => {
+  it("says plainly what is missing when there is no history yet", async () => {
     const { container } = await enabled();
 
-    expect(container.textContent).toContain("Based on your own recorded dates");
-    expect(container.textContent).toContain("This is an estimate, not medical advice");
+    expect(container.textContent).toContain("Not enough of your own history yet");
+    // And points at the two ways out rather than leaving a dead end.
+    expect(container.textContent).toContain("tell Claro your usual cycle length");
+  });
+
+  it("shows the day, the phase and the next window once there is history", async () => {
+    const h = harness();
+    await ready(h.api);
+    const todayId = h.api.store!.today;
+
+    act(() => {
+      h.api.store!.setCycleEnabled(true, new Date());
+      h.api.store!.setCycleEntries(
+        Object.fromEntries(
+          [61, 33, 5].map((back, i) => [
+            `e${i}`,
+            {
+              id: `e${i}`,
+              startDate: shiftDayId(todayId, -back),
+              endDate: shiftDayId(todayId, -back + 4),
+              loggedAt: "x",
+            },
+          ]),
+        ),
+      );
+    });
+
+    expect(h.container.textContent).toContain("of about 28");
+    expect(h.container.textContent).toContain("Next period");
+    expect(h.container.textContent).toContain("estimated, from your own dates");
+  });
+
+  it("keeps every promise in full, once, rather than in fragments on each card", async () => {
+    const { container } = await enabled();
+
+    // Collapsed, but present in the document, so it is searchable and reachable.
+    const note = [...container.querySelectorAll("details")].find((d) =>
+      d.textContent?.includes("What Claro does with this"),
+    )!;
+    expect(note).toBeTruthy();
+    expect(note.open).toBe(false);
+
+    for (const promise of [
+      "estimate, not medical advice",
+      "first day of one period to the first day of the next",
+      "never changes your day, week, quarter, habits, goals, focus or sound",
+      "does not show a fertile window",
+      "doctor, nurse or pharmacist",
+    ]) {
+      expect(note.textContent).toContain(promise);
+    }
   });
 
   it("keeps a quiet way through to the guidance", async () => {
@@ -186,9 +244,9 @@ describe("the screen once it is on", () => {
   it("folds the long sections away, so the page opens short", async () => {
     const { container } = await enabled();
 
-    const folded = [...container.querySelectorAll("details")].map(
-      (d) => d.querySelector("h2")?.textContent,
-    );
+    const folded = [...container.querySelectorAll("details")]
+      .map((d) => d.querySelector("h2")?.textContent)
+      .filter(Boolean);
     expect(folded).toEqual(["How today felt"]);
     // Closed by default, and still findable by the browser's own search.
     expect([...container.querySelectorAll("details")].every((d) => !d.open)).toBe(true);

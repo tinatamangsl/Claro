@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { estimatedWindow, isBlankMark, markFor, monthMarks } from "./cycle-calendar";
+import {
+  estimatedPeriodOn,
+  estimatedWindow,
+  isBlankMark,
+  markFor,
+  monthMarks,
+} from "./cycle-calendar";
 import { monthDayIds } from "./calendar";
 import { blankCycle } from "./storage";
 import type { CycleState, ISODate } from "./types";
@@ -164,5 +170,69 @@ describe("marks for a run of days", () => {
 
     expect(markFor(cycle, "2026-08-14", TODAY).note).toBe(true);
     expect(markFor(cycle, "2026-08-15", TODAY).note).toBe(false);
+  });
+});
+
+describe("estimating every future period, not only the next", () => {
+  const REGULAR = () =>
+    cycleWith(
+      ["2026-06-01", "2026-06-04"],
+      ["2026-06-29", "2026-07-02"],
+      ["2026-07-27", "2026-07-30"],
+    );
+
+  it("repeats on the user's own gap, as far ahead as asked", () => {
+    // Next start 24 Aug, then every 28 days.
+    expect(estimatedPeriodOn(REGULAR(), "2026-08-24")).toMatchObject({
+      inWindow: true,
+      isStart: true,
+      ahead: 0,
+    });
+    expect(estimatedPeriodOn(REGULAR(), "2026-09-21")).toMatchObject({
+      inWindow: true,
+      isStart: true,
+      ahead: 1,
+    });
+    expect(estimatedPeriodOn(REGULAR(), "2027-05-31")).toMatchObject({
+      inWindow: true,
+      isStart: true,
+    });
+  });
+
+  it("covers the whole estimated period, not just its first day", () => {
+    for (const day of ["2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24"] as ISODate[]) {
+      expect(estimatedPeriodOn(REGULAR(), day).inWindow).toBe(true);
+    }
+    expect(estimatedPeriodOn(REGULAR(), "2026-09-25").inWindow).toBe(false);
+  });
+
+  it("counts how many cycles ahead it is, so later ones can be drawn fainter", () => {
+    expect(estimatedPeriodOn(REGULAR(), "2026-08-24").ahead).toBe(0);
+    expect(estimatedPeriodOn(REGULAR(), "2026-10-19").ahead).toBe(2);
+  });
+
+  it("projects forward only, never back over months the user lived", () => {
+    expect(estimatedPeriodOn(REGULAR(), "2026-08-23").inWindow).toBe(false);
+    expect(estimatedPeriodOn(REGULAR(), "2026-01-01").inWindow).toBe(false);
+  });
+
+  it("says nothing at all without enough history to project from", () => {
+    expect(estimatedPeriodOn(blankCycle(), "2026-09-21").inWindow).toBe(false);
+    expect(estimatedPeriodOn(cycleWith("2026-08-16"), "2026-09-21").inWindow).toBe(false);
+  });
+
+  it("never marks a logged day as an estimate, however far ahead", () => {
+    const cycle = cycleWith(
+      ["2026-06-01", "2026-06-04"],
+      ["2026-06-29", "2026-07-02"],
+      ["2026-07-27", "2026-07-30"],
+      ["2026-08-24", "2026-08-27"],
+    );
+
+    // The 24th is now logged, so it is a record rather than a projection.
+    expect(markFor(cycle, "2026-08-24", "2026-08-30")).toMatchObject({
+      period: true,
+      estimated: false,
+    });
   });
 });

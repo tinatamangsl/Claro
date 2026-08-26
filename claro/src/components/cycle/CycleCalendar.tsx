@@ -8,6 +8,7 @@ import {
   describeRefusal,
   durationOf,
   endPeriod,
+  estimateNext,
   isOngoing,
   ongoingPeriod,
   periodEntryOn,
@@ -18,7 +19,13 @@ import { estimatedWindow, markFor } from "@/lib/cycle-calendar";
 import { PHASE_META, projectedDay } from "@/lib/cycle-phases";
 import { PhaseLegend } from "@/components/cycle/PhaseLegend";
 import { DayPhaseGuidance } from "@/components/cycle/DayPhaseGuidance";
-import { formatDayDate, formatDayLong, formatDayOfMonth, formatDayShort } from "@/lib/dates";
+import {
+  formatDayDate,
+  formatDayLong,
+  formatDayOfMonth,
+  formatDayShort,
+  shiftDayId,
+} from "@/lib/dates";
 import { newId } from "@/lib/id";
 import { cn } from "@/lib/utils";
 import { FLOWS, FLOW_META, type CycleCheckIn, type CycleEntry, type CycleState, type ISODate } from "@/lib/types";
@@ -209,6 +216,7 @@ export function CycleCalendar({
               aria-current={cell.dayId === todayId ? "date" : undefined}
               aria-label={[
                 formatDayLong(cell.dayId),
+                cell.dayId === todayId ? "today" : null,
                 phase ? `estimated day ${phase.day}, ${PHASE_META[phase.phase].label.toLowerCase()}` : null,
                 mark.period
                   ? mark.ongoing
@@ -226,7 +234,9 @@ export function CycleCalendar({
                 // The wash sits behind everything the user actually logged.
                 cell.inMonth && phase && `phase-${phase.phase}`,
                 cell.inMonth && phase?.projected && "phase-projected",
-                cell.dayId === todayId && "font-medium",
+                // A ring, not bold type: with a phase wash behind every cell,
+                // weight alone was invisible and today was unfindable.
+                cell.dayId === todayId && "font-semibold ring-2 ring-foreground/70",
                 inDrag(cell.dayId) && "bg-primary/20",
                 isSelected && !drag && "ring-2 ring-ring ring-offset-1 ring-offset-card",
               )}
@@ -244,13 +254,17 @@ export function CycleCalendar({
               )}
 
               {/* Estimated: pencilled, never filled. */}
-              {mark.estimated && !mark.period && window && (
+              {mark.estimated && !mark.period && (
                 <span
                   aria-hidden
                   className={cn(
                     "cycle-estimate",
-                    cell.dayId === window.from && "cycle-estimate-start",
-                    cell.dayId === window.to && "cycle-estimate-end",
+                    mark.estimatedStart && "cycle-estimate-start",
+                    markFor(cycle, shiftDayId(cell.dayId, 1), todayId).estimated
+                      ? undefined
+                      : "cycle-estimate-end",
+                    // Further out rests on the same few dates as the first.
+                    mark.estimatedAhead > 0 && "cycle-estimate-far",
                   )}
                 />
               )}
@@ -270,7 +284,7 @@ export function CycleCalendar({
         })}
       </div>
 
-      <Key window={window} />
+      <Key window={window} gap={estimateNext(cycle)?.typicalGap ?? 0} />
       <PhaseLegend className="mt-3" />
 
       {selected && (
@@ -295,16 +309,15 @@ export function CycleCalendar({
       )}
 
       {!selected && (
-        <p className="mt-3 text-[0.82rem] leading-relaxed text-muted-foreground">
-          Tap a day to open it, or press and drag across several days to log a whole period at
-          once.
+        <p className="mt-3 text-[0.82rem] text-muted-foreground">
+          Tap a day, or drag across several to log a whole period.
         </p>
       )}
     </div>
   );
 }
 
-function Key({ window }: { window: { from: ISODate; to: ISODate } | null }) {
+function Key({ window, gap }: { window: { from: ISODate; to: ISODate } | null; gap: number }) {
   return (
     <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/70 pt-3 text-[11px] text-muted-foreground">
       <span className="flex items-center gap-1.5">
@@ -313,13 +326,24 @@ function Key({ window }: { window: { from: ISODate; to: ISODate } | null }) {
       </span>
       <span className="flex items-center gap-1.5">
         <span aria-hidden className="cycle-key-estimate h-2.5 w-5 rounded" />
-        Estimated next period
+        Estimated periods
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span
+          aria-hidden
+          className="grid h-4 w-4 place-items-center rounded ring-2 ring-foreground/70 text-[8px] font-semibold"
+        >
+          1
+        </span>
+        Today
       </span>
       {window && (
         <span className="tnum">
+          Next{" "}
           {window.from === window.to
-            ? `Estimated around ${formatDayShort(window.from)}`
-            : `Estimated ${formatDayShort(window.from)} to ${formatDayShort(window.to)}`}
+            ? formatDayShort(window.from)
+            : `${formatDayShort(window.from)} to ${formatDayShort(window.to)}`}
+          , then every {gap} days
         </span>
       )}
     </div>

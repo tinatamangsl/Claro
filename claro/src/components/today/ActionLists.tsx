@@ -6,6 +6,7 @@ import { useSortable } from "@/hooks/use-sortable";
 import { newId } from "@/lib/id";
 import { removeById, toggleById, updateById } from "@/lib/mutations";
 import { BUCKETS, BUCKET_META, type ActionItem, type Bucket } from "@/lib/types";
+import { Picker } from "@/components/Picker";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -22,7 +23,7 @@ type Props = {
  * without either list owning the data.
  *
  * One `useSortable` covers all three lanes, so a drag that starts in Tasks can
- * finish in Projects. The bucket `<select>` on each row stays as the non-drag
+ * finish in Projects. The bucket picker on each row stays as the non-drag
  * fallback, and the grip's arrow keys move between lanes too.
  */
 export function ActionLists({ actions, onChange, className, columns }: Props) {
@@ -153,17 +154,15 @@ function BucketSwitcher({
   itemLabel: string;
 }) {
   return (
-    <select
-      aria-label={`Move "${itemLabel}" to another list`}
+    <Picker
       value={value}
-      onChange={(e) => onChange(e.target.value as Bucket)}
-      className="field-select w-0 shrink-0 overflow-hidden p-0 opacity-0 transition-opacity focus-visible:w-auto focus-visible:p-[0.125rem_0.375rem] focus-visible:opacity-100 group-hover:w-auto group-hover:p-[0.125rem_0.375rem] group-hover:opacity-100"
-    >
-      {BUCKETS.map((b) => (
-        <option key={b} value={b}>
-          {BUCKET_META[b].short}
-        </option>
-      ))}
-    </select>
+      onChange={(bucket) => onChange(bucket as Bucket)}
+      label={`Move "${itemLabel}" to another list`}
+      placeholder={BUCKET_META[value].short}
+      align="right"
+      className="w-0 shrink-0 overflow-hidden opacity-0 transition-opacity focus-within:w-auto focus-within:overflow-visible focus-within:opacity-100 group-hover:w-auto group-hover:overflow-visible group-hover:opacity-100"
+      triggerClassName="goal-trigger whitespace-nowrap"
+      options={BUCKETS.map((b) => ({ value: b, label: BUCKET_META[b].short }))}
+    />
   );
 }
