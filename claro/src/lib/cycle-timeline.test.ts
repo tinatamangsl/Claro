@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   MIN_NOTES_FOR_PATTERN,
   MIN_NOTES_IN_PHASE,
+  NOTICED_EXCERPT,
+  describeNoteWarmly,
+  noticedExcerpt,
   notesInPhase,
   observations,
   positionOn,
@@ -246,5 +249,65 @@ describe("looking up your own notes from this point before", () => {
     const cycle = withNotes(REGULAR(), note("2026-06-02"));
 
     expect(notesInPhase(cycle, "2026-07-28")).toEqual([]);
+  });
+});
+
+describe("a note read back as language", () => {
+  const note = (patch: Partial<CycleCheckIn>): CycleCheckIn => ({
+    dayId: "2026-08-26",
+    energy: null,
+    mood: null,
+    stress: null,
+    feeling: null,
+    flow: null,
+    note: "",
+    evening: null,
+    noticed: "",
+    updatedAt: "x",
+  ...patch,
+  });
+
+  it("leads with energy and says the mood as a feeling", () => {
+    expect(describeNoteWarmly(note({ energy: 4, mood: "steady" }))).toBe(
+      "Good energy, felt steady",
+    );
+  });
+
+  it("says energy alone when that is all there was", () => {
+    expect(describeNoteWarmly(note({ energy: 3 }))).toBe("Middling energy");
+  });
+
+  it("mentions stress only when it was high", () => {
+    // The middle of a five point scale on every row buries the two readings
+    // that were actually worth a mention.
+    expect(describeNoteWarmly(note({ energy: 4, stress: 3 }))).toBe("Good energy");
+    expect(describeNoteWarmly(note({ energy: 4, stress: 4 }))).toContain("stress");
+    expect(describeNoteWarmly(note({ energy: 4, stress: 5 }))).toContain("stress");
+  });
+
+  it("infers nothing for a blank", () => {
+    expect(describeNoteWarmly(note({}))).toBe("");
+    expect(describeNoteWarmly(note({ mood: "bright" }))).toBe("felt bright");
+  });
+
+  it("leaves a short note exactly as it was written", () => {
+    expect(noticedExcerpt("slept badly, back ache")).toBe("slept badly, back ache");
+  });
+
+  it("cuts a long note on a word, not mid-word", () => {
+    const long = "woke up early and felt surprisingly clear headed all morning";
+    const cut = noticedExcerpt(long);
+
+    expect(cut.endsWith("...")).toBe(true);
+    expect(cut.length).toBeLessThanOrEqual(NOTICED_EXCERPT + 3);
+    // The last word is whole, rather than sliced through the middle.
+    expect(long.startsWith(cut.slice(0, -3))).toBe(true);
+    expect(cut.slice(0, -3).endsWith(" ")).toBe(false);
+  });
+
+  it("does not add an ellipsis to save a single character", () => {
+    const exact = "a".repeat(NOTICED_EXCERPT);
+    expect(noticedExcerpt(exact)).toBe(exact);
+    expect(noticedExcerpt(exact).endsWith("...")).toBe(false);
   });
 });

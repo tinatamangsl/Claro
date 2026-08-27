@@ -4,10 +4,13 @@ import {
   DRIFTED_NOTE,
   DRIFTED_QUESTIONS,
   PHASE_QUESTIONS,
+  acknowledge,
   answerToday,
   hasDrifted,
 } from "@/lib/cycle-guidance";
-import { PHASE_ESTIMATE_NOTE, PHASE_META } from "@/lib/cycle-phases";
+import { PHASE_META } from "@/lib/cycle-phases";
+import { bandOf } from "@/lib/cycle-log";
+import { checkInOn } from "@/lib/cycle";
 import { notesInPhase, positionOn, summariseNote } from "@/lib/cycle-timeline";
 import { formatDayShort } from "@/lib/dates";
 import type { CycleState, ISODate, MatchAnswer } from "@/lib/types";
@@ -59,6 +62,7 @@ export function PhaseInsight({
   const drifted = hasDrifted(cycle.guidanceMatches, "phase", position.phase);
   const answer = answerToday(cycle.guidanceMatches, "phase", todayId);
   const recent = notesInPhase(cycle, todayId, 3).filter((note) => summariseNote(note) !== "");
+  const said = acknowledge(position.phase, bandOf(checkInOn(cycle, todayId).energy));
 
   return (
     <section className="surface-raised p-5 sm:p-6">
@@ -81,6 +85,15 @@ export function PhaseInsight({
       <p className="display mt-3 text-[1.3rem] italic leading-relaxed sm:text-[1.45rem]">
         {drifted ? DRIFTED_QUESTIONS[position.phase] : PHASE_QUESTIONS[position.phase]}
       </p>
+
+      {/*
+        Only once they have said something. With no reading there is nothing to
+        acknowledge, and filling the gap would mean asserting something about
+        the phase on its own.
+      */}
+      {!drifted && said && (
+        <p className="mt-1.5 max-w-prose text-[0.88rem] text-muted-foreground">{said}</p>
+      )}
 
       {drifted ? (
         <p className="mt-2 max-w-prose text-[0.85rem] text-muted-foreground">{DRIFTED_NOTE}</p>
@@ -114,7 +127,15 @@ export function PhaseInsight({
         )}
       </div>
 
-      <p className="mt-3 text-[10px] text-muted-foreground">{PHASE_ESTIMATE_NOTE}</p>
+      {/*
+        One short line, not the full caveat. The whole statement is made once at
+        the foot of the page in `WhatClaroDoes`; three lines of it inside the
+        hero pushed the chips off a phone screen to repeat what is already said
+        there. The substance stays: this is an estimate, not a measurement.
+      */}
+      <p className="mt-3 text-[10px] text-muted-foreground">
+        Estimated from the dates you logged. Not a measurement.
+      </p>
 
       <MatchPrompt
         cardLabel="the phase card"

@@ -71,11 +71,42 @@ export const MATCH_PROMPT = "Does this match what you are feeling today?";
  * today?" is an invitation to notice, and the answer belongs to the reader.
  */
 export const PHASE_QUESTIONS: Record<CyclePhase, string> = {
-  menstrual: "How does your energy feel today?",
-  follicular: "What feels possible today?",
-  ovulation: "What would be good to say out loud today?",
-  luteal: "What would you like to finish today?",
+  menstrual: "How are you actually feeling right now?",
+  follicular: "What feels possible for you today?",
+  ovulation: "What is the most important thing on your mind today?",
+  luteal: "What does your body need most right now?",
 };
+
+/**
+ * One line under the question, once an energy has been logged.
+ *
+ * **It reads back what the person said, against what was assumed.** That is the
+ * only thing here Claro can actually know, and it happens to be the useful
+ * thing: somebody logging high energy on a day the estimate expected low is
+ * being told something real about the limits of the estimate, not about their
+ * body.
+ *
+ * The supplied copy for this slot included "this is your sharpest window", "peak
+ * clarity, say the thing" and "finish, don't start". Those are the claims about
+ * cognition and instructions about work that the whole of this module exists to
+ * avoid, and they arrived in the same brief that said no prescriptive language
+ * anywhere. The lines that compared logged energy against the phase default were
+ * already honest, and those are close to what survives here.
+ *
+ * Null when nothing has been logged: with no reading there is nothing to say,
+ * and filling the gap would mean asserting something about the phase alone.
+ */
+export function acknowledge(phase: CyclePhase, energy: EnergyBand | null): string | null {
+  if (energy === null) return null;
+
+  const expected = PHASE_DEFAULT_ENERGY[phase];
+  if (energy === expected) return "That is about what this part of your cycle usually looks like for you.";
+
+  const order: EnergyBand[] = ["low", "medium", "high"];
+  return order.indexOf(energy) > order.indexOf(expected)
+    ? "More than this part of your cycle usually brings. Worth noting."
+    : "Quieter than this part of your cycle usually is. That is useful information.";
+}
 
 /**
  * What the card asks once the suggestions have stopped landing.
@@ -283,6 +314,11 @@ export function allGuidanceCopy(): string[] {
     ...Object.values(DRIFTED_QUESTIONS),
     GUIDANCE_FRAMING,
     ...Object.values(CARD_META).map((m) => m.label),
+    ...(["menstrual", "follicular", "ovulation", "luteal"] as CyclePhase[]).flatMap((phase) =>
+      ([null, "low", "medium", "high"] as (EnergyBand | null)[])
+        .map((band) => acknowledge(phase, band))
+        .filter((line): line is string => line !== null),
+    ),
   ];
 
   for (const card of SUGGESTION_CARDS) {

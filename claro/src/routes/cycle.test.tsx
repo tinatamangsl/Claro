@@ -89,6 +89,8 @@ describe("the screen once it is on", () => {
     expect(headings).toEqual([
       "Cycle notes",
       "Today",
+      // The one reading everything keys off, before everything it keys.
+      "Energy today",
       // No guidance section here: with no logged start there is no phase, and
       // a card of suggestions for a phase nobody is in would be invention.
       "How are you feeling today?",

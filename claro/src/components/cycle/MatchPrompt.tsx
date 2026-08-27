@@ -26,7 +26,9 @@ export function MatchPrompt({
   className?: string;
 }) {
   return (
-    <div className={cn("mt-3 border-t border-border/60 pt-2.5", className)}>
+    /* Set apart from the suggestions above it: a different kind of thing, and
+       it ran together with the last bullet at the old spacing. */
+    <div className={cn("mt-4 border-t border-border/60 pt-3", className)}>
       <p className="text-[10px] text-muted-foreground">{MATCH_PROMPT}</p>
 
       <div

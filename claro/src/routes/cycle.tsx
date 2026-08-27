@@ -2,6 +2,8 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { ArrowLeft, BookOpen, CalendarDays, ChevronDown, Lock, NotebookPen, Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import { useIsWide } from "@/hooks/use-is-wide";
+
 import { AppShell } from "@/components/AppShell";
 import { useClaro } from "@/lib/claro-store";
 import { EditableText } from "@/components/EditableText";
@@ -9,6 +11,8 @@ import { CycleCalendar } from "@/components/cycle/CycleCalendar";
 import { CycleGlance } from "@/components/cycle/CycleGlance";
 import { GuidanceCards } from "@/components/cycle/GuidanceCards";
 import { PhaseInsight } from "@/components/cycle/PhaseInsight";
+import { FloatingLog } from "@/components/cycle/FloatingLog";
+import { QuickEnergy } from "@/components/cycle/QuickEnergy";
 import { CycleNumbers } from "@/components/cycle/CycleNumbers";
 import { PeriodHistory } from "@/components/cycle/PeriodHistory";
 import { LoggedMeaning } from "@/components/cycle/LoggedMeaning";
@@ -27,7 +31,7 @@ import {
   recentCheckIns,
   type LogResult,
 } from "@/lib/cycle";
-import { observations } from "@/lib/cycle-timeline";
+import { describeNoteWarmly, noticedExcerpt, observations } from "@/lib/cycle-timeline";
 import { SUPPORTIVE_PROMPTS, SUPPORT_NOTE } from "@/lib/cycle-guide";
 import { formatDayShort } from "@/lib/dates";
 import { newId } from "@/lib/id";
@@ -76,6 +80,9 @@ export const Route = createFileRoute("/cycle")({
 export function CycleNotes() {
   const [scale, setScale] = useState<"month" | "year">("month");
   const [tab, setTab] = useState<CycleTab>("numbers");
+  const wide = useIsWide();
+  const [calendarOpen, setCalendarOpen] = useState(wide);
+  const [recordsOpen, setRecordsOpen] = useState(wide);
   /** The period just recorded, so the page can explain it once. */
   const [justLogged, setJustLogged] = useState<string | null>(null);
   const {
@@ -133,6 +140,22 @@ export function CycleNotes() {
         }
       />
 
+      {/*
+        The one reading everything below keys off, before everything below.
+        It writes the same field the full form writes, so the quick row and the
+        form can never hold two different answers about today.
+      */}
+      <QuickEnergy
+        cycle={cycle}
+        todayId={today}
+        onWrite={(energy) => writeCycleCheckIn(today, { energy }, new Date())}
+        onOpenLog={() => {
+          document
+            .getElementById("todays-log")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
+      />
+
       <GuidanceCards
         cycle={cycle}
         todayId={today}
@@ -141,7 +164,33 @@ export function CycleNotes() {
         }
       />
 
-      <section>
+      {/*
+        The deeper, user-led material is good and nobody was finding it: it sat
+        behind a tab, inside a section, below the calendar. This surfaces it for
+        the people who want it without putting it in front of the people who do
+        not.
+      */}
+      <div className="-mt-6">
+        <button
+          type="button"
+          onClick={() => {
+            setTab("phases");
+            setRecordsOpen(true);
+            // After the section has been told to open, or it scrolls to a
+            // summary that is still collapsed and the content lands off screen.
+            requestAnimationFrame(() => {
+              document
+                .getElementById("cycle-records")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+          }}
+          className="text-[0.85rem] text-primary underline-offset-2 hover:underline"
+        >
+          Explore this phase in depth
+        </button>
+      </div>
+
+      <section id="todays-log" className="scroll-mt-24">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
           <h2 className="eyebrow">How are you feeling today?</h2>
           <span className="text-[11px] text-muted-foreground">private to you</span>
@@ -158,14 +207,13 @@ export function CycleNotes() {
 
       <CycleGlance cycle={cycle} todayId={today} />
 
-      <section>
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-          <div className="flex items-baseline gap-2.5">
-            <h2 className="eyebrow">Your cycle calendar</h2>
-            <span className="text-[11px] text-muted-foreground">
-              {scale === "month" ? "tap or drag any day" : "tap a month to open it"}
-            </span>
-          </div>
+      <LongSection
+        summary="Your cycle calendar"
+        hint={scale === "month" ? "tap or drag any day" : "tap a month to open it"}
+        open={calendarOpen}
+        onToggle={setCalendarOpen}
+      >
+        <div className="flex justify-end">
           <ScaleToggle scale={scale} onChange={setScale} />
         </div>
 
@@ -184,7 +232,7 @@ export function CycleNotes() {
             <YearCalendar cycle={cycle} todayId={today} onOpenMonth={() => setScale("month")} />
           )}
         </div>
-      </section>
+      </LongSection>
 
       {/* Then the action, and the three ways on. */}
       <LogPeriod
@@ -218,12 +266,13 @@ export function CycleNotes() {
         index nobody could hold in their head; separately each is one screen and
         the glance and the log stay above them, always.
       */}
-      <section>
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-          <h2 className="eyebrow">{TAB_META[tab].heading}</h2>
-          <span className="text-[11px] text-muted-foreground">{TAB_META[tab].hint}</span>
-        </div>
-
+      <LongSection
+        id="cycle-records"
+        summary={TAB_META[tab].heading}
+        hint={TAB_META[tab].hint}
+        open={recordsOpen}
+        onToggle={setRecordsOpen}
+      >
         <div
           role="tablist"
           aria-label="Your cycle records"
@@ -269,7 +318,7 @@ export function CycleNotes() {
             />
           )}
         </div>
-      </section>
+      </LongSection>
 
       {/* 6. A quiet way through to the guidance, never in place of the actions. */}
       <section className="border-t border-border/70 pt-6">
@@ -283,6 +332,20 @@ export function CycleNotes() {
       </section>
 
       <WhatClaroDoes />
+
+      <FloatingLog
+        targetId="todays-log"
+        logged={checkInOn(cycle, today).energy !== null}
+        onOpen={() => {
+          const target = document.getElementById("todays-log");
+          target?.scrollIntoView({ behavior: "smooth", block: "start" });
+          // Focus the first energy control, so the tap that brought them here
+          // leaves them able to answer rather than merely looking at it.
+          target
+            ?.querySelector<HTMLButtonElement>('[role="group"] button')
+            ?.focus({ preventScroll: true });
+        }}
+      />
 
       <DeleteAll
         enabled={hasAnyCycleData(cycle)}
@@ -497,9 +560,27 @@ function CheckIn({
   recent: ReturnType<typeof recentCheckIns>;
   onWrite: (patch: Partial<ReturnType<typeof checkInOn>>) => void;
 }) {
+  /*
+   * One question at a time, revealed by answering the last one.
+   *
+   * All five fields at once is a form, and a form is a thing people abandon:
+   * energy, mood, stress, a note and "what I actually notice" on screen
+   * together read as work to be got through rather than three taps. Each step
+   * appears when the one before it is answered, and the optional writing only
+   * once the readings are done.
+   *
+   * A day already logged opens showing every step, because the reason to come
+   * back to it is to change one of them, and hiding four behind a fifth would
+   * make correcting stress mean re-answering energy.
+   */
+  const started = note.energy !== null;
+  const showMood = started;
+  const showStress = showMood && note.mood !== null;
+  const showWriting = showStress && note.stress !== null;
+
   return (
     <section>
-      {/* The heading lives on the disclosure that opens this. */}
+      {/* The heading lives on the section that holds this. */}
       <div className="surface space-y-4 p-4">
         <Scale
           legend="Energy"
@@ -509,6 +590,7 @@ function CheckIn({
           onSelect={(energy) => onWrite({ energy: energy as EnergyLevel | null })}
         />
 
+        {showMood && (
         <fieldset>
           <legend className="text-[0.85rem]">Mood</legend>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -537,15 +619,19 @@ function CheckIn({
             })}
           </div>
         </fieldset>
+        )}
 
-        <Scale
-          legend="Stress"
-          options={STRESS_LEVELS}
-          labels={STRESS_LABELS}
-          selected={note.stress}
-          onSelect={(stress) => onWrite({ stress: stress as StressLevel | null })}
-        />
+        {showStress && (
+          <Scale
+            legend="Stress"
+            options={STRESS_LEVELS}
+            labels={STRESS_LABELS}
+            selected={note.stress}
+            onSelect={(stress) => onWrite({ stress: stress as StressLevel | null })}
+          />
+        )}
 
+        {showWriting && (
         <label className="block">
           <span className="block text-[0.85rem]">Anything you want to remember</span>
           <div className="paper-panel ruled mt-2 px-3 pb-2">
@@ -560,6 +646,7 @@ function CheckIn({
             />
           </div>
         </label>
+        )}
 
         {/*
           Separate from the note above on purpose.
@@ -568,6 +655,7 @@ function CheckIn({
           what is actually true, and it is the field the guidance cards defer
           to when they stop fitting.
         */}
+        {showWriting && (
         <label className="block">
           <span className="block text-[0.85rem]">What I actually notice</span>
           <div className="paper-panel mt-2 px-3 pb-2">
@@ -582,6 +670,13 @@ function CheckIn({
             />
           </div>
         </label>
+        )}
+
+        {!started && (
+          <p className="text-[11px] text-muted-foreground">
+            Answer one and the next appears. Three taps on an ordinary day.
+          </p>
+        )}
 
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           These are your own notes for {formatDayShort(todayId)}. Claro does not read anything into
@@ -592,28 +687,57 @@ function CheckIn({
       {recent.length > 0 && (
         <div className="mt-4">
           <h3 className="eyebrow">Recent notes</h3>
+          {/*
+            Read back as language rather than as the record printed out.
+            "Energy good, Mood steady, Stress moderate" is the row of a table;
+            "Good energy, felt steady" is what somebody would actually say, and
+            a middling stress reading on every row buried the two that mattered.
+          */}
           <ul className="paper-panel mt-2 divide-y divide-subtle px-4">
             {recent.map((entry) => (
-              <li
-                key={entry.dayId}
-                className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-2 text-[0.85rem]"
-              >
-                <span className="tnum min-w-0 flex-1">{formatDayShort(entry.dayId)}</span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">
-                  {[
-                    entry.energy ? `Energy ${ENERGY_LABELS[entry.energy].toLowerCase()}` : null,
-                    entry.mood ? `Mood ${MOOD_FACE_META[entry.mood].label.toLowerCase()}` : null,
-                    entry.stress ? `Stress ${STRESS_LABELS[entry.stress].toLowerCase()}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(", ")}
-                </span>
-              </li>
+              <RecentNote key={entry.dayId} entry={entry} />
             ))}
           </ul>
         </div>
       )}
     </section>
+  );
+}
+
+/** One row of the recent list, which opens to the whole day when tapped. */
+function RecentNote({ entry }: { entry: ReturnType<typeof checkInOn> }) {
+  const [open, setOpen] = useState(false);
+  const summary = describeNoteWarmly(entry);
+  const noticed = entry.noticed.trim();
+  // Nothing to open when the row is already showing everything there is.
+  const expandable = noticed !== "" || entry.note.trim() !== "" || entry.stress !== null;
+
+  return (
+    <li className="py-2 text-[0.85rem]">
+      <button
+        type="button"
+        disabled={!expandable}
+        aria-expanded={expandable ? open : undefined}
+        onClick={() => setOpen((was) => !was)}
+        className="flex w-full flex-wrap items-baseline gap-x-4 gap-y-1 text-left disabled:cursor-default"
+      >
+        <span className="tnum shrink-0">{formatDayShort(entry.dayId)}</span>
+        <span className="min-w-0 flex-1 text-[0.82rem] text-muted-foreground">
+          {summary}
+          {noticed !== "" && (
+            <span className="italic"> {noticedExcerpt(noticed)}</span>
+          )}
+        </span>
+      </button>
+
+      {open && expandable && (
+        <div className="mt-1.5 space-y-1 pl-[3.5rem] text-[0.82rem] text-muted-foreground">
+          {entry.stress && <p>Stress {STRESS_LABELS[entry.stress].toLowerCase()}</p>}
+          {entry.note.trim() !== "" && <p>{entry.note}</p>}
+          {noticed !== "" && <p className="italic">{noticed}</p>}
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -665,6 +789,50 @@ function Scale<T extends number>({
  * reachable, findable by the browser's own in-page search, and it needs no
  * JavaScript to open.
  */
+/**
+ * A long section that opens itself when there is room.
+ *
+ * Collapsed on a phone and open above `md`. The cycle page reached 4,554px on a
+ * 390px screen, most of it the calendar and the records behind the tabs, which
+ * meant the log and the guidance were reachable only by scrolling past the two
+ * heaviest things on the page. Controlled rather than an `open` attribute, so
+ * "Explore this phase in depth" can open the records from elsewhere.
+ */
+function LongSection({
+  summary,
+  hint,
+  open,
+  onToggle,
+  id,
+  children,
+}: {
+  summary: string;
+  hint: string;
+  open: boolean;
+  onToggle: (open: boolean) => void;
+  id?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details
+      id={id}
+      open={open}
+      onToggle={(event) => onToggle((event.currentTarget as HTMLDetailsElement).open)}
+      className="group scroll-mt-24"
+    >
+      <summary className="flex cursor-pointer list-none items-baseline gap-2.5">
+        <h2 className="eyebrow">{summary}</h2>
+        <span className="text-[11px] text-muted-foreground">{hint}</span>
+        <ChevronDown
+          aria-hidden
+          className="ml-auto h-3.5 w-3.5 shrink-0 self-center text-muted-foreground transition-transform group-open:rotate-180"
+        />
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
+
 function Disclosure({
   summary,
   hint,

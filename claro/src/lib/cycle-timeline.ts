@@ -149,6 +149,53 @@ export function observations(cycle: CycleState): PatternObservation[] {
   return found;
 }
 
+/**
+ * A note read back the way a person would say it.
+ *
+ * `summariseNote` reads "Energy good, Mood steady, Stress moderate", which is
+ * the record printed out rather than the day described. This says "Good energy,
+ * felt steady" instead, and drops what carries no signal:
+ *
+ * - **Energy always leads**, because it is the reading everything else is
+ *   keyed to and the one most often the only thing logged.
+ * - **Mood only when it was logged.** Nothing is inferred for a blank.
+ * - **Stress only when it was high or very high.** Moderate and below on a
+ *   five point scale is the middle of the range, and printing it on every row
+ *   buries the two readings that were worth a mention.
+ *
+ * Still a description and not a reading: nothing here says what a day meant.
+ */
+export function describeNoteWarmly(note: CycleCheckIn): string {
+  const parts: string[] = [];
+
+  if (note.energy) parts.push(`${ENERGY_LABELS[note.energy]} energy`);
+  if (note.mood) parts.push(`felt ${MOOD_FACE_META[note.mood].label.toLowerCase()}`);
+  if (note.stress && note.stress >= 4) {
+    parts.push(`${STRESS_LABELS[note.stress].toLowerCase()} stress`);
+  }
+
+  return parts.join(", ");
+}
+
+/** How much of "what I actually notice" fits on a row before it is cut. */
+export const NOTICED_EXCERPT = 40;
+
+/**
+ * The reader's own words, shortened to a row.
+ *
+ * Cut on a word boundary rather than mid-syllable, and only when the text is
+ * genuinely longer than the limit: a 41 character note ending in an ellipsis
+ * to save one character reads as though something was withheld.
+ */
+export function noticedExcerpt(text: string, limit = NOTICED_EXCERPT): string {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  if (trimmed.length <= limit) return trimmed;
+
+  const cut = trimmed.slice(0, limit);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > limit * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd()}...`;
+}
+
 /** A one-line summary of a note, for the history list. */
 export function summariseNote(note: CycleCheckIn): string {
   return [

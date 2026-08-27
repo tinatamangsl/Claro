@@ -637,6 +637,40 @@ still passes.** Nothing was deleted to make room for this.
 - **`noticed` on `CycleCheckIn`** is the free field the drifted cards defer to. Separate from
   `note`, which answers Claro's questions; this one answers nothing.
 
+**The quick energy row comes before everything it keys.** Energy is the reading the guidance is
+keyed to, and the full log sat below three guidance cards, which made the most important control on
+the page the fourth thing on it. `QuickEnergy` puts five chips under the hero: one tap, and the
+cards below re-key immediately. It is not a second store, it writes the same `energy` on the same
+check-in the full form writes, so the two can never disagree about today.
+
+**The full log reveals one question at a time.** Energy, mood, stress and two writing fields on
+screen together is a form, and a form is a thing people abandon. Each step appears when the one
+before it is answered. A day already logged shows every step, because the reason to return to it is
+to change one of them and hiding four behind a fifth would make correcting stress mean re-answering
+energy.
+
+**`acknowledge` reads the logged energy back against the phase default**, and that comparison is
+the only thing in this area Claro actually knows. The supplied copy for the slot was "this is your
+sharpest window", "peak clarity, say the thing" and "finish, don't start": claims about cognition
+and instructions about work, in the same brief that said no prescriptive language anywhere. What
+survives is the half of that copy which was already honest, the lines comparing what somebody
+logged against what was assumed. Null when nothing is logged, because with no reading there is
+nothing to acknowledge.
+
+**The calendar and the records collapse below `md`.** The page reached 4,554px on a 390px screen,
+most of it those two, which put the log and the guidance behind the two heaviest things on the
+page. `useIsWide` is safe to read at first render *only because* `AppShell` gates content behind
+`ready`, so nothing calling it has ever rendered on the server; it reaches `matchMedia` optionally,
+because jsdom has none and a hook that throws in every page test is worse than one that answers
+"narrow". Mobile is now 3,311px. **It does not reach the 2,200px the brief asked for**, and cannot
+while the three guidance cards stay at the readability the same brief asked for: the guidance
+section alone is 848px of it.
+
+**`describeNoteWarmly` reads a note back as language**, not as the record printed out. "Energy
+good, Mood steady, Stress moderate" is a table row; "Good energy, felt steady" is what somebody
+would say. Stress appears only at 4 or 5, because the middle of a five point scale on every row
+buried the two readings worth a mention.
+
 The supplied palette (`#E8622A`, `#F3EFE7`) is close to Claro's but not it, so `.phase-badge`,
 `.guidance-card` and `.stat-chip` take the tokens instead. Hardcoding would leave the one page
 nobody can theme outside the system, with the dark block not following.

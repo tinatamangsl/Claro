@@ -104,9 +104,14 @@ function Card({
 
   return (
     <article className="guidance-card">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+      {/*
+        The context sits under the label rather than opposite it. Top right at
+        10px muted it was present and unread, which is the same as absent for
+        the one line saying which energy these three were drawn from.
+      */}
+      <div>
         <h3 className="eyebrow">{meta.label}</h3>
-        <span className="text-[10px] text-muted-foreground">
+        <span className="guidance-context">
           {drifted ? "asking, not suggesting" : context}
         </span>
       </div>
@@ -119,9 +124,9 @@ function Card({
           <p className="mt-1.5 text-[0.85rem] leading-relaxed">{DRIFTED_INVITATION}</p>
         </>
       ) : (
-        <ul className="mt-2 space-y-1.5">
+        <ul className="guidance-list mt-2.5">
           {lines.map((line) => (
-            <li key={line} className="flex gap-2 text-[0.82rem] leading-relaxed">
+            <li key={line} className="flex gap-2.5 text-[0.875rem] leading-relaxed">
               <span aria-hidden className="guidance-bullet" />
               <span className="min-w-0 flex-1">{line}</span>
             </li>
