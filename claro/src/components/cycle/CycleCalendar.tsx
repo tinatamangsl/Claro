@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 
 import { monthGrid, monthOfDay, formatMonthLong, shiftMonthId, type MonthId } from "@/lib/calendar";
 import {
@@ -8,14 +8,13 @@ import {
   describeRefusal,
   durationOf,
   endPeriod,
-  estimateNext,
   isOngoing,
   ongoingPeriod,
   periodEntryOn,
   reopenPeriod,
   type LogResult,
 } from "@/lib/cycle";
-import { estimatedWindow, markFor } from "@/lib/cycle-calendar";
+import { markFor } from "@/lib/cycle-calendar";
 import { PHASE_META, projectedDay } from "@/lib/cycle-phases";
 import { PhaseLegend } from "@/components/cycle/PhaseLegend";
 import { DayPhaseGuidance } from "@/components/cycle/DayPhaseGuidance";
@@ -42,6 +41,8 @@ type Props = {
   /** The day's private note, for recording how heavy it was. */
   noteOn: (dayId: ISODate) => CycleCheckIn;
   onWriteNote: (dayId: ISODate, patch: Partial<CycleCheckIn>) => void;
+  /** The month/year switch, rendered on this card rather than floating above it. */
+  trailing?: ReactNode;
 };
 
 /**
@@ -63,6 +64,7 @@ export function CycleCalendar({
   onLogged,
   noteOn,
   onWriteNote,
+  trailing,
 }: Props) {
   const [monthId, setMonthId] = useState<MonthId>(monthOfDay(todayId));
   const [selected, setSelected] = useState<ISODate | null>(null);
@@ -71,7 +73,6 @@ export function CycleCalendar({
   const [drag, setDrag] = useState<{ from: ISODate; to: ISODate } | null>(null);
   const dragging = useRef(false);
 
-  const window = estimatedWindow(cycle);
 
   const apply = (result: LogResult) => {
     if (!result.ok) {
@@ -138,8 +139,8 @@ export function CycleCalendar({
   // Bounded rather than full width: at 768px a seven column grid gives 100px
   // cells, which reads as a wall of boxes rather than a calendar.
   return (
-    <div className="surface mx-auto w-full max-w-[30rem] p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-3">
+    <div className="surface w-full p-4 sm:p-5">
+      <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={() => setMonthId(shiftMonthId(monthId, -1))}
@@ -148,7 +149,7 @@ export function CycleCalendar({
         >
           <ChevronLeft aria-hidden className="h-4 w-4" />
         </button>
-        <h3 className="display text-[1.25rem]">{formatMonthLong(monthId)}</h3>
+        <h3 className="flex-1 text-center display text-[1.25rem]">{formatMonthLong(monthId)}</h3>
         <button
           type="button"
           onClick={() => setMonthId(shiftMonthId(monthId, 1))}
@@ -157,14 +158,8 @@ export function CycleCalendar({
         >
           <ChevronRight aria-hidden className="h-4 w-4" />
         </button>
+        {trailing}
       </div>
-
-      {/*
-        The key sits above the grid, not under it.
-        Below the dates it was off the bottom of a phone screen, so the one
-        thing that explains what the colours mean was the one thing nobody saw.
-      */}
-      <PhaseLegend className="mt-3" />
 
       {/*
         A period band reaches into the gutter to close the gap between cells, so
@@ -285,7 +280,19 @@ export function CycleCalendar({
         })}
       </div>
 
-      <Key window={window} gap={estimateNext(cycle)?.typicalGap ?? 0} />
+      {/*
+        The phase key sits under the grid, as the design has it. It used to sit
+        above, to keep it on a phone screen; below a grid that is now half the
+        layout it is visible either way, and above the dates it pushed the grid
+        itself down.
+
+        A second key went entirely. It named "logged by you", "estimated
+        periods" and "today", and repeated the next estimated window and the
+        typical gap. Today is the ringed cell and needs no legend entry, the
+        next window is already a chip on the today card beside this, and
+        tapping any day says in words what that day is.
+      */}
+      <PhaseLegend className="mt-3" />
 
       {selected && (
         <SelectedDay
@@ -310,45 +317,13 @@ export function CycleCalendar({
 
       {!selected && (
         <p className="mt-3 text-[0.82rem] text-muted-foreground">
-          Tap a day, or drag across several to log a whole period.
+          Tap a day, or drag across several, to log a period.
         </p>
       )}
     </div>
   );
 }
 
-function Key({ window, gap }: { window: { from: ISODate; to: ISODate } | null; gap: number }) {
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/70 pt-3 text-[11px] text-muted-foreground">
-      <span className="flex items-center gap-1.5">
-        <span aria-hidden className="cycle-key-period h-2.5 w-5 rounded-full" />
-        Logged by you
-      </span>
-      <span className="flex items-center gap-1.5">
-        <span aria-hidden className="cycle-key-estimate h-2.5 w-5 rounded" />
-        Estimated periods
-      </span>
-      <span className="flex items-center gap-1.5">
-        <span
-          aria-hidden
-          className="grid h-4 w-4 place-items-center rounded ring-2 ring-foreground/70 text-[8px] font-semibold"
-        >
-          1
-        </span>
-        Today
-      </span>
-      {window && (
-        <span className="tnum">
-          Next{" "}
-          {window.from === window.to
-            ? formatDayShort(window.from)
-            : `${formatDayShort(window.from)} to ${formatDayShort(window.to)}`}
-          , then every {gap} days
-        </span>
-      )}
-    </div>
-  );
-}
 
 /**
  * What this day is, and what may be done with it.

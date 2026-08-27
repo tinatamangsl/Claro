@@ -27,6 +27,7 @@ const note = (dayId: ISODate, patch: Partial<CycleCheckIn> = {}): CycleCheckIn =
   note: "",
   evening: null,
   noticed: "",
+  journal: "",
   updatedAt: "x",
   ...patch,
 });

@@ -13,13 +13,16 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * Today's energy, in one tap, at the top of the page.
+ * Today's energy, in one tap, inside the today card.
  *
- * The full log sits below the guidance cards, which made it the fourth thing on
- * the page and invisible on a phone. This is the one reading everything else
- * keys off, so it comes first and costs a single tap: the guidance cards below
- * re-key to it the moment it is set, which is the whole reason they are keyed
- * to energy rather than to the phase alone.
+ * This is the one reading everything else keys off, so it sits near the top and
+ * costs a single tap: the guidance cards below re-key to it the moment it is
+ * set, which is the whole reason they are keyed to energy rather than to the
+ * phase alone.
+ *
+ * It draws no card of its own. It used to, which made "today" two stacked
+ * surfaces saying two halves of the same thing, and two blocks where the design
+ * has one is exactly the clutter this page was reorganised to remove.
  *
  * It is not a second store. It writes the same `energy` on the same check-in
  * the full form writes, so the two can never disagree about today.
@@ -46,7 +49,7 @@ export function QuickEnergy({
 
   if (settled) {
     return (
-      <section className="surface flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border/60 pt-4">
         <p className="text-[0.88rem]">
           <span className="text-muted-foreground">Logged today</span>
           <span aria-hidden className="px-1.5 text-muted-foreground">·</span>
@@ -69,12 +72,12 @@ export function QuickEnergy({
             Full log
           </button>
         </div>
-      </section>
+      </div>
     );
   }
 
   return (
-    <section className="surface px-4 py-3">
+    <div className="mt-4 border-t border-border/60 pt-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="eyebrow">Energy today</h2>
         <button
@@ -115,7 +118,7 @@ export function QuickEnergy({
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }
 

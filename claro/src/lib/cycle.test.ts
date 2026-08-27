@@ -149,6 +149,7 @@ const withCheckIns = (
         note: "",
         evening: null,
       noticed: "",
+      journal: "",
         updatedAt: "x",
       },
     ]),
@@ -172,6 +173,7 @@ describe("private daily notes", () => {
       note: "",
       evening: null,
       noticed: "",
+      journal: "",
       updatedAt: "",
     });
     // Reading must not materialise a record, or "delete all" would lie.

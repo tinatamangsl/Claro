@@ -34,13 +34,51 @@ import type { GuidanceCard, GuidanceMatch, MatchAnswer } from "./types";
 /** The card that carries a suggestion list, as opposed to the phase card. */
 export type SuggestionCard = Extract<GuidanceCard, "eat" | "move" | "do">;
 
+/** The three cards backed by the suggestion matrices below. */
 export const SUGGESTION_CARDS: SuggestionCard[] = ["eat", "move", "do"];
 
-export const CARD_META: Record<SuggestionCard, { label: string }> = {
-  eat: { label: "Eat" },
-  move: { label: "Move" },
-  do: { label: "Do today" },
+/** The journal card asks a question and stores an answer; it has no matrix. */
+export type JournalCard = Extract<GuidanceCard, "journal">;
+
+/** Any card the guidance section draws, suggestion backed or not. */
+export type GuidanceCardName = SuggestionCard | JournalCard;
+
+/**
+ * The order the cards are drawn in.
+ *
+ * Work, movement, journal, food, which is the design's order. The keys are
+ * the older storage ones: `do` reads as Work Focus and `eat` as Food, because
+ * these strings are saved inside `guidanceMatches` and renaming them would
+ * throw away every answer somebody has already given.
+ */
+export const GUIDANCE_CARD_ORDER: GuidanceCardName[] = ["do", "move", "journal", "eat"];
+
+export const CARD_META: Record<GuidanceCardName, { label: string }> = {
+  do: { label: "Work Focus" },
+  move: { label: "Movement" },
+  journal: { label: "Journal Prompt" },
+  eat: { label: "Food" },
 };
+
+/**
+ * The question the journal card opens with, per phase.
+ *
+ * These are the one part of the supplied design that needed almost no
+ * changing: they were already questions the reader answers rather than
+ * readings handed to them, and they ask about work and attention rather than
+ * about a body. Nothing here is scored, summarised or read back by Claro.
+ */
+export const JOURNAL_PROMPTS: Record<CyclePhase, string> = {
+  menstrual:
+    "Are the things you are spending energy on still the things you meant to spend it on?",
+  follicular: "What would you like to start, and what is the smallest first step?",
+  ovulation:
+    "Where would you like to be more visible, and what have you been waiting for permission to do?",
+  luteal: "What are you ready to finish, and what are you carrying that is not yours to carry?",
+};
+
+/** Said under the journal field, because it is the only promise that matters there. */
+export const JOURNAL_PRIVACY = "Only you ever see this.";
 
 /**
  * The framing, said once over the three cards rather than on each of them.
@@ -70,6 +108,41 @@ export const MATCH_PROMPT = "Does this match what you are feeling today?";
  * claim about a person Claro has never met; "what does your energy feel like
  * today?" is an invitation to notice, and the answer belongs to the reader.
  */
+/**
+ * The line the today card leads with, one per estimated phase.
+ *
+ * The design this comes from calls these affirmations and puts them where the
+ * page used to ask a question. Three of its four are reworded here, and the
+ * reason is the same in each case: an affirmation that opens by telling
+ * somebody what they are feeling is a reading, and a calendar cannot take one.
+ *
+ * - **Menstrual is the design's, word for word.** It offers permission and a
+ *   reframe and claims nothing about a body, which is what the other three had
+ *   to be brought round to.
+ * - **Follicular** was "Your appetite for new things is real. Back yourself
+ *   while it's here." The encouragement survives; the assertion that the
+ *   appetite is there today does not, because some days it will not be and
+ *   being told it is, is the thing that makes a page like this feel wrong.
+ * - **Ovulation** was "You are unusually clear right now. Say the thing you've
+ *   been circling." The second sentence is good and is kept. The first grades
+ *   somebody's mind against their own average from four dates they typed.
+ * - **Luteal** was "Your brain is working harder than usual today. Protecting
+ *   your energy is the plan, not a compromise." The second sentence is the best
+ *   line in the set. The first is a physiological claim about an organ, and
+ *   `cycle-guidance.test.ts` has banned the phrase "your brain" since long
+ *   before this design existed, so it would not have shipped either way.
+ *
+ * They are deliberately about what somebody is allowed to do rather than about
+ * what is happening inside them. Nothing here needs to be true of a body to be
+ * true.
+ */
+export const PHASE_AFFIRMATIONS: Record<CyclePhase, string> = {
+  menstrual: "Rest is a decision you are allowed to make. Slower is not behind.",
+  follicular: "If there is an appetite for something new today, it is worth backing.",
+  ovulation: "If there is something you have been circling, today could be the day you say it.",
+  luteal: "Protecting your energy is a plan, not a compromise.",
+};
+
 export const PHASE_QUESTIONS: Record<CyclePhase, string> = {
   menstrual: "How are you actually feeling right now?",
   follicular: "What feels possible for you today?",
@@ -311,8 +384,11 @@ export function allGuidanceCopy(): string[] {
     DRIFTED_NOTE,
     DRIFTED_INVITATION,
     ...Object.values(PHASE_QUESTIONS),
+    ...Object.values(PHASE_AFFIRMATIONS),
     ...Object.values(DRIFTED_QUESTIONS),
     GUIDANCE_FRAMING,
+    JOURNAL_PRIVACY,
+    ...Object.values(JOURNAL_PROMPTS),
     ...Object.values(CARD_META).map((m) => m.label),
     ...(["menstrual", "follicular", "ovulation", "luteal"] as CyclePhase[]).flatMap((phase) =>
       ([null, "low", "medium", "high"] as (EnergyBand | null)[])

@@ -10,6 +10,7 @@ import {
   observations,
   positionOn,
   summariseNote,
+  whyThisForYou,
 } from "./cycle-timeline";
 import { CYCLE_PHASES, PHASE_META } from "./cycle-phases";
 import { blankCycle } from "./storage";
@@ -41,6 +42,7 @@ const note = (
   note: "",
   evening: null,
   noticed: "",
+  journal: "",
   updatedAt: "x",
   ...patch,
 });
@@ -263,6 +265,7 @@ describe("a note read back as language", () => {
     note: "",
     evening: null,
     noticed: "",
+    journal: "",
     updatedAt: "x",
   ...patch,
   });
@@ -309,5 +312,71 @@ describe("a note read back as language", () => {
     const exact = "a".repeat(NOTICED_EXCERPT);
     expect(noticedExcerpt(exact)).toBe(exact);
     expect(noticedExcerpt(exact).endsWith("...")).toBe(false);
+  });
+});
+
+describe("saying where a phase reading came from", () => {
+  /*
+   * Three menstrual-phase notes across past cycles. The starts are 28 days
+   * apart, so days 1 to 5 of each cycle land in the menstrual band, and notes
+   * from the current cycle are excluded on purpose: the point is to read back
+   * what somebody already lived through, not what they wrote this morning.
+   */
+  const menstrualNotes = (...notes: CycleCheckIn[]) => withNotes(REGULAR(), ...notes);
+
+  it("stays quiet until there is enough of the user's own history", () => {
+    expect(whyThisForYou(REGULAR(), "menstrual")).toBeNull();
+
+    const two = menstrualNotes(
+      note("2026-05-04", { energy: 1 }),
+      note("2026-06-01", { energy: 2 }),
+    );
+    // Two days is an anecdote. Reading a pattern into it would be the page
+    // inventing the personalisation it claims to have.
+    expect(whyThisForYou(two, "menstrual")).toBeNull();
+  });
+
+  it("counts the low energy days rather than judging them", () => {
+    const cycle = menstrualNotes(
+      note("2026-05-04", { energy: 1 }),
+      note("2026-06-01", { energy: 2 }),
+      note("2026-06-29", { energy: 4 }),
+    );
+
+    const said = whyThisForYou(cycle, "menstrual");
+
+    expect(said).toContain("From your own notes");
+    expect(said).toContain("you logged low energy on 2 of 3 days");
+    // No verdict on whether that is a lot, a little, or normal.
+    for (const verdict of ["normal", "typical", "should", "expected", "healthy"]) {
+      expect(said?.toLowerCase()).not.toContain(verdict);
+    }
+  });
+
+  it("says so plainly when no low energy was logged, rather than going silent", () => {
+    const cycle = menstrualNotes(
+      note("2026-05-04", { energy: 4 }),
+      note("2026-06-01", { energy: 5 }),
+      note("2026-06-29", { energy: 4 }),
+    );
+
+    expect(whyThisForYou(cycle, "menstrual")).toContain("none of the 3 days");
+  });
+
+  it("quotes the user's own word back, only when one word actually leads", () => {
+    const led = menstrualNotes(
+      note("2026-05-04", { energy: 2, feeling: "exhausted" }),
+      note("2026-06-01", { energy: 2, feeling: "exhausted" }),
+      note("2026-06-29", { energy: 4, feeling: "calm" }),
+    );
+    expect(whyThisForYou(led, "menstrual")).toContain('chose "exhausted" more often');
+
+    const tied = menstrualNotes(
+      note("2026-05-04", { energy: 2, feeling: "exhausted" }),
+      note("2026-06-01", { energy: 2, feeling: "calm" }),
+      note("2026-06-29", { energy: 4 }),
+    );
+    // A tie is not a favourite, so no word is put in their mouth.
+    expect(whyThisForYou(tied, "menstrual")).not.toContain("more often");
   });
 });

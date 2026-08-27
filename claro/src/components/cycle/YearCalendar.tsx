@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { markFor } from "@/lib/cycle-calendar";
 import { projectedDay } from "@/lib/cycle-phases";
@@ -13,6 +13,8 @@ type Props = {
   cycle: CycleState;
   todayId: ISODate;
   onOpenMonth: (monthId: string) => void;
+  /** The month/year switch, rendered on this card rather than floating above it. */
+  trailing?: ReactNode;
 };
 
 /**
@@ -23,12 +25,12 @@ type Props = {
  * survive being four pixels across, which is why one is solid and the other is
  * a ring rather than the same colour at two opacities.
  */
-export function YearCalendar({ cycle, todayId, onOpenMonth }: Props) {
+export function YearCalendar({ cycle, todayId, onOpenMonth, trailing }: Props) {
   const [year, setYear] = useState(() => Number(todayId.slice(0, 4)));
 
   return (
     <div className="surface p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={() => setYear((y) => y - 1)}
@@ -37,7 +39,7 @@ export function YearCalendar({ cycle, todayId, onOpenMonth }: Props) {
         >
           <ChevronLeft aria-hidden className="h-4 w-4" />
         </button>
-        <h3 className="display tnum text-[1.25rem]">{year}</h3>
+        <h3 className="flex-1 text-center display tnum text-[1.25rem]">{year}</h3>
         <button
           type="button"
           onClick={() => setYear((y) => y + 1)}
@@ -46,6 +48,7 @@ export function YearCalendar({ cycle, todayId, onOpenMonth }: Props) {
         >
           <ChevronRight aria-hidden className="h-4 w-4" />
         </button>
+        {trailing}
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3">

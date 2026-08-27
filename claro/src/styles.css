@@ -1256,7 +1256,14 @@
     display: block;
     margin-top: 0.15rem;
     font-size: 11px;
-    color: var(--primary);
+    /*
+      Muted, not amber. This says which phase and which energy a suggestion was
+      picked for, which is the sentence somebody reads to decide whether to open
+      the card at all, so it has to be legible. Amber on parchment is about
+      2.2:1, and --muted-foreground is the 4.7:1 token that exists precisely
+      because this project sets secondary text at 11px.
+    */
+    color: var(--muted-foreground);
   }
 
   .guidance-bullet {

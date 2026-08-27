@@ -1,10 +1,16 @@
+import { ChevronRight } from "lucide-react";
+import { useState } from "react";
+
 import {
   CARD_META,
   DRIFTED_INVITATION,
   DRIFTED_NOTE,
+  GUIDANCE_CARD_ORDER,
   GUIDANCE_FRAMING,
   GUIDANCE_NOTICE,
-  SUGGESTION_CARDS,
+  JOURNAL_PRIVACY,
+  JOURNAL_PROMPTS,
+  type GuidanceCardName,
   type SuggestionCard,
   answerToday,
   hasDrifted,
@@ -14,17 +20,26 @@ import { ENERGY_BAND_LABELS, bandOf, type EnergyBand } from "@/lib/cycle-log";
 import { PHASE_META, type CyclePhase } from "@/lib/cycle-phases";
 import { checkInOn } from "@/lib/cycle";
 import { positionOn } from "@/lib/cycle-timeline";
+import { useDebouncedField } from "@/hooks/use-debounced-field";
 import type { CycleState, ISODate, MatchAnswer } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { MatchPrompt } from "./MatchPrompt";
 
 /**
- * Eat, Move and Do today.
+ * Work Focus, Movement, Journal Prompt and Food, one row each.
  *
  * The reference apps put a plan here: eat these foods, do this workout, tackle
- * the hardest problem. Claro puts three things **some people find helpful**,
- * and says so in the heading of every card, because that is the strongest
- * claim four typed dates can support. Nothing here is addressed to the reader
- * in the imperative and nothing explains itself through a hormone.
+ * the hardest problem. Claro puts a few things **some people find helpful**,
+ * and says so once above the set, because that is the strongest claim four
+ * typed dates can support. Nothing is addressed to the reader in the
+ * imperative and nothing explains itself through a hormone.
+ *
+ * **They are collapsed, and that is the hierarchy fix.** Open, the three cards
+ * that used to live here were 848px of a 3,311px page: the guidance was the
+ * heaviest thing on screen while being the least urgent, which pushed the log
+ * and the calendar below it. Closed, the same four are a scannable list of
+ * what is on offer, and the reader opens the one they came for. The first is
+ * left open so the section still shows what a card contains.
  *
  * The lists move with the energy the reader logged today, and fall back to the
  * phase's default when they have not logged one. The card says which of the
@@ -39,11 +54,26 @@ export function GuidanceCards({
   cycle,
   todayId,
   onAnswer,
+  onJournal,
 }: {
   cycle: CycleState;
   todayId: ISODate;
   onAnswer: (card: SuggestionCard, phase: string, answer: MatchAnswer) => void;
+  onJournal: (text: string) => void;
 }) {
+  /*
+   * Which rows are open, by card key. Seeded with the first rather than
+   * empty: four closed rows and nothing else reads as a page that failed to
+   * load, and the point of collapsing was to rank the guidance, not hide it.
+   */
+  /*
+   * All four start closed, as the design has them. Opening the first was a
+   * hedge against the row of shut cards reading as empty, and it cost the thing
+   * the collapse was for: the section is four lines somebody can take in, and
+   * one card open pushed the rest of the page down by a screen on a phone.
+   */
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+
   const position = positionOn(cycle, todayId);
   if (!position) return null;
 
@@ -51,12 +81,10 @@ export function GuidanceCards({
 
   return (
     <section>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="eyebrow">{GUIDANCE_FRAMING}</h2>
-      </div>
+      <h2 className="eyebrow">{GUIDANCE_FRAMING}</h2>
 
-      <div className="mt-3 space-y-2.5">
-        {SUGGESTION_CARDS.map((card) => (
+      <div className="mt-3 space-y-2">
+        {GUIDANCE_CARD_ORDER.map((card) => (
           <Card
             key={card}
             card={card}
@@ -64,7 +92,12 @@ export function GuidanceCards({
             todayId={todayId}
             phase={position.phase}
             logged={logged}
-            onAnswer={(answer) => onAnswer(card, position.phase, answer)}
+            open={open[card] === true}
+            onToggle={() => setOpen((prev) => ({ ...prev, [card]: prev[card] !== true }))}
+            onAnswer={(answer) =>
+              card !== "journal" && onAnswer(card, position.phase, answer)
+            }
+            onJournal={onJournal}
           />
         ))}
       </div>
@@ -80,65 +113,162 @@ function Card({
   todayId,
   phase,
   logged,
+  open,
+  onToggle,
   onAnswer,
+  onJournal,
 }: {
-  card: SuggestionCard;
+  card: GuidanceCardName;
   cycle: CycleState;
   todayId: ISODate;
   phase: CyclePhase;
   logged: EnergyBand | null;
+  open: boolean;
+  onToggle: () => void;
   onAnswer: (answer: MatchAnswer) => void;
+  onJournal: (text: string) => void;
 }) {
   const meta = CARD_META[card];
-  const drifted = hasDrifted(cycle.guidanceMatches, card, phase);
+  const journal = card === "journal";
+  const drifted = !journal && hasDrifted(cycle.guidanceMatches, card, phase);
   const answer = answerToday(cycle.guidanceMatches, card, todayId);
-  const { lines, energy, fromDefault } = suggestionsFor(card, phase, logged);
+
   /*
-   * Which phase and which energy these three came from, said on the card.
-   * "Assuming" rather than a bare label when nothing was logged, so a default
-   * is never read back as something the person told Claro.
+   * The journal card has no suggestion matrix behind it, so it carries the
+   * phase alone. The other three name the energy their lines were drawn from,
+   * with "assuming" when nothing was logged, so a default is never read back
+   * as something the person told Claro.
    */
-  const context = `${PHASE_META[phase].label}, ${fromDefault ? "assuming " : ""}${ENERGY_BAND_LABELS[
-    energy
-  ].toLowerCase()} energy`;
+  let context = PHASE_META[phase].label;
+  let lines: string[] = [];
+  if (!journal) {
+    const picked = suggestionsFor(card, phase, logged);
+    lines = picked.lines;
+    context = `${PHASE_META[phase].label}, ${picked.fromDefault ? "assuming " : ""}${ENERGY_BAND_LABELS[
+      picked.energy
+    ].toLowerCase()} energy`;
+  }
+
+  const bodyId = `guidance-${card}`;
 
   return (
     <article className="guidance-card">
       {/*
-        The context sits under the label rather than opposite it. Top right at
-        10px muted it was present and unread, which is the same as absent for
-        the one line saying which energy these three were drawn from.
+        A real button rather than a <details>, because the caret, the label and
+        the context all have to sit on one row and a summary marker cannot be
+        placed. aria-expanded and aria-controls carry what the disclosure
+        triangle would have said.
       */}
-      <div>
-        <h3 className="eyebrow">{meta.label}</h3>
-        <span className="guidance-context">
-          {drifted ? "asking, not suggesting" : context}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={bodyId}
+        className="flex w-full items-center gap-3 text-left"
+      >
+        <ChevronRight
+          aria-hidden
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
+            open && "rotate-90",
+          )}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="eyebrow block">{meta.label}</span>
+          <span className="guidance-context">
+            {drifted ? "asking, not suggesting" : context}
+          </span>
         </span>
-      </div>
+      </button>
 
-      {drifted ? (
-        <>
-          <p className="mt-2 text-[0.85rem] leading-relaxed text-muted-foreground">
-            {DRIFTED_NOTE}
-          </p>
-          <p className="mt-1.5 text-[0.85rem] leading-relaxed">{DRIFTED_INVITATION}</p>
-        </>
-      ) : (
-        <ul className="guidance-list mt-2.5">
-          {lines.map((line) => (
-            <li key={line} className="flex gap-2.5 text-[0.875rem] leading-relaxed">
-              <span aria-hidden className="guidance-bullet" />
-              <span className="min-w-0 flex-1">{line}</span>
-            </li>
-          ))}
-        </ul>
+      {open && (
+        <div id={bodyId} className="mt-3">
+          {journal ? (
+            <Journal
+              cycle={cycle}
+              todayId={todayId}
+              phase={phase}
+              onJournal={onJournal}
+            />
+          ) : drifted ? (
+            <>
+              <p className="text-[0.85rem] leading-relaxed text-muted-foreground">
+                {DRIFTED_NOTE}
+              </p>
+              <p className="mt-1.5 text-[0.85rem] leading-relaxed">{DRIFTED_INVITATION}</p>
+            </>
+          ) : (
+            <ul className="guidance-list">
+              {lines.map((line) => (
+                <li key={line} className="flex gap-2.5 text-[0.875rem] leading-relaxed">
+                  <span aria-hidden className="guidance-bullet" />
+                  <span className="min-w-0 flex-1">{line}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {!journal && (
+            <MatchPrompt
+              cardLabel={`the ${meta.label.toLowerCase()} card`}
+              answer={answer}
+              onAnswer={onAnswer}
+            />
+          )}
+        </div>
       )}
-
-      <MatchPrompt
-        cardLabel={`the ${meta.label.toLowerCase()} card`}
-        answer={answer}
-        onAnswer={onAnswer}
-      />
     </article>
+  );
+}
+
+/**
+ * The journal prompt, and somewhere to answer it.
+ *
+ * No save button. The design drew one, and everywhere else in Claro a save
+ * button is the thing this project has already refused: it implies the words
+ * could be lost. This commits on the established debounce and on blur, like
+ * every other writing field in the app, and says the only thing worth saying
+ * underneath, which is who can read it.
+ *
+ * There is no `MatchPrompt` here either. "Does this match what you are feeling
+ * today?" is a question about a suggestion, and this card makes none.
+ */
+function Journal({
+  cycle,
+  todayId,
+  phase,
+  onJournal,
+}: {
+  cycle: CycleState;
+  todayId: ISODate;
+  phase: CyclePhase;
+  onJournal: (text: string) => void;
+}) {
+  const note = checkInOn(cycle, todayId);
+  const field = useDebouncedField(note.journal, onJournal);
+
+  return (
+    <div>
+      <p className="display text-[1.05rem] italic leading-relaxed">
+        {JOURNAL_PROMPTS[phase]}
+      </p>
+      <textarea
+        rows={4}
+        value={field.value}
+        onChange={(e) => field.onChange(e.target.value)}
+        onBlur={field.onBlur}
+        placeholder="Start wherever you like..."
+        aria-label="Your answer to today's journal prompt"
+        /*
+          Ruled, like Today's notes and the focus card. A transparent field on
+          a card is invisible until it is clicked, and four blank rows read as
+          dead space rather than as somewhere to write. The lines are the
+          project's own answer to that, and this is what they are for: a roomy
+          writing surface, not a form grid.
+        */
+        className="field-plain ruled ruled-text mt-3 w-full resize-y"
+      />
+      <p className="mt-1.5 text-[10px] text-muted-foreground">{JOURNAL_PRIVACY}</p>
+    </div>
   );
 }

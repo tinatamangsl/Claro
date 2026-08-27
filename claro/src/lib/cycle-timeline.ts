@@ -27,6 +27,7 @@ import {
 } from "./cycle-phases";
 import {
   ENERGY_LABELS,
+  FEELING_META,
   MOOD_FACE_META,
   STRESS_LABELS,
   type CycleCheckIn,
@@ -307,4 +308,42 @@ export function summarisePhase(cycle: CycleState, phase: CyclePhase): PhaseSumma
     commonFeeling: ranked.length > 0 && !tied ? ranked[0][0] : null,
     lowEnergy: notes.filter((note) => note.energy !== null && note.energy <= 2).length,
   };
+}
+
+// ------------------------------------------- why this card says what it says
+
+/**
+ * What the reader's own notes say about this phase, as one sentence.
+ *
+ * This is the whole content of the "why this, for you" reveal, and the
+ * boundary it holds is the reason it exists. The supplied design put a
+ * sentence there reading "built from your logs: energy low on days 1 to 3 in
+ * each of your last three cycles, and 'calm' on day 4", which is a statistic
+ * Claro had never computed and, on a new install, would be a fabrication
+ * dressed as a personal reading.
+ *
+ * So this counts, and says how many notes it counted. It reports what the
+ * person logged and stops: no verdict on the number, nothing about what the
+ * phase does to anybody, and nothing about what to do next. It returns null
+ * below `MIN_NOTES_IN_PHASE`, because two days is an anecdote and calling it a
+ * pattern is the failure this function is guarding against.
+ */
+export function whyThisForYou(cycle: CycleState, phase: CyclePhase): string | null {
+  const summary = summarisePhase(cycle, phase);
+  if (summary.notes < MIN_NOTES_IN_PHASE) return null;
+
+  const noted = `${summary.notes} ${summary.notes === 1 ? "day" : "days"} you have noted in this phase`;
+  const parts: string[] = [];
+
+  if (summary.lowEnergy > 0) {
+    parts.push(`you logged low energy on ${summary.lowEnergy} of ${noted}`);
+  } else {
+    parts.push(`none of the ${noted} recorded low energy`);
+  }
+
+  if (summary.commonFeeling) {
+    parts.push(`and chose "${FEELING_META[summary.commonFeeling].label.toLowerCase()}" more often than any other word`);
+  }
+
+  return `From your own notes: ${parts.join(", ")}.`;
 }

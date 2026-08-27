@@ -95,7 +95,8 @@ describe("the cycle calendar", () => {
     // not only the one after this.
     expect(container.querySelectorAll(".cycle-estimate").length).toBeGreaterThanOrEqual(4);
     expect(container.querySelectorAll(".cycle-band.cycle-estimate")).toHaveLength(0);
-    expect(screen.getByText(/Next 24 Aug to 27 Aug, then every 28 days/)).toBeTruthy();
+    // The next window in words is on the today card beside this grid, not
+    // repeated under it: see cycle.test.tsx.
   });
 
   it("draws later projections fainter than the next one", () => {
@@ -121,12 +122,22 @@ describe("the cycle calendar", () => {
     expect(today.getAttribute("aria-label")).toContain("today");
   });
 
-  it("names both treatments in a key beside the grid", () => {
-    setup(cycleWith(["2026-08-03", "2026-08-06"]));
+  it("keys the phase washes, and only those", () => {
+    const { container } = setup(cycleWith(["2026-08-03", "2026-08-06"]));
 
-    expect(screen.getByText("Logged by you")).toBeTruthy();
-    expect(screen.getByText("Estimated periods")).toBeTruthy();
-    expect(screen.getByText("Today")).toBeTruthy();
+    /*
+     * The colours are the one thing on this grid a reader cannot work out by
+     * looking, so they keep a key. A second key naming "logged by you",
+     * "estimated periods" and "today" went: today is the ringed cell, and
+     * tapping any day says in words what that day is, which the test below
+     * covers. Five lines of legend under a colour-coded calendar was most of
+     * why this page kept reading as cluttered.
+     */
+    for (const phase of ["Menstrual", "Follicular", "Ovulation", "Luteal"]) {
+      expect(screen.getByText(phase)).toBeTruthy();
+    }
+    expect(screen.getByText("Estimated. Fainter means further ahead.")).toBeTruthy();
+    expect(container.textContent).not.toContain("Logged by you");
   });
 
   it("says in the accessible name what a day is", () => {

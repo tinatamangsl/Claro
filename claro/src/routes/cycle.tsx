@@ -1,19 +1,17 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, BookOpen, CalendarDays, ChevronDown, Lock, NotebookPen, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, BookOpen, CalendarDays, ChevronDown, Lock, Trash2 } from "lucide-react";
+import { useCallback, useState } from "react";
 
-import { useIsWide } from "@/hooks/use-is-wide";
 
 import { AppShell } from "@/components/AppShell";
 import { useClaro } from "@/lib/claro-store";
 import { EditableText } from "@/components/EditableText";
 import { CycleCalendar } from "@/components/cycle/CycleCalendar";
-import { CycleGlance } from "@/components/cycle/CycleGlance";
 import { GuidanceCards } from "@/components/cycle/GuidanceCards";
 import { PhaseInsight } from "@/components/cycle/PhaseInsight";
 import { FloatingLog } from "@/components/cycle/FloatingLog";
-import { QuickEnergy } from "@/components/cycle/QuickEnergy";
 import { CycleNumbers } from "@/components/cycle/CycleNumbers";
+import { CycleLengthChart } from "@/components/cycle/CycleLengthChart";
 import { PeriodHistory } from "@/components/cycle/PeriodHistory";
 import { LoggedMeaning } from "@/components/cycle/LoggedMeaning";
 import { PhasePanel } from "@/components/cycle/PhasePanel";
@@ -50,19 +48,28 @@ import {
 } from "@/lib/types";
 
 /** The four record surfaces, behind one control instead of stacked five deep. */
-const CYCLE_TABS = ["numbers", "phases", "history"] as const;
+/*
+ * The four surfaces below the fold, in the design's own order and wording.
+ *
+ * `log` carries both halves of "your log": the daily check-in form and the
+ * logged periods, which used to be a separate History tab. They are the same
+ * question asked at two scales, and splitting them across two tabs was part of
+ * what made this page an index rather than a page.
+ */
+const CYCLE_TABS = ["phases", "log", "notes", "length"] as const;
 
 type CycleTab = (typeof CYCLE_TABS)[number];
 
 const TAB_META: Record<CycleTab, { label: string; heading: string; hint: string }> = {
-  numbers: { label: "Numbers", heading: "Your numbers", hint: "from your own dates" },
-  phases: { label: "Phases", heading: "Your cycle, part by part", hint: "what you logged" },
-  history: { label: "History", heading: "Your logged periods", hint: "edit any of them" },
+  phases: { label: "About this phase", heading: "Your cycle, part by part", hint: "what you logged" },
+  log: { label: "Your log", heading: "Your log", hint: "today, and every period" },
+  notes: { label: "Recent notes", heading: "Recent notes", hint: "in your own words" },
+  length: { label: "Cycle length", heading: "Your cycle length", hint: "from your own dates" },
 };
 
 export const Route = createFileRoute("/cycle")({
   component: () => (
-    <AppShell>
+    <AppShell wide>
       <CycleNotes />
     </AppShell>
   ),
@@ -72,17 +79,53 @@ export const Route = createFileRoute("/cycle")({
 /**
  * Cycle at a glance.
  *
- * The order on this page is the product decision. What Claro estimated comes
- * first but quietly, because it is arithmetic; the loudest thing is the action
- * that records what actually happened. Everything below is the user's own data
- * read back to them, and nothing on the page changes a plan.
+ * The order on this page is the product decision, and it has now been made
+ * twice in opposite directions. It used to be calendar first, then today
+ * first on the reasoning that the calendar is what the page is *made of*
+ * while what somebody opens it for is "what about today?". The current design
+ * puts the calendar back at the top and earns it a different way: the today
+ * strip beneath it is four lines rather than a screen, and the guidance under
+ * that is four collapsed rows rather than three open cards, so the grid can
+ * lead without burying the thing people came to do.
+ *
+ * Everything below is the user's own data read back to them, and nothing on
+ * the page changes a plan.
  */
 export function CycleNotes() {
   const [scale, setScale] = useState<"month" | "year">("month");
-  const [tab, setTab] = useState<CycleTab>("numbers");
-  const wide = useIsWide();
-  const [calendarOpen, setCalendarOpen] = useState(wide);
-  const [recordsOpen, setRecordsOpen] = useState(wide);
+  const [tab, setTab] = useState<CycleTab>("phases");
+  /*
+   * Closed at every width. It used to open on a wide screen, on the reasoning
+   * that there was room for it, and the result was that the one section the
+   * brief moved below the fold was the only thing on the page that arrived
+   * expanded: a nested tablist and a full phase panel under four cards that had
+   * just been collapsed to make room. Secondary means secondary on a desktop
+   * too. The summary line still says which tab it will open on, and the
+   * browser's own in-page search still reaches inside it.
+   */
+  const [recordsOpen, setRecordsOpen] = useState(false);
+  /**
+   * Take the reader to today's note.
+   *
+   * It now sits inside the Your log tab of a section that is folded on a
+   * phone, so a bare `scrollIntoView` would land them on a collapsed summary
+   * and look like a dead control. Open the section, select the tab, and scroll
+   * on the next frame once the content it is scrolling to actually exists.
+   */
+  const openLog = useCallback((focusFirst = false) => {
+    setTab("log");
+    setRecordsOpen(true);
+    requestAnimationFrame(() => {
+      const target = document.getElementById("todays-log");
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (focusFirst) {
+        target
+          ?.querySelector<HTMLButtonElement>('[role="group"] button')
+          ?.focus({ preventScroll: true });
+      }
+    });
+  }, []);
+
   /** The period just recorded, so the page can explain it once. */
   const [justLogged, setJustLogged] = useState<string | null>(null);
   const {
@@ -102,7 +145,7 @@ export function CycleNotes() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-10">
+    <div className="space-y-10">
       <header className="border-b border-border pb-5">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -122,102 +165,34 @@ export function CycleNotes() {
         */}
         <h1 className="sr-only">Cycle notes</h1>
       </header>
-
       {/*
-        The order, which is the product decision on this page.
+        The whole of "today" on one screen, side by side.
 
-        The calendar used to be first, on the reasoning that it is what the
-        page is for. It is what the page is *made of*; what somebody opens it
-        for is "what about today?". So today comes first, as a question rather
-        than a reading, then what some people find helpful, then the log, and
-        only then the grid the rest of it is drawn from.
+        This was a vertical stack: calendar, then today, then the cards, each
+        full width. The design it comes from puts the calendar in a left column
+        and today plus the four cards in a right one, and that is what makes it
+        read as simple rather than as a long page with less on it. Stacked, the
+        cards start below the fold however short the calendar gets; beside it,
+        the reader sees where they are and what is suggested in one look.
+
+        The ratio and the breakpoint are the design's: 1.35fr to 1fr, and one
+        column below 860px, which is wider than the usual tablet breakpoint
+        because two columns of this content stop working before the screen
+        stops being a tablet.
       */}
-      <PhaseInsight
-        cycle={cycle}
-        todayId={today}
-        onAnswer={(phase, answer) =>
-          writeGuidanceMatch("phase", phase, today, answer, new Date())
-        }
-      />
-
-      {/*
-        The one reading everything below keys off, before everything below.
-        It writes the same field the full form writes, so the quick row and the
-        form can never hold two different answers about today.
-      */}
-      <QuickEnergy
-        cycle={cycle}
-        todayId={today}
-        onWrite={(energy) => writeCycleCheckIn(today, { energy }, new Date())}
-        onOpenLog={() => {
-          document
-            .getElementById("todays-log")
-            ?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }}
-      />
-
-      <GuidanceCards
-        cycle={cycle}
-        todayId={today}
-        onAnswer={(card, phase, answer) =>
-          writeGuidanceMatch(card, phase, today, answer, new Date())
-        }
-      />
-
-      {/*
-        The deeper, user-led material is good and nobody was finding it: it sat
-        behind a tab, inside a section, below the calendar. This surfaces it for
-        the people who want it without putting it in front of the people who do
-        not.
-      */}
-      <div className="-mt-6">
-        <button
-          type="button"
-          onClick={() => {
-            setTab("phases");
-            setRecordsOpen(true);
-            // After the section has been told to open, or it scrolls to a
-            // summary that is still collapsed and the content lands off screen.
-            requestAnimationFrame(() => {
-              document
-                .getElementById("cycle-records")
-                ?.scrollIntoView({ behavior: "smooth", block: "start" });
-            });
-          }}
-          className="text-[0.85rem] text-primary underline-offset-2 hover:underline"
-        >
-          Explore this phase in depth
-        </button>
-      </div>
-
-      <section id="todays-log" className="scroll-mt-24">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-          <h2 className="eyebrow">How are you feeling today?</h2>
-          <span className="text-[11px] text-muted-foreground">private to you</span>
-        </div>
-        <div className="mt-3">
-          <CheckIn
-            todayId={today}
-            note={checkInOn(cycle, today)}
-            recent={recentCheckIns(cycle, 5)}
-            onWrite={(patch) => writeCycleCheckIn(today, patch, new Date())}
-          />
-        </div>
-      </section>
-
-      <CycleGlance cycle={cycle} todayId={today} />
-
-      <LongSection
-        summary="Your cycle calendar"
-        hint={scale === "month" ? "tap or drag any day" : "tap a month to open it"}
-        open={calendarOpen}
-        onToggle={setCalendarOpen}
-      >
-        <div className="flex justify-end">
-          <ScaleToggle scale={scale} onChange={setScale} />
-        </div>
-
-        <div className="mt-3">
+      <div className="grid items-start gap-7 min-[860px]:grid-cols-[1.35fr_1fr]">
+        {/*
+          The calendar is no longer behind a disclosure. It leads the page and
+          it is half the layout, so a control that folds it away was furniture
+          around the one thing this column is for.
+        */}
+        <section>
+          <h2 className="sr-only">Your cycle calendar</h2>
+          {/*
+            The switch rides on the card it switches. Floating above it, right
+            aligned to a column edge, it read as a stray chip belonging to the
+            page rather than a control belonging to the calendar.
+          */}
           {scale === "month" ? (
             <CycleCalendar
               cycle={cycle}
@@ -227,22 +202,55 @@ export function CycleNotes() {
               onLogged={setJustLogged}
               noteOn={(dayId) => checkInOn(cycle, dayId)}
               onWriteNote={(dayId, patch) => writeCycleCheckIn(dayId, patch, new Date())}
+              trailing={<ScaleToggle scale={scale} onChange={setScale} />}
             />
           ) : (
-            <YearCalendar cycle={cycle} todayId={today} onOpenMonth={() => setScale("month")} />
+            <YearCalendar
+              cycle={cycle}
+              todayId={today}
+              onOpenMonth={() => setScale("month")}
+              trailing={<ScaleToggle scale={scale} onChange={setScale} />}
+            />
           )}
+        </section>
+
+        <div className="space-y-3.5">
+          {/*
+            One card for today, not two. The energy row writes the same field
+            the full form writes, so the quick row and the form can never hold
+            two different answers about today.
+          */}
+          {/*
+            The energy row moved out with everything else the design's today
+            card has no slot for. Energy is still set in the log, and the cards
+            below still key to it; what it is not any more is a control on the
+            one card whose whole job is to say one thing.
+          */}
+          <PhaseInsight cycle={cycle} todayId={today} />
+
+          <GuidanceCards
+            cycle={cycle}
+            todayId={today}
+            onAnswer={(card, phase, answer) =>
+              writeGuidanceMatch(card, phase, today, answer, new Date())
+            }
+            onJournal={(journal) => writeCycleCheckIn(today, { journal }, new Date())}
+          />
         </div>
-      </LongSection>
+      </div>
 
-      {/* Then the action, and the three ways on. */}
-      <LogPeriod
-        cycle={cycle}
-        todayId={today}
-        onReplace={setCycleEntries}
-        onLogged={setJustLogged}
-      />
+      {/*
+        Nothing sits between the cards and the records.
 
-      <QuickActions />
+        A link reading "explore this phase in depth" used to, and so did the
+        period logging card and a grid of three tiles. All three were furniture
+        left over from the page this replaced: the section below announces
+        itself, the logging card is the logging table the brief moved below the
+        fold, and every tile duplicated something already on screen. "Log today"
+        was the energy row and the log tab, "Learn" was the guidance link at the
+        foot, and only "This week" went anywhere new, so it survives as one line
+        down there rather than as a third of a grid.
+      */}
 
       {/* What was just written down, and what it does and does not mean. */}
       {justLogged && (
@@ -264,7 +272,7 @@ export function CycleNotes() {
         Four surfaces behind one control rather than stacked.
         Together they ran to five screens on a phone, which made the page an
         index nobody could hold in their head; separately each is one screen and
-        the glance and the log stay above them, always.
+        the calendar, the strip and the log stay above them, always.
       */}
       <LongSection
         id="cycle-records"
@@ -276,7 +284,7 @@ export function CycleNotes() {
         <div
           role="tablist"
           aria-label="Your cycle records"
-          className="mt-2.5 grid grid-cols-3 gap-1 rounded-xl bg-muted p-1"
+          className="mt-2.5 grid grid-cols-2 gap-1 rounded-xl bg-muted p-1 sm:grid-cols-4"
         >
           {CYCLE_TABS.map((option) => (
             <button
@@ -298,10 +306,6 @@ export function CycleNotes() {
         </div>
 
         <div className="mt-3">
-          {tab === "numbers" && (
-            <CycleNumbers cycle={cycle} todayId={today} onSetLength={setCycleLength} />
-          )}
-
           {tab === "phases" && (
             <>
               <PhasePanel cycle={cycle} todayId={today} />
@@ -309,19 +313,68 @@ export function CycleNotes() {
             </>
           )}
 
-          {tab === "history" && (
-            <PeriodHistory
-              cycle={cycle}
-              todayId={today}
-              onReplace={setCycleEntries}
-              onDelete={deleteCycleEntry}
-            />
+          {/*
+            Both halves of "your log": today's note, and every period recorded.
+            `recent` is empty here because Recent notes is now its own tab, and
+            printing the same five rows under two labels is the duplication this
+            redesign exists to remove.
+          */}
+          {tab === "log" && (
+            <div className="space-y-8">
+              <LogPeriod
+                cycle={cycle}
+                todayId={today}
+                onReplace={setCycleEntries}
+                onLogged={setJustLogged}
+              />
+
+              <section id="todays-log" className="scroll-mt-24">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+                  <h2 className="eyebrow">How are you feeling today?</h2>
+                  <span className="text-[11px] text-muted-foreground">private to you</span>
+                </div>
+                <div className="mt-3">
+                  <CheckIn
+                    todayId={today}
+                    note={checkInOn(cycle, today)}
+                    recent={[]}
+                    onWrite={(patch) => writeCycleCheckIn(today, patch, new Date())}
+                  />
+                </div>
+              </section>
+              <PeriodHistory
+                cycle={cycle}
+                todayId={today}
+                onReplace={setCycleEntries}
+                onDelete={deleteCycleEntry}
+              />
+            </div>
+          )}
+
+          {tab === "notes" && <RecentNotes cycle={cycle} />}
+
+          {tab === "length" && (
+            <div className="space-y-8">
+              <CycleLengthChart cycle={cycle} />
+              <CycleNumbers cycle={cycle} todayId={today} onSetLength={setCycleLength} />
+            </div>
           )}
         </div>
       </LongSection>
 
-      {/* 6. A quiet way through to the guidance, never in place of the actions. */}
-      <section className="border-t border-border/70 pt-6">
+      {/*
+        The two places worth going that are not on this page, as two lines
+        rather than as a grid of tiles competing with the page's own content.
+      */}
+      <section className="flex flex-col gap-2.5 border-t border-border/70 pt-6">
+        <Link
+          to="/cycle-day"
+          search={{ view: "forecast" }}
+          className="inline-flex items-center gap-1.5 text-[0.88rem] text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+        >
+          <CalendarDays aria-hidden className="h-3.5 w-3.5" />
+          The week ahead, day by day
+        </Link>
         <Link
           to="/cycle-guide"
           className="inline-flex items-center gap-1.5 text-[0.88rem] text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
@@ -336,15 +389,7 @@ export function CycleNotes() {
       <FloatingLog
         targetId="todays-log"
         logged={checkInOn(cycle, today).energy !== null}
-        onOpen={() => {
-          const target = document.getElementById("todays-log");
-          target?.scrollIntoView({ behavior: "smooth", block: "start" });
-          // Focus the first energy control, so the tap that brought them here
-          // leaves them able to answer rather than merely looking at it.
-          target
-            ?.querySelector<HTMLButtonElement>('[role="group"] button')
-            ?.focus({ preventScroll: true });
-        }}
+        onOpen={() => openLog(true)}
       />
 
       <DeleteAll
@@ -546,7 +591,6 @@ function Patterns({ cycle }: { cycle: CycleState }) {
     </section>
   );
 }
-
 
 /** Neutral readings. No interpretation is offered, and none is stored. */
 function CheckIn({
@@ -863,30 +907,6 @@ function Disclosure({
  * Logging a day, logging a period and reading the guide are different jobs; a
  * page that hides two of them behind the third makes the user hunt.
  */
-function QuickActions() {
-  const items = [
-    { to: "/cycle-day" as const, icon: NotebookPen, label: "Log today", hint: "3 taps" },
-    { to: "/cycle-day" as const, icon: CalendarDays, label: "This week", hint: "7 days", search: { view: "forecast" as const } },
-    { to: "/cycle-guide" as const, icon: BookOpen, label: "Learn", hint: "with sources" },
-  ];
-
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      {items.map((item) => (
-        <Link
-          key={item.label}
-          to={item.to}
-          search={item.search}
-          className="surface flex flex-col items-center gap-1.5 rounded-xl p-3.5 transition-colors hover:border-foreground/25"
-        >
-          <item.icon aria-hidden className="h-4 w-4 text-muted-foreground" />
-          <span className="text-[0.85rem] font-medium">{item.label}</span>
-          <span className="text-[10px] text-muted-foreground">{item.hint}</span>
-        </Link>
-      ))}
-    </div>
-  );
-}
 
 function ScaleToggle({
   scale,
@@ -977,5 +997,60 @@ function DeleteAll({
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * What the reader wrote, most recent first.
+ *
+ * Only notes carrying words. A row reading "medium energy" and nothing else is
+ * already in the log above; this tab is for the sentences, which is why it
+ * shows the note, what they said they noticed, and the journal answer, and
+ * says nothing about any of them.
+ */
+function RecentNotes({ cycle }: { cycle: CycleState }) {
+  const written = recentCheckIns(cycle, 30).filter(
+    (entry) =>
+      entry.note.trim() !== "" || entry.noticed.trim() !== "" || entry.journal.trim() !== "",
+  );
+
+  if (written.length === 0) {
+    return (
+      <p className="text-[0.85rem] text-muted-foreground">
+        Nothing written down yet. Anything you type in today's log, or in a journal prompt,
+        appears here.
+      </p>
+    );
+  }
+
+  return (
+    <ul className="space-y-2.5">
+      {written.map((entry) => (
+        <li key={entry.dayId} className="paper-panel px-4 py-3">
+          <p className="text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
+            <span className="tnum">{formatDayShort(entry.dayId)}</span>
+            {describeNoteWarmly(entry) && (
+              <>
+                <span aria-hidden className="px-1.5">
+                  &middot;
+                </span>
+                {describeNoteWarmly(entry)}
+              </>
+            )}
+          </p>
+          {entry.note.trim() !== "" && (
+            <p className="mt-1.5 text-[0.88rem] leading-relaxed">{entry.note}</p>
+          )}
+          {entry.noticed.trim() !== "" && (
+            <p className="mt-1.5 text-[0.88rem] leading-relaxed text-muted-foreground">
+              Noticed: {entry.noticed}
+            </p>
+          )}
+          {entry.journal.trim() !== "" && (
+            <p className="display mt-1.5 text-[1rem] italic leading-relaxed">{entry.journal}</p>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

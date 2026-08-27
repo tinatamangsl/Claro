@@ -165,6 +165,7 @@ describe("marks for a run of days", () => {
           note: "",
           evening: null,
   noticed: "",
+  journal: "",
           updatedAt: "2026-08-14T20:00:00.000Z",
         },
       },

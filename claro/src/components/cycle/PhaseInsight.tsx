@@ -1,46 +1,59 @@
-import { estimatedWindow } from "@/lib/cycle-calendar";
+import { useState } from "react";
+
 import {
   DRIFTED_INVITATION,
   DRIFTED_NOTE,
   DRIFTED_QUESTIONS,
+  PHASE_AFFIRMATIONS,
   PHASE_QUESTIONS,
-  acknowledge,
-  answerToday,
   hasDrifted,
 } from "@/lib/cycle-guidance";
 import { PHASE_META } from "@/lib/cycle-phases";
-import { bandOf } from "@/lib/cycle-log";
-import { checkInOn } from "@/lib/cycle";
-import { notesInPhase, positionOn, summariseNote } from "@/lib/cycle-timeline";
-import { formatDayShort } from "@/lib/dates";
-import type { CycleState, ISODate, MatchAnswer } from "@/lib/types";
-import { MatchPrompt } from "./MatchPrompt";
+import { positionOn, whyThisForYou } from "@/lib/cycle-timeline";
+import type { CycleState, ISODate } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 /**
- * The first thing on the cycle page.
+ * Today, in as few lines as it can honestly take.
  *
  * It opens with a **question**, not a reading. The design this replaces led
- * with lines like "your brain is working harder than usual" and "energy is
- * building": sentences that sound supportive and are, underneath, claims about
- * a body Claro has never met, from four dates somebody typed. What Claro can
- * honestly put at the top of the page is the arithmetic (which day, which
- * estimated phase, when the next period is estimated) and an invitation to
- * notice, followed by what this person themselves wrote at this point before.
+ * with lines like "your brain is working harder than usual" and "peak clarity,
+ * say the thing": sentences that sound supportive and are, underneath, claims
+ * about a body and a mind Claro has never met, from four dates somebody typed.
+ * What Claro can honestly put at the top of the page is the arithmetic (which
+ * day, which estimated phase, when the next period is estimated) and an
+ * invitation to notice.
  *
- * When the reader has said more than once that this does not fit, the card
- * stops offering a frame at all and asks what they are noticing instead.
+ * **The strip carries no "mode" and no "strengths".** The supplied design
+ * labelled each phase Visionary, Instigator, Communicator or Editor and listed
+ * what the reader is good at while in it. That is a claim about what a phase
+ * makes someone, which is the one thing this feature's rules forbid outright,
+ * and no amount of hedging rescues a personality label.
+ *
+ * What the reader logged around this point before used to sit here too. It now
+ * lives in Recent notes below, because it is history rather than today and it
+ * was the single biggest thing between this card and the guidance under it.
+ *
+ * **It asks nothing back.** It used to carry "does this match what you are
+ * feeling today?", which made sense when it opened with a question and makes
+ * none now: an affirmation about what somebody is allowed to do is not a
+ * reading to be confirmed. The four suggestion cards still ask, and that is
+ * where the answers come from.
+ *
+ * The drift read stays even though nothing on this card can set it any more.
+ * If somebody has already told the page twice that its reading is the opposite
+ * of how they feel, handing them a confident line is precisely the wrong move,
+ * so those answers still turn the affirmation back into a question.
  */
 export function PhaseInsight({
   cycle,
   todayId,
-  onAnswer,
 }: {
   cycle: CycleState;
   todayId: ISODate;
-  onAnswer: (phase: string, answer: MatchAnswer) => void;
 }) {
+  const [showWhy, setShowWhy] = useState(false);
   const position = positionOn(cycle, todayId);
-  const window = estimatedWindow(cycle);
 
   // No logged start to count from means no phase, and inventing one would be
   // the single most misleading thing this page could do.
@@ -60,9 +73,7 @@ export function PhaseInsight({
   }
 
   const drifted = hasDrifted(cycle.guidanceMatches, "phase", position.phase);
-  const answer = answerToday(cycle.guidanceMatches, "phase", todayId);
-  const recent = notesInPhase(cycle, todayId, 3).filter((note) => summariseNote(note) !== "");
-  const said = acknowledge(position.phase, bandOf(checkInOn(cycle, todayId).energy));
+  const why = whyThisForYou(cycle, position.phase);
 
   return (
     <section className="surface-raised p-5 sm:p-6">
@@ -73,79 +84,71 @@ export function PhaseInsight({
       */}
       <h2 className="sr-only">Today</h2>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="phase-badge">
-          {PHASE_META[position.phase].label} phase, day {position.day}
-        </span>
-        {position.projected && (
-          <span className="text-[10px] text-muted-foreground">projected</span>
-        )}
-      </div>
-
-      <p className="display mt-3 text-[1.3rem] italic leading-relaxed sm:text-[1.45rem]">
-        {drifted ? DRIFTED_QUESTIONS[position.phase] : PHASE_QUESTIONS[position.phase]}
-      </p>
-
       {/*
-        Only once they have said something. With no reading there is nothing to
-        acknowledge, and filling the gap would mean asserting something about
-        the phase on its own.
+        A swatch, the phase and the day, on one row. The badge that used to
+        carry all three read as the card's title and pushed the line the card
+        is actually for down a level.
       */}
-      {!drifted && said && (
-        <p className="mt-1.5 max-w-prose text-[0.88rem] text-muted-foreground">{said}</p>
-      )}
-
-      {drifted ? (
-        <p className="mt-2 max-w-prose text-[0.85rem] text-muted-foreground">{DRIFTED_NOTE}</p>
-      ) : recent.length > 0 ? (
-        <div className="mt-3">
-          <p className="text-[10px] text-muted-foreground">
-            What you wrote around this point before
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className={cn("h-2.5 w-2.5 shrink-0 rounded-full", `phase-key-${position.phase}`)}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="display text-[1.35rem] leading-tight">
+            {PHASE_META[position.phase].label}
           </p>
-          <ul className="mt-1.5 space-y-1">
-            {recent.map((note) => (
-              <li key={note.dayId} className="text-[0.82rem] text-muted-foreground">
-                <span className="tnum">{formatDayShort(note.dayId)}</span>
-                {"  "}
-                {summariseNote(note)}
-              </li>
-            ))}
-          </ul>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Day {position.day} of your cycle
+            {position.projected && ", projected"}
+          </p>
         </div>
-      ) : (
-        <p className="mt-2 max-w-prose text-[0.85rem] text-muted-foreground">
-          Nothing logged around this point in earlier cycles yet.
+      </div>
+
+      <div className="mt-4 border-t border-border/60 pt-4">
+        <p className="display text-[1.25rem] italic leading-relaxed sm:text-[1.35rem]">
+          {drifted ? DRIFTED_QUESTIONS[position.phase] : PHASE_AFFIRMATIONS[position.phase]}
         </p>
+
+        {drifted && (
+          <p className="mt-2 max-w-prose text-[0.85rem] text-muted-foreground">{DRIFTED_NOTE}</p>
+        )}
+
+      {/*
+        An inline reveal, not the design's floating tooltip. That one was drawn
+        on hover with `pointer-events: none`, which is nothing at all on a
+        phone, and this is the one line on the card actually drawn from the
+        reader's own history. It appears only when there are enough notes to
+        say something true: see `whyThisForYou`.
+      */}
+      {!drifted && why && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setShowWhy((prev) => !prev)}
+            aria-expanded={showWhy}
+            aria-controls="why-this-for-you"
+            className="flex items-center gap-2 text-[10px] tracking-[0.1em] text-muted-foreground uppercase hover:text-foreground"
+          >
+            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
+            Why this, for you
+          </button>
+          {showWhy && (
+            <p
+              id="why-this-for-you"
+              className="mt-2 max-w-prose text-[0.85rem] leading-relaxed text-muted-foreground"
+            >
+              {why}
+            </p>
+          )}
+        </div>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <span className="stat-chip">
-          Day {position.day} of about {position.ofAbout}
-        </span>
-        {window && (
-          <span className="stat-chip">Next period estimated {formatDayShort(window.from)}</span>
+        {drifted && (
+          <p className="mt-2 text-[0.82rem] text-muted-foreground">{DRIFTED_INVITATION}</p>
         )}
       </div>
 
-      {/*
-        One short line, not the full caveat. The whole statement is made once at
-        the foot of the page in `WhatClaroDoes`; three lines of it inside the
-        hero pushed the chips off a phone screen to repeat what is already said
-        there. The substance stays: this is an estimate, not a measurement.
-      */}
-      <p className="mt-3 text-[10px] text-muted-foreground">
-        Estimated from the dates you logged. Not a measurement.
-      </p>
-
-      <MatchPrompt
-        cardLabel="the phase card"
-        answer={answer}
-        onAnswer={(next) => onAnswer(position.phase, next)}
-      />
-
-      {drifted && (
-        <p className="mt-2 text-[0.82rem] text-muted-foreground">{DRIFTED_INVITATION}</p>
-      )}
     </section>
   );
 }

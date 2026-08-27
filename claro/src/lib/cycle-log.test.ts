@@ -20,6 +20,7 @@ const note = (patch: Partial<CycleCheckIn> = {}): CycleCheckIn => ({
   note: "",
   evening: null,
   noticed: "",
+  journal: "",
   updatedAt: "",
   ...patch,
 });

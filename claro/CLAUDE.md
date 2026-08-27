@@ -152,6 +152,8 @@ src/lib/cycle-guide.ts  the learning page's content and its cited sources
 src/lib/cycle-log.ts    the quick daily log: three energy taps over one stored reading
 src/lib/cycle-forecast.ts   the next seven days, with no forecast of how anyone will feel
 src/lib/cycle-recalibration.ts  what moved in the user's own estimate, said once
+src/lib/cycle-guidance.ts   the four suggestion cards' copy, and the journal prompts
+src/lib/cycle-timeline.ts   what the user's own notes say about a phase, counted not judged
 src/lib/sound.ts        the single generated-ambient-sound engine
 src/hooks/use-sortable.ts   pointer + keyboard reordering, group-aware
 src/hooks/use-focus-session.ts  the one canonical session, shared by every route
@@ -599,12 +601,108 @@ reaches into the grid gutter to close it, which is why the grid carries `px-0.5`
 
 ### `/cycle` is the centralised view
 
-One page holding the whole feature: the glance, three equal ways in (log today, this week,
-learn), logging a period, **one calendar at two scales** (month grid or a twelve-month year), the
-numbers, and each part of the cycle as the user's own record of it. History and the fuller
-check-in form are `<details>` disclosures, closed by default and still findable by the browser's
-own in-page search: opened, they took the page past 12,000px on a phone, which is the opposite of
-a view you can take in.
+One page holding the whole feature: the calendar, today in four lines, four suggestion cards,
+logging a period, three equal ways in (log today, this week, learn), and the records behind one
+disclosure. Long sections are `<details>`, still findable by the browser's own in-page search:
+opened, they took the page past 12,000px on a phone, which is the opposite of a view you can
+take in.
+
+**The page is a two-column split above the fold, and that is what makes it read as simple.**
+The design exported from Claude Design puts the calendar in a left column and the today card
+plus the four suggestion cards in a right one, `1.35fr 1fr` with a 28px gap, collapsing to one
+column below **860px** (wider than the usual tablet breakpoint, because two columns of this
+content stop working before the screen stops being a tablet). Two earlier passes stacked the
+same blocks vertically and kept cutting content to make the page shorter; the stack was the
+problem. Beside each other, the reader sees where they are and what is suggested in one look,
+and `/cycle` is `AppShell wide` so there is room for it. Desktop went 3,583px to 1,486px.
+
+**The order is the product decision.** An exported design moved the calendar to the top and put
+everything else under it, and the reasoning held: the calendar is the shape of the whole feature
+and the one view that answers "where am I" without being read. Everything below it was compressed
+to earn it that slot. The calendar is the only long section that opens **open**, because a page
+that leads with a folded-away hero leads with nothing.
+
+**A reordering clause in a design brief is also a removal clause, and missing that cost a whole
+round.** The first pass added everything the design asked for and left the old page's furniture
+in place underneath: a separate energy card, a link into the section immediately below it, a full
+period-logging card, and a grid of three tiles. Eight blocks sat on the primary scroll where the
+design has three, and the verdict was that it was "still so badly cluttered". What went, and why:
+
+- **The three tiles.** "Log today" went to the log this page carries; "Learn" to the guidance link
+  at the foot. Only the week ahead was somewhere else. The two survivors are one quiet line each.
+- **"Explore this phase in depth".** A link scrolling to the section directly beneath it. The
+  section's own summary line is the affordance.
+- **The period-logging card** moved into Your log, beside the history it writes into. The action
+  stayed in the open, because **the calendar is the action**: a period is logged by tapping or
+  dragging across days, and that is now the first thing on the page. The card was the second
+  affordance for the same job, which is the thing "one destination, one affordance" forbids.
+- **The energy row** folded into the today card. Two stacked surfaces were saying two halves of
+  the same thing.
+- **The records section closes at every width.** It opened on a wide screen on the reasoning that
+  there was room, which made the one section moved below the fold the only thing on the page that
+  arrived expanded. Secondary means secondary on a desktop too.
+
+`/cycle` went from 3,583px to 2,248px on a desktop and 2,997px to 2,171px on a phone. The heading
+list in `cycle.test.tsx` is the guard: adding a block there should be hard.
+
+**The today card carries an affirmation and asks nothing back.** It opened with a question, and
+the design replaces that with a per-phase affirmation in italic serif under a swatch, the phase
+name and the cycle day. Everything else came off it: the two stat chips, the "estimated from the
+dates you logged" line, the energy row and the match prompt. Energy is still set in the log and
+the cards still key to it. The prompt went because "does this match what you are feeling today?"
+made sense against a reading and makes none against an affirmation about what somebody is
+allowed to do; the three suggestion cards still ask, and that is where drift answers now come
+from. The drift *read* survives on this card even though nothing can set it, because handing a
+confident line to somebody who has twice said the reading is the opposite of how they feel is
+exactly the wrong move.
+
+**Three of the design's four affirmations are reworded, and `PHASE_AFFIRMATIONS` records why
+each one.** Menstrual ships verbatim. The other three each opened by telling the reader what
+they were feeling, which is a reading a calendar cannot take: luteal's "your brain is working
+harder than usual today" would also have failed `cycle-guidance.test.ts`, which has banned the
+phrase "your brain" since long before this design existed.
+
+**All four suggestion cards start closed.** Opening the first was a hedge against a row of shut
+cards reading as empty, and it cost the thing the collapse was for.
+
+**The suggestions are four collapsed cards, and only the first opens.** Work Focus, Movement,
+Journal Prompt and Food, each a real `<button>` carrying `aria-expanded` and `aria-controls`
+rather than a `<details>`, because the caret, the label and the "which phase, which energy"
+context have to share one row and a `<summary>` marker cannot be placed. They toggle
+independently rather than as an accordion: somebody comparing two of them should not have the
+first shut in their face to read the second.
+
+**The card keys are storage, the card names are not.** `GUIDANCE_CARDS` still reads
+`eat`, `move`, `do`, because those strings are persisted inside `guidanceMatches` keyed
+`card:dayId`. On screen they are Food, Movement and Work Focus. Renaming the keys to match would
+orphan every answer already saved under the old ones, which is exactly the trade the renaming
+rule exists to refuse. `journal` is genuinely new.
+
+**The Journal Prompt card asks nothing back.** The other three ask "does this match what you are
+feeling today?" and record the answer. This one does not: there is no right answer to something
+written in the user's own words, so asking whether it matched would be the page marking their
+work. It writes to `CycleCheckIn.journal`, a third writing field beside `note` and `noticed`
+rather than a reuse of either, because answering the prompt must never overwrite the place
+somebody said the guidance did not fit them.
+
+**The records sit behind four tabs**: About this phase, Your log, Recent notes, Cycle length.
+`CycleLengthChart` draws the gaps between logged period starts and passes no verdict on the
+shape. The design it came from captioned its chart "steady enough that Claro can plan around it.
+The dip in March lined up with a stretch of short sleep", which reads a cause into a wobble from
+data that cannot support one and grades the line on top of it. A short cycle is not a problem and
+a variable one is not a warning. The chart is also deliberately **unfiltered**, unlike
+`estimateNext`, which drops implausible gaps before taking a median: a chart of what you recorded
+should show the day you logged by mistake, or there is no way to see it and fix it. Its points
+and labels are HTML positioned over the SVG rather than `<text>` inside it, because the viewBox is
+stretched to the card and would scale type down to seven pixels on a phone.
+
+**`whyThisForYou` is the personalisation, and it is arithmetic on the user's own notes.** The
+design asked for an affirmation "built from your logs: energy low on days 1 to 3 in each of your
+last three cycles", which is a statistic Claro never computed and would be a fabrication on a new
+install. What ships instead counts what is actually there: how many notes exist in this phase,
+how many recorded low energy, and which feeling word leads if one clearly does. It returns `null`
+below `MIN_NOTES_IN_PHASE`, because two days is an anecdote and calling it a pattern would be the
+page inventing the history it claims to be reading.
 
 **The calculators are the ones a calendar can support.** The apps this page takes its shape from
 offer ovulation, fertile window, implantation, HCG, pregnancy-test and due-date calculators.

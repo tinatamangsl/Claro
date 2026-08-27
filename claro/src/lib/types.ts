@@ -686,13 +686,30 @@ export type CycleCheckIn = {
    * match the general guidance has somewhere to say so. Never parsed.
    */
   noticed: string;
+  /**
+   * Additive: the journal prompt's answer, in the user's own words.
+   *
+   * A third writing field rather than a reuse of `noticed`, because the two
+   * are asked by different things and answering one must not overwrite the
+   * other: `noticed` is where somebody says the guidance does not fit them,
+   * and this is where they answer the question the journal card asked. Never
+   * parsed, never read by anything but the card that wrote it.
+   */
+  journal: string;
   updatedAt: string;
 };
 
 // ------------------------------------------------- does the guidance fit you
 
 /** The cards that carry a suggestion, and therefore ask whether it landed. */
-export const GUIDANCE_CARDS = ["phase", "eat", "move", "do"] as const;
+/*
+ * These four strings are **persisted** inside `guidanceMatches`, so they are
+ * storage keys and not labels. `eat`, `move` and `do` now read as Food,
+ * Movement and Work Focus on screen; renaming the keys to match would orphan
+ * every answer already saved under the old ones, which is exactly the trade
+ * the project's renaming rule exists to refuse. `journal` is genuinely new.
+ */
+export const GUIDANCE_CARDS = ["phase", "eat", "move", "do", "journal"] as const;
 export type GuidanceCard = (typeof GUIDANCE_CARDS)[number];
 
 /**

@@ -84,6 +84,7 @@ export function blankCheckIn(dayId: ISODate, now: Date): CycleCheckIn {
     note: "",
     evening: null,
     noticed: "",
+    journal: "",
     updatedAt: now.toISOString(),
   };
 }
@@ -477,6 +478,7 @@ function readCheckIns(raw: unknown): Record<string, CycleCheckIn> {
       note: typeof note.note === "string" ? note.note : "",
       evening: note.evening ?? null,
       noticed: typeof note.noticed === "string" ? note.noticed : "",
+      journal: typeof note.journal === "string" ? note.journal : "",
       updatedAt: typeof note.updatedAt === "string" ? note.updatedAt : "",
     };
   }
