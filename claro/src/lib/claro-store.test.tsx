@@ -1527,6 +1527,7 @@ describe("cycle edits recalculate, and deletion stays isolated", () => {
       checkIns: {},
       lastSeen: null,
   guidanceMatches: {},
+  guideAnswers: {},
     });
     // And nothing else moved.
     expect(state.days[TODAY].priority1.text).toBe("Ship the store");

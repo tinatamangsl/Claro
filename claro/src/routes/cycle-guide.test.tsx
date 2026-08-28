@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +13,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 import { CycleGuide } from "./cycle-guide";
 import { ClaroProvider, useClaro } from "@/lib/claro-store";
-import { GUIDE_SOURCES, PHASE_CARDS } from "@/lib/cycle-guide";
+import { ESTIMATE_BAND, GUIDE_PROMPTS, GUIDE_SOURCES, MYTHS, PHASE_CARDS } from "@/lib/cycle-guide";
 import { shiftDayId, weekOfDay } from "@/lib/dates";
 import type { CycleCheckIn, CycleEntry } from "@/lib/types";
 
@@ -68,22 +68,45 @@ describe("the learning page", () => {
     const { api, container } = harness();
     await ready(api);
 
-    expect(screen.getByRole("heading", { name: "Understanding your menstrual cycle" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Four phases. Tap one." })).toBeTruthy();
     expect(container.textContent).toContain(
-      "A guide to estimated cycle phases, your own notes, and questions you may want to explore.",
+      "No two cycles match, not even your own. Here is what each stretch is, in plain words.",
     );
     expect(container.textContent).toContain(
       "This guide is for general education and personal reflection. It does not replace medical advice.",
     );
   });
 
-  it("shows all four phase cards, each with its estimate disclaimer", async () => {
+  it("reaches every phase, and every phase states the limit of a calendar", async () => {
+    const { api, container } = harness();
+    await ready(api);
+
+    /*
+     * One phase at a time now, chosen from a tab strip, rather than four
+     * articles down a column. The estimate note moved behind "go deeper" with
+     * the paragraphs it belongs to, and the statement that covers the whole
+     * explorer sits under the card at every phase: see the test below.
+     */
+    for (const card of PHASE_CARDS) {
+      fireEvent.click(screen.getByRole("tab", { name: card.short }));
+      expect(screen.getByRole("heading", { name: card.short })).toBeTruthy();
+      expect(container.textContent).toContain(card.lead);
+
+      fireEvent.click(screen.getByRole("button", { name: "Go deeper" }));
+      expect(container.textContent).toContain(card.estimateNote);
+      for (const paragraph of card.body) {
+        expect(container.textContent).toContain(paragraph);
+      }
+    }
+  });
+
+  it("says the phases are an estimate, on every phase, without being opened", async () => {
     const { api, container } = harness();
     await ready(api);
 
     for (const card of PHASE_CARDS) {
-      expect(screen.getByRole("heading", { name: card.title })).toBeTruthy();
-      expect(container.textContent).toContain(card.estimateNote);
+      fireEvent.click(screen.getByRole("tab", { name: card.short }));
+      expect(container.textContent).toContain(ESTIMATE_BAND);
     }
   });
 
@@ -91,8 +114,117 @@ describe("the learning page", () => {
     const { api, container } = harness();
     await ready(api);
 
-    expect(container.textContent).toContain("There is no single correct length");
+    /*
+     * This used to read off a "before the phases" preamble. That section is
+     * gone and its three claims are each somewhere they are harder to skip:
+     * the 28 day one is the first myth card, cycle length versus bleeding days
+     * is the second, and the calendar-estimate point is the band under the
+     * phase explorer. Flipping the card is what a reader does, so the test
+     * does it too.
+     */
+    fireEvent.click(screen.getByRole("button", { name: /28 days is the normal cycle/ }));
+
+    expect(container.textContent).toContain("An average, not a standard");
+    expect(container.textContent).toContain("Claro does not treat 28 as the default");
     expect(container.textContent!.toLowerCase()).not.toContain("28-day");
+    // And no verdict on a cycle that is not 28 days, in either direction.
+    for (const verdict of ["normal cycle length", "healthy", "abnormal", "too short", "too long"]) {
+      expect(container.textContent!.toLowerCase()).not.toContain(verdict);
+    }
+  });
+
+  it("keeps the myth hidden behind the claim until the reader asks", async () => {
+    const { api, container } = harness();
+    await ready(api);
+
+    for (const entry of MYTHS) {
+      // The claim is what shows first: reading it and then wanting the answer
+      // is what makes the correction land.
+      expect(container.textContent).toContain(entry.myth);
+      expect(container.textContent).not.toContain(entry.truth);
+    }
+
+    const card = screen.getByRole("button", { name: new RegExp(MYTHS[1].myth) });
+    expect(card.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(card);
+
+    expect(card.getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain(MYTHS[1].truth);
+    // Independent, so two can be compared side by side.
+    expect(container.textContent).not.toContain(MYTHS[0].truth);
+  });
+
+  it("corrects a claim and never the reader", async () => {
+    const { api, container } = harness();
+    await ready(api);
+
+    for (const entry of MYTHS) {
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(entry.myth) }));
+    }
+
+    /*
+     * The whole section is about things somebody was told wrongly, which is
+     * the one place on this page where it would be easy to slip into telling
+     * them they were wrong, or into grading the cycle behind the question.
+     */
+    const text = container.textContent!.toLowerCase();
+    for (const banned of ["you were wrong", "mistake", "actually,", "healthy", "abnormal"]) {
+      expect(text).not.toContain(banned);
+    }
+  });
+
+  it("gives every question somewhere to answer it, and keeps the answer", async () => {
+    const { api } = harness();
+    await ready(api);
+
+    const prompt = GUIDE_PROMPTS[0];
+    // Closed to begin with: five open fields is a form, and this is a page.
+    expect(screen.queryByLabelText(prompt.question)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: prompt.question }));
+    const field = screen.getByLabelText(prompt.question);
+    fireEvent.change(field, { target: { value: "steady, better than last week" } });
+    fireEvent.blur(field);
+
+    await waitFor(() =>
+      expect(api.store!.cycle.guideAnswers[prompt.id]).toBe("steady, better than last week"),
+    );
+  });
+
+  it("clears an answer rather than storing an empty one", async () => {
+    const { api } = harness();
+    await ready(api);
+
+    const prompt = GUIDE_PROMPTS[0];
+    fireEvent.click(screen.getByRole("button", { name: prompt.question }));
+    const field = screen.getByLabelText(prompt.question);
+
+    fireEvent.change(field, { target: { value: "written" } });
+    fireEvent.blur(field);
+    await waitFor(() => expect(api.store!.cycle.guideAnswers[prompt.id]).toBe("written"));
+
+    fireEvent.change(field, { target: { value: "   " } });
+    fireEvent.blur(field);
+
+    // Emptying the box leaves no trace of having written in it.
+    await waitFor(() => expect(prompt.id in api.store!.cycle.guideAnswers).toBe(false));
+  });
+
+  it("does not print a private answer on the collapsed row", async () => {
+    const { api, container } = harness();
+    await ready(api);
+
+    const prompt = GUIDE_PROMPTS[0];
+    fireEvent.click(screen.getByRole("button", { name: prompt.question }));
+    const field = screen.getByLabelText(prompt.question);
+    fireEvent.change(field, { target: { value: "slept badly again" } });
+    fireEvent.blur(field);
+    await waitFor(() => expect(api.store!.cycle.guideAnswers[prompt.id]).toBe("slept badly again"));
+
+    // Collapse it. Somebody may be reading this page with another person
+    // beside them, and the row should not read the note back out.
+    fireEvent.click(screen.getByRole("button", { name: prompt.question }));
+    expect(container.textContent).not.toContain("slept badly again");
   });
 
   it("lists every source with the metadata a reader needs to weigh it", async () => {

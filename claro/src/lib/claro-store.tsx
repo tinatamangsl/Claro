@@ -155,6 +155,8 @@ type ClaroContextValue = {
   deleteCycleEntry: (id: string) => void;
   /** An optional private note about a day. Never written anywhere else. */
   writeCycleCheckIn: (dayId: ISODate, patch: Partial<CycleCheckIn>, now: Date) => void;
+  /** One answer to one guide prompt. Blank clears it rather than storing "". */
+  writeGuideAnswer: (promptId: string, text: string) => void;
   /** Marks the current estimate as seen, so a change is announced only once. */
   acknowledgeCycleEstimate: (snapshot: EstimateSnapshot) => void;
   /** The typical length the user stated, used until their own gaps can speak. */
@@ -554,6 +556,27 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
   );
 
   /**
+   * One answer to one of the guide's reflective prompts.
+   *
+   * A blank answer removes the key rather than storing an empty string, so
+   * clearing a box leaves no trace of having written in it. Nothing reads
+   * these back except the prompt that wrote them: they are not scored, not
+   * summarised, and never used to change anything on any other screen.
+   */
+  const writeGuideAnswer = useCallback((promptId: string, text: string) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev.state.cycle.guideAnswers };
+      if (text.trim()) next[promptId] = text;
+      else delete next[promptId];
+      return {
+        ...prev,
+        state: { ...prev.state, cycle: { ...prev.state.cycle, guideAnswers: next } },
+      };
+    });
+  }, []);
+
+  /**
    * What the reader said about one card today.
    *
    * Answering again on the same day corrects the earlier answer rather than
@@ -747,6 +770,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       writeGuidanceMatch,
       deleteCycleEntry,
       writeCycleCheckIn,
+      writeGuideAnswer,
       acknowledgeCycleEstimate,
       setCycleLength,
       deleteAllCycleData,
@@ -791,6 +815,7 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       setCycleEntries,
       deleteCycleEntry,
       writeCycleCheckIn,
+      writeGuideAnswer,
       acknowledgeCycleEstimate,
       setCycleLength,
       deleteAllCycleData,

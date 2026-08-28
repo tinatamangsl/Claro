@@ -710,6 +710,43 @@ Every one is a fertility or pregnancy prediction. What Claro offers instead is a
 can check: cycle length, recorded durations, the next estimate, and which cycle day a date falls
 on.
 
+### `/cycle-guide` is an explorer, not a document
+
+It was four long articles down a 768px column, 7.7 screens, and it read as a page somebody
+scrolls past. It is now the same content arranged the way the exported design has it: a ring
+showing the four phases as proportions, a tab strip, and **one phase card at a time** carrying a
+lead sentence and three labelled rows. It sits at `AppShell wide`, the same width as `/cycle`,
+because the two link to each other constantly and chrome that changes size between them is the
+most visible kind of incoherence there is.
+
+**Nothing was re-claimed to do it.** `lead`, `facts` and `span` on `PhaseCard` are the same three
+things `body` already said, cut to the length a card can show. Every paragraph, every
+`estimateNote` and every `invitation` is still there behind **Go deeper**, with that phase's
+sources named inline under it.
+
+**The sources are folded, never cut.** Seven sources at full metadata ran to half the page. This
+is the one page in the app where each claim is tied to a named, dated source, so the whole list
+is behind one `<details>` rather than shortened, and the browser's in-page search still reaches
+inside it.
+
+**"Three things worth unlearning" absorbed the old preamble.** A "before the phases" section used
+to make three points in prose: no single correct length, cycle length is not bleeding days, and
+everything here is a calendar estimate. The first two are now myth cards, which show the claim
+and reveal the correction on tap, and the third is the band under the phase explorer. They
+correct a *claim*, never the reader: no card says anybody was wrong, and none grades a cycle.
+The design's first card read "a great many **healthy** cycles sit either side of it"; "healthy"
+is a verdict word this project bans elsewhere, and the design's own register already offers the
+replacement, since it says "Both are ordinary" two cards along.
+
+**`guideAnswers` is additive, keyed by prompt id, and not on a `CycleCheckIn`.** "What did you
+notice last time around?" is answered once and revisited, not logged every morning, and putting
+it on a day would either scatter one answer across many days or silently pick one to be the real
+one. `GUIDE_PROMPTS` carries explicit ids so that editing a question's wording cannot orphan the
+answer; `SUPPORTIVE_PROMPTS` is derived from it, so the four other screens that show the
+questions can never drift into a different set. A blank answer deletes the key rather than
+storing `""`, and a collapsed row shows a dot rather than the text: somebody may be reading this
+page with another person beside them.
+
 ### Eat, Move and Do: how guidance ships without a claim
 
 **This reverses the refusal below, and the shape of the reversal is the point.** The user asked

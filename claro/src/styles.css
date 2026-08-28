@@ -1101,6 +1101,24 @@
   .phase-key-luteal {
     background-color: color-mix(in srgb, var(--phase-luteal) 45%, transparent);
   }
+
+  /*
+    The same four hues as a stroke, for the guide's ring. They read the same
+    --phase-* variables the calendar washes do, so the diagram explaining the
+    colours can never use different ones from the calendar it explains.
+  */
+  .phase-arc-menstrual {
+    stroke: var(--phase-menstrual);
+  }
+  .phase-arc-follicular {
+    stroke: var(--phase-follicular);
+  }
+  .phase-arc-ovulation {
+    stroke: var(--phase-ovulation);
+  }
+  .phase-arc-luteal {
+    stroke: var(--phase-luteal);
+  }
 }
 
 /*

@@ -774,6 +774,16 @@ export type CycleState = {
    * the earlier answer rather than stacking a second one beside it.
    */
   guidanceMatches: Record<string, GuidanceMatch>;
+  /**
+   * Additive: the guide's reflective prompts, keyed by prompt id.
+   *
+   * Not on a `CycleCheckIn`, because these are not about a day. "What did you
+   * notice last time around?" is answered once and revisited, not logged every
+   * morning, and putting it on a day would either scatter one answer across
+   * many days or silently pick one to be the real one. Never parsed, never
+   * read back by anything except the prompt that wrote it.
+   */
+  guideAnswers: Record<string, string>;
 };
 
 // -------------------------------------------------------------- 3-3-3 plan

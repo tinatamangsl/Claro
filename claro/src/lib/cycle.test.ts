@@ -51,6 +51,7 @@ const cycleWith = (...specs: Spec[]): CycleState => ({
   checkIns: {},
   lastSeen: null,
   guidanceMatches: {},
+  guideAnswers: {},
 });
 
 describe("logged entries", () => {
@@ -156,6 +157,7 @@ const withCheckIns = (
   ),
   lastSeen: null,
   guidanceMatches: {},
+  guideAnswers: {},
 });
 
 describe("private daily notes", () => {

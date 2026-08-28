@@ -25,6 +25,7 @@ const withStarts = (...starts: ISODate[]): CycleState => ({
   checkIns: {},
   lastSeen: null,
   guidanceMatches: {},
+  guideAnswers: {},
 });
 
 const REGULAR = () => withStarts("2026-05-04", "2026-06-01", "2026-06-29", "2026-07-27");

@@ -159,9 +159,33 @@ export function sourceById(id: string): GuideSource | null {
 
 // ------------------------------------------------------------ phase cards
 
+/** One row of the phase card: a short label and the sentence it introduces. */
+export type PhaseFact = { label: string; text: string };
+
 export type PhaseCard = {
   id: string;
   title: string;
+  /**
+   * Additive, and not new claims.
+   *
+   * `lead` and `facts` are the same three things `body` already said, cut to
+   * the length the card can show without being scrolled. The design reads a
+   * phase as one statement and three labelled rows; the paragraphs are still
+   * here, unchanged, behind "go deeper", so nothing is lost by compressing the
+   * front of the card and nothing is asserted that was not asserted before.
+   */
+  lead: string;
+  facts: [PhaseFact, PhaseFact, PhaseFact];
+  /** Sits under the phase name in the ring. Says the span, and hedges it. */
+  span: string;
+  /**
+   * The name alone, for the chips and the ring.
+   *
+   * "Follicular phase" is right in a sentence and wrong on a chip beside three
+   * others, where the repeated word is the only thing the eye has to skip past
+   * to reach the one that differs.
+   */
+  short: string;
   /** One or more short paragraphs, in Claro's own words. */
   body: string[];
   /** Says plainly what a calendar can and cannot know. Required on every card. */
@@ -175,6 +199,20 @@ export const PHASE_CARDS: PhaseCard[] = [
   {
     id: "menstruation",
     title: "Menstruation",
+    lead: "Day 1 is the first day of proper bleeding, not the spotting before it. That is where counting starts.",
+    span: "Days 1 to 5, roughly",
+    short: "Menstruation",
+    facts: [
+      {
+        label: "Overlap",
+        text: "It sits inside the wider follicular phase, so the two run together rather than one after the other.",
+      },
+      {
+        label: "Length",
+        text: "How long bleeding lasts differs between people, and between your own cycles.",
+      },
+      { label: "Claro", text: "Records the days you logged. Measures nothing." },
+    ],
     body: [
       "Day 1 of a cycle is the first day of proper bleeding, not spotting before it. That is the day cycle counting starts from, which is why Claro asks for a start date rather than working one out.",
       "Menstruation happens at the beginning of the wider follicular phase, so the two overlap rather than following one another.",
@@ -189,6 +227,23 @@ export const PHASE_CARDS: PhaseCard[] = [
   {
     id: "follicular",
     title: "Follicular phase",
+    lead: "From the first day of a period until an egg is released. Follicles develop, and usually one goes on to release an egg.",
+    span: "Day 1 until an egg is released",
+    short: "Follicular",
+    facts: [
+      {
+        label: "Varies",
+        text: "The most variable stretch of the cycle. Most of the difference in overall length comes from here.",
+      },
+      {
+        label: "Meaning",
+        text: "A longer or shorter phase is not something a calendar can interpret for you.",
+      },
+      {
+        label: "You",
+        text: "Some people notice changes across these days. Some notice none. Both are ordinary.",
+      },
+    ],
     body: [
       "The follicular phase runs from the first day of a period until an egg is released. During it, follicles in the ovaries develop, and usually one of them goes on to release an egg.",
       "This phase is the part of the cycle that varies most in length, both between people and between cycles. Much of the difference in overall cycle length comes from here.",
@@ -203,6 +258,23 @@ export const PHASE_CARDS: PhaseCard[] = [
   {
     id: "ovulation",
     title: "Ovulation",
+    lead: "An egg is released from an ovary. It is the point that separates the follicular phase from the luteal one.",
+    span: "Once per cycle, day not fixed",
+    short: "Ovulation",
+    facts: [
+      {
+        label: "Timing",
+        text: "The day is not fixed. It moves between cycles, including for otherwise regular ones.",
+      },
+      {
+        label: "Proof",
+        text: "Dates alone cannot confirm ovulation happened, or when. That needs clinical assessment.",
+      },
+      {
+        label: "Claro",
+        text: "Shows no fertile window and no chance of pregnancy. A calendar cannot support either.",
+      },
+    ],
     body: [
       "Ovulation is the release of an egg from an ovary. It happens once in most cycles, and it is the point that separates the follicular phase from the luteal phase.",
       "The day it happens is not fixed. It can move between cycles for the same person, including for someone whose cycles are otherwise regular.",
@@ -217,6 +289,23 @@ export const PHASE_CARDS: PhaseCard[] = [
   {
     id: "luteal",
     title: "Luteal phase",
+    lead: "From ovulation until the next period begins. If pregnancy does not occur, the next cycle starts.",
+    span: "Ovulation until the next period",
+    short: "Luteal",
+    facts: [
+      {
+        label: "Length",
+        text: "Usually the steadier of the two halves, though this varies between people as well.",
+      },
+      {
+        label: "You",
+        text: "Some people notice changes in mood, energy or sleep. Others notice little. Both are ordinary.",
+      },
+      {
+        label: "Claro",
+        text: "Places this phase from your logged dates alone. It cannot see inside your body.",
+      },
+    ],
     body: [
       "The luteal phase runs from ovulation until the next period begins. The structure left behind after the egg is released produces hormones that thicken the lining of the womb.",
       "If pregnancy does not occur, those hormone levels fall and the lining is shed, which is the next period and the start of the next cycle.",
@@ -243,13 +332,68 @@ export function sourcesFor(card: PhaseCard): GuideSource[] {
  * supplement, a workout, a treatment or a kind of work, and none is triggered
  * by an estimated phase. The user answers them or ignores them.
  */
-export const SUPPORTIVE_PROMPTS: string[] = [
-  "How is your energy today?",
-  "What movement would feel good, if any?",
-  "What food would help you feel nourished today?",
-  "Would you like to reduce, keep, or expand your plan?",
-  "What did you notice last time around?",
+export type GuidePrompt = {
+  /**
+   * The storage key for whatever the reader writes, and the reason this list
+   * is objects rather than strings. Deriving a key from the question text
+   * would orphan an answer the first time a word in the question changed.
+   */
+  id: string;
+  question: string;
+};
+
+export const GUIDE_PROMPTS: GuidePrompt[] = [
+  { id: "energy", question: "How is your energy today?" },
+  { id: "movement", question: "What movement would feel good, if any?" },
+  { id: "food", question: "What food would help you feel nourished today?" },
+  { id: "plan", question: "Would you like to reduce, keep, or expand your plan?" },
+  { id: "last-time", question: "What did you notice last time around?" },
 ];
+
+/**
+ * The questions alone, for the four screens that only ever show them.
+ *
+ * Derived rather than duplicated, so the guide and everywhere else can never
+ * drift into asking two different sets of questions.
+ */
+export const SUPPORTIVE_PROMPTS: string[] = GUIDE_PROMPTS.map((p) => p.question);
+
+/**
+ * The three misreadings this page exists to correct.
+ *
+ * Each is a sentence somebody has actually been told, paired with what is
+ * true instead. They are corrections of claims, never of a person: no card
+ * says the reader was wrong, and none of them grades a cycle. The 28 day one
+ * matters most, because it is the number every other app defaults to and the
+ * one Claro deliberately does not.
+ */
+export type Myth = { myth: string; truth: string };
+
+export const MYTHS: Myth[] = [
+  {
+    myth: "28 days is the normal cycle.",
+    truth:
+      "An average, not a standard. A great many ordinary cycles sit either side of it, and Claro does not treat 28 as the default.",
+  },
+  {
+    myth: "Cycle length is how long my period lasts.",
+    truth:
+      "It is the first day of one period to the first day of the next. Bleeding days are a separate count.",
+  },
+  {
+    myth: "An app can tell me when I ovulated.",
+    truth:
+      "It cannot. Dates alone cannot confirm that ovulation happened, or when, which is why Claro does not claim to.",
+  },
+];
+
+/** Sits under the phase explorer, where the estimate is easiest to forget. */
+export const ESTIMATE_BAND =
+  "Phases in Claro are worked out from the dates you entered. A calendar estimate, not a measurement.";
+
+/** Introduces the prompts, and says plainly why Claro does not answer them. */
+export const PROMPTS_INTRO =
+  "Claro does not tell you what to eat, how to train, or what work suits a phase. It has no basis for that. These are yours to answer.";
 
 export const GUIDE_NOTICE =
   "This guide is for general education and personal reflection. It does not replace medical advice.";

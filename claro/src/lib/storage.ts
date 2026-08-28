@@ -69,6 +69,7 @@ export function blankCycle(): CycleState {
     checkIns: {},
     lastSeen: null,
     guidanceMatches: {},
+    guideAnswers: {},
   };
 }
 
@@ -506,6 +507,7 @@ function readCycle(raw: unknown): CycleState {
     // with nothing said either way, which is the truth about it.
     guidanceMatches:
       c.guidanceMatches && typeof c.guidanceMatches === "object" ? c.guidanceMatches : {},
+    guideAnswers: c.guideAnswers && typeof c.guideAnswers === "object" ? c.guideAnswers : {},
   };
 }
 

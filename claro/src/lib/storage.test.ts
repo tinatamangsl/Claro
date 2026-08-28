@@ -49,6 +49,7 @@ describe("blank records", () => {
         checkIns: {},
         lastSeen: null,
   guidanceMatches: {},
+  guideAnswers: {},
       },
       sound: {
         volume: 0.4,
@@ -745,6 +746,7 @@ describe("v7 → v8 period range migration", () => {
       checkIns: {},
       lastSeen: null,
   guidanceMatches: {},
+  guideAnswers: {},
     },
   });
 
@@ -814,6 +816,7 @@ describe("period ranges survive a refresh", () => {
       checkIns: {},
       lastSeen: null,
   guidanceMatches: {},
+  guideAnswers: {},
     },
   });
 
