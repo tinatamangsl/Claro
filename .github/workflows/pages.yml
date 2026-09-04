@@ -1,0 +1,78 @@
+# Builds Claro as a static site and publishes it to GitHub Pages.
+#
+# This exists because the app lives in `claro/` and its build output is
+# gitignored, so the "deploy from a branch" mode has nothing to serve: it would
+# publish the repository root, which holds no index.html at all. Pages Source
+# must be set to "GitHub Actions" for this to run.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # So a deploy can be re-run without an empty commit.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: claro
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: claro/package-lock.json
+
+      - run: npm ci
+
+      # The suite is the gate. A broken build should not reach the URL.
+      - run: npm run typecheck
+      - run: npm test
+
+      # A project site is served from /<repo>/, never from /. Derived rather
+      # than written out, so renaming the repository cannot silently publish a
+      # site whose every asset URL is one level too high.
+      - name: Build
+        run: CLARO_BASE="/${{ github.event.repository.name }}/" npm run build
+
+      - name: Prepare the static site
+        run: |
+          cd dist/client
+          # The prerendered shell becomes the entry point, and the 404 page.
+          # GitHub Pages serves 404.html for any path it has no file for, which
+          # is what makes a deep link like /Claro/cycle reach the router rather
+          # than a GitHub error page.
+          cp _shell.html index.html
+          cp _shell.html 404.html
+          rm _shell.html
+          # Without this, Pages runs Jekyll, which drops files and folders whose
+          # names begin with an underscore.
+          touch .nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: claro/dist/client
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

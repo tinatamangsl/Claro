@@ -5,6 +5,12 @@ export const getRouter = () => {
   return createRouter({
     routeTree,
     /*
+     * Read from Vite's `base` rather than written out again here. On GitHub
+     * Pages the app is served from `/Claro/`, so a router that still believed
+     * it was at `/` would build every link one level too high.
+     */
+    basepath: import.meta.env.BASE_URL,
+    /*
      * Off deliberately. Claro's store is null on the server and on the client's
      * first render (invariant 1), so at the moment a restore is attempted the
      * document is still the skeleton and a fraction of its real height. The

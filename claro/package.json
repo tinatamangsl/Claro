@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:pages": "CLARO_BASE=/Claro/ vite build && cd dist/client && cp _shell.html index.html && cp _shell.html 404.html && rm _shell.html && touch .nojekyll"
   },
   "dependencies": {
     "@tanstack/react-router": "^1.170.29",

@@ -546,6 +546,36 @@ The hours are adjustable and the shape is a starting point: a partial plan is a 
 `scheduleFocusBlock` never overwrites an hour that already has something in it, and there is no
 score, reward or completion-pressure language anywhere in the flow.
 
+## Deployment: a static site, on GitHub Pages
+
+`/cycle` and every other route is client-only. There are **no server functions, no data loaders
+and no API**: the single `beforeLoad` in the app is a client-side redirect in
+`routes/index.tsx`, and every byte of state is in `localStorage`. So Claro is built as a static
+SPA, which is the shape it already had rather than a compromise made for the host.
+
+`tanstackStart({ spa: { enabled: true } })` is what makes that happen. Without it `vite build`
+emits a Node server bundle and **zero HTML files**, which no static host can serve, and that was
+the real cause of the 404 at `tinatamangsl.github.io/Claro/` (the other cause being that Pages
+was serving the repository root, which has no `index.html` in it at all).
+
+**The base path is the thing that breaks quietly.** A project site is served from `/Claro/`, not
+`/`. `vite.config.ts` reads `CLARO_BASE` from the environment and defaults to `/`, so
+`localhost:8080` is unaffected, and `router.tsx` takes its `basepath` from
+`import.meta.env.BASE_URL` rather than repeating the string. The workflow derives the value from
+the repository name, so renaming the repo cannot silently publish a site whose every asset URL
+is one level too high.
+
+**`404.html` is load-bearing.** The prerendered shell is copied to both `index.html` and
+`404.html`. GitHub Pages serves `404.html` for any path it has no file for, which is what lets a
+deep link like `/Claro/cycle` reach the router instead of a GitHub error page. Such a request
+returns HTTP 404 with the app as its body: that status is expected and is not a fault. A
+`.nojekyll` file is written too, or Jekyll drops anything whose name starts with an underscore.
+
+`.github/workflows/pages.yml` builds from `claro/`, runs typecheck and the suite as a gate, and
+publishes `claro/dist/client`. **Pages Source must be set to "GitHub Actions"**, not "Deploy from
+a branch": the app is in a subfolder and its output is gitignored, so branch mode has nothing to
+serve.
+
 ## Private cycle notes
 
 Four routes, none of them in the nav: `/cycle` is the centralised view, `/cycle-day` the daily
