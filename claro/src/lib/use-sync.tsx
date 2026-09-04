@@ -131,6 +131,38 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         replaceState(merge(state, result.row.payload));
       }
 
+      /*
+       * Seed the account, rather than waiting for the next edit to do it.
+       *
+       * This branch used to fall straight through to "synced", which was a lie
+       * with nothing behind it: the push effect below only fires when `state`
+       * changes, so signing in and then not touching anything left the account
+       * empty while the footer said the writing was safely in it. Somebody
+       * could sign in, close the tab, and lose a device believing they had a
+       * copy.
+       */
+      if (plan.action === "push") {
+        const seeded = await push(session.user.id, forUpload(state), token.current);
+        if (cancelled) return;
+
+        if (!seeded.ok) {
+          if (seeded.reason === "conflict") {
+            // Another device seeded it between our read and our write.
+            const fresh = await pull(session.user.id);
+            if (fresh.ok && fresh.row) {
+              token.current = fresh.row.token;
+              setRemote(fresh.row.payload);
+            }
+            setStatus("conflict");
+            return;
+          }
+          setStatus("error");
+          setMessage(seeded.message);
+          return;
+        }
+        token.current = seeded.token;
+      }
+
       reconciled.current = true;
       setStatus("synced");
     })();
