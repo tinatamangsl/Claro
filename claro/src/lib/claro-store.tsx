@@ -142,6 +142,8 @@ type ClaroContextValue = {
   /** Private cycle awareness, kept apart from planning and focus records. */
   cycle: CycleState;
   setCycleEnabled: (enabled: boolean, now: Date) => void;
+  /** Whether cycle notes may sync. Null withholds them from every upload. */
+  setCycleSyncConsent: (at: string | null) => void;
   logCycleStart: (entry: CycleEntry) => void;
   /** Replaces the logged starts wholesale. Used by add, edit and delete. */
   setCycleEntries: (entries: Record<string, CycleEntry>) => void;
@@ -157,6 +159,8 @@ type ClaroContextValue = {
   writeCycleCheckIn: (dayId: ISODate, patch: Partial<CycleCheckIn>, now: Date) => void;
   /** One answer to one guide prompt. Blank clears it rather than storing "". */
   writeGuideAnswer: (promptId: string, text: string) => void;
+  /** Replace the entire snapshot. Sync only, after a safe plan is chosen. */
+  replaceState: (next: ClaroState) => void;
   /** Marks the current estimate as seen, so a change is announced only once. */
   acknowledgeCycleEstimate: (snapshot: EstimateSnapshot) => void;
   /** The typical length the user stated, used until their own gaps can speak. */
@@ -499,6 +503,31 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  /**
+   * Whether cycle notes may leave the device, decided explicitly.
+   *
+   * Separate from `setCycleEnabled` because they are different questions asked
+   * at different times. Somebody who turned cycle notes on before sync existed
+   * agreed to a screen promising the data stayed here and went nowhere; that
+   * cannot be read forward as agreement to upload it. Passing null withdraws
+   * consent, after which `forUpload` stops including the branch again.
+   */
+  const setCycleSyncConsent = useCallback((at: string | null) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          cycle: {
+            ...prev.state.cycle,
+            settings: { ...prev.state.cycle.settings, syncConsentAt: at },
+          },
+        },
+      };
+    });
+  }, []);
+
   const logCycleStart = useCallback((entry: CycleEntry) => {
     setSnap((prev) =>
       prev
@@ -563,6 +592,18 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
    * these back except the prompt that wrote them: they are not scored, not
    * summarised, and never used to change anything on any other screen.
    */
+  /**
+   * Swap the whole snapshot for one that came from somewhere else.
+   *
+   * Only sync uses this, and only after `planSignIn` has decided it is safe:
+   * either the device holds nothing, or the person was asked and chose. It is
+   * deliberately blunt, because a partial merge across fourteen top-level keys
+   * is a thing that would be wrong in ways nobody could see.
+   */
+  const replaceState = useCallback((next: ClaroState) => {
+    setSnap((prev) => (prev ? { ...prev, state: next } : prev));
+  }, []);
+
   const writeGuideAnswer = useCallback((promptId: string, text: string) => {
     setSnap((prev) => {
       if (!prev) return prev;
@@ -765,12 +806,14 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       updateMonthPlan,
       cycle: state.cycle,
       setCycleEnabled,
+      setCycleSyncConsent,
       logCycleStart,
       setCycleEntries,
       writeGuidanceMatch,
       deleteCycleEntry,
       writeCycleCheckIn,
       writeGuideAnswer,
+      replaceState,
       acknowledgeCycleEstimate,
       setCycleLength,
       deleteAllCycleData,
@@ -811,11 +854,13 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       monthPlan,
       updateMonthPlan,
       setCycleEnabled,
+      setCycleSyncConsent,
       logCycleStart,
       setCycleEntries,
       deleteCycleEntry,
       writeCycleCheckIn,
       writeGuideAnswer,
+      replaceState,
       acknowledgeCycleEstimate,
       setCycleLength,
       deleteAllCycleData,

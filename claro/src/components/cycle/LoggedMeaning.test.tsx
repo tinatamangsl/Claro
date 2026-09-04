@@ -20,7 +20,7 @@ type Spec = [ISODate, ISODate | null];
 
 const cycleWith = (...specs: Spec[]): CycleState => ({
   ...blankCycle(),
-  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
+  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null, syncConsentAt: null },
   entries: Object.fromEntries(
     specs.map(([startDate, endDate], i) => [
       `e${i}`,

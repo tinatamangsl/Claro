@@ -576,6 +576,46 @@ publishes `claro/dist/client`. **Pages Source must be set to "GitHub Actions"**,
 a branch": the app is in a subfolder and its output is gitignored, so branch mode has nothing to
 serve.
 
+## Sync: an account, layered on top of a local-first app
+
+Claro still works exactly as it did with no account, no network and no Supabase project. That is
+the design constraint, not a fallback: `supabase.ts` exports `syncAvailable`, and with either
+environment variable missing the client is **null** and every path downstream treats that as
+normal. A build without credentials is a valid build, which is what keeps `npm run dev` and the
+whole existing suite running against a store that never leaves `localStorage`.
+
+**One row per person, holding the whole snapshot as JSONB.** `supabase/schema.sql` is the entire
+server side. It mirrors how the app already worked: a single `ClaroState` written through one
+function, so the table needs no per-entity mapping and no second opinion about what a quarter is.
+RLS is the only security boundary, because the anon key is compiled into a public bundle and is
+readable by anyone; nothing in those policies may be relaxed to `true` or to `authenticated`
+alone.
+
+**`updated_at` is an optimistic-concurrency token, stamped by a trigger.** A push carries the
+value it is replacing and updates `where updated_at = token`. Zero rows affected means another
+device wrote in between, and that is reported as a conflict rather than allowed to overwrite work
+this device never saw.
+
+**Nothing silently picks a winner.** `sync.ts` holds every decision that could lose somebody's
+writing, kept pure and tested without a browser or a server. `planSignIn` returns `push` when the
+account is empty, `pull` when this browser holds nothing, and **`ask`** when both hold different
+work, because last-write-wins is smaller code that eventually eats a quarter of planning.
+
+**Cycle notes are withheld until they are separately allowed.** They were collected under a screen
+promising they stayed on the device and went nowhere, and that agreement cannot be read forward as
+agreement to upload them. `CycleSettings.syncConsentAt` is null for everyone who opted in before
+sync existed, and while it is null `forUpload` leaves the **entire `cycle` branch out of the
+payload** and the rest of the planner syncs without it. Absent is not blanked: `merge` reads a
+missing `cycle` as "the server was never told", never as "delete what is here", or a pull would
+destroy the exact data this feature is most careful about.
+
+**The copy was changed before a byte could move.** "Stored on this device" in the footer, "Private,
+on this device" on the cycle page, and both bullets on the cycle consent screen were true for the
+whole life of the app and stopped being true the moment an account could hold a copy. They are now
+read off the real state rather than asserted, and the consent screen, the one place consent is
+actually given, says what it now does. What did not change is the half that still holds
+absolutely: nothing reaches another person.
+
 ## Private cycle notes
 
 Four routes, none of them in the nav: `/cycle` is the centralised view, `/cycle-day` the daily

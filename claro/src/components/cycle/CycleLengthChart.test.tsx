@@ -13,7 +13,7 @@ const withGaps = (...gaps: number[]): CycleState => {
 
   return {
     ...blankCycle(),
-    settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
+    settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null, syncConsentAt: null },
     entries: Object.fromEntries(
       starts.map((startDate, i) => [`e${i}`, { id: `e${i}`, startDate, endDate: null, loggedAt: "x" }]),
     ),

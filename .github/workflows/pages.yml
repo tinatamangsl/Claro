@@ -46,7 +46,18 @@ jobs:
       # A project site is served from /<repo>/, never from /. Derived rather
       # than written out, so renaming the repository cannot silently publish a
       # site whose every asset URL is one level too high.
+      # Supabase credentials, from repository secrets. Both are optional: with
+      # them absent the build is the local-only app it has always been, which is
+      # also what keeps a fork of this repo working without a project of its own.
+      #
+      # These are compiled into a public bundle and are readable by anyone. That
+      # is how Supabase anon keys are meant to work; row-level security in
+      # supabase/schema.sql is the actual boundary. Never put a service_role key
+      # here, it would bypass every policy.
       - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: CLARO_BASE="/${{ github.event.repository.name }}/" npm run build
 
       - name: Prepare the static site

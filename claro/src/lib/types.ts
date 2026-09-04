@@ -544,6 +544,16 @@ export type CycleSettings = {
   enabled: boolean;
   optedInAt: string | null;
   cycleLength: number | null;
+  /**
+   * Additive: when the person agreed that cycle notes may leave the device.
+   *
+   * Separate from `optedInAt` on purpose, and null for everybody who opted in
+   * before sync existed. They agreed to a screen that said their cycle notes
+   * were stored on this device and sent nowhere, so that agreement cannot be
+   * read as agreement to upload them. Until this is set, `forUpload` withholds
+   * the whole `cycle` branch from the payload.
+   */
+  syncConsentAt: string | null;
 };
 
 export const MIN_STATED_CYCLE_DAYS = 15;

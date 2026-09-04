@@ -64,7 +64,7 @@ export function emptyState(): ClaroState {
 
 export function blankCycle(): CycleState {
   return {
-    settings: { enabled: false, optedInAt: null, cycleLength: null },
+    settings: { enabled: false, optedInAt: null, cycleLength: null, syncConsentAt: null },
     entries: {},
     checkIns: {},
     lastSeen: null,
@@ -498,6 +498,14 @@ function readCycle(raw: unknown): CycleState {
       // which is the truth about it.
       cycleLength:
         typeof c.settings?.cycleLength === "number" ? c.settings.cycleLength : null,
+      /*
+       * Additive, and null is the answer that matters. Every store written
+       * before sync existed arrives without this, which correctly reads as
+       * "has not agreed to upload cycle notes" rather than as consent that
+       * happens to be undated.
+       */
+      syncConsentAt:
+        typeof c.settings?.syncConsentAt === "string" ? c.settings.syncConsentAt : null,
     },
     entries: readCycleEntries(c.entries),
     // Additive: a store saved before check-ins existed simply arrives empty.

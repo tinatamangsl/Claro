@@ -10,7 +10,7 @@ const TODAY: ISODate = "2026-08-21";
 /** Three completed periods 28 days apart, the last one closed. */
 const withHistory = (openLast = false): CycleState => ({
   ...blankCycle(),
-  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
+  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null, syncConsentAt: null },
   entries: Object.fromEntries(
     [
       ["2026-06-21", "2026-06-25"],

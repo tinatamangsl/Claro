@@ -6,6 +6,8 @@ import { UndoBar } from "@/components/UndoBar";
 import { FocusControl } from "@/components/FocusControl";
 import { SoundControl } from "@/components/SoundControl";
 import { useClaro } from "@/lib/claro-store";
+import { AccountBar } from "@/components/AccountBar";
+import { SyncConflict } from "@/components/SyncConflict";
 import { cn } from "@/lib/utils";
 
 /** The planning hierarchy, in reverse: the level used most often comes first. */
@@ -98,7 +100,15 @@ export function AppShell({ children, wide }: { children: ReactNode; wide?: boole
       </header>
 
       <main className={cn(page, "flex-1 pb-14 pt-8 sm:pt-12")}>
-        {ready ? children : <BootSkeleton />}
+        {ready ? (
+          <>
+            {/* Interrupts on purpose: syncing is stopped until it is answered. */}
+            <SyncConflict />
+            {children}
+          </>
+        ) : (
+          <BootSkeleton />
+        )}
       </main>
 
       {/* One way back, on every screen. */}
@@ -129,27 +139,37 @@ function SaveIndicator({ ready, status }: { ready: boolean; status: string }) {
 function AppFooter({ ready, today, page }: { ready: boolean; today: string; page: string }) {
   return (
     <footer className="mt-auto border-t border-border/70">
-      <div className={cn(page, "flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-5")}>
-        <span className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
-          <span className="eyebrow">Claro</span>
-          <span aria-hidden className="text-muted-foreground/40">
-            ·
+      <div className={cn(page, "py-5")}>
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+          <span className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
+            <span className="eyebrow">Claro</span>
+            <span aria-hidden className="text-muted-foreground/40">
+              ·
+            </span>
+            Quarter → Week → Daily
           </span>
-          Quarter → Week → Daily
-        </span>
 
-        {ready && today && (
-          <span className="tnum flex items-center gap-2.5 text-[11px] text-muted-foreground">
-            <span>{formatQuarterShort(quarterOfDay(today))}</span>
-            <span aria-hidden className="text-muted-foreground/40">
-              ·
+          {ready && today && (
+            <span className="tnum flex items-center gap-2.5 text-[11px] text-muted-foreground">
+              <span>{formatQuarterShort(quarterOfDay(today))}</span>
+              <span aria-hidden className="text-muted-foreground/40">
+                ·
+              </span>
+              <span>{formatWeekNumber(weekOfDay(today))}</span>
             </span>
-            <span>{formatWeekNumber(weekOfDay(today))}</span>
-            <span aria-hidden className="text-muted-foreground/40">
-              ·
-            </span>
-            <span>Stored on this device</span>
-          </span>
+          )}
+        </div>
+
+        {/*
+          Where the writing lives, on its own line.
+          It sat in the meta row beside the quarter and the week, which was fine
+          for a four-word sentence and wrong the moment it could open an email
+          field: nested in a right-aligned column, "full width" is a narrow one.
+        */}
+        {ready && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground">
+            <AccountBar />
+          </div>
         )}
       </div>
     </footer>

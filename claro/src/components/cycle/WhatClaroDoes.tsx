@@ -31,9 +31,20 @@ export function WhatClaroDoes({ className }: { className?: string }) {
       </summary>
 
       <div className="mt-2.5 space-y-2 border-l-2 border-border pl-3 text-[11px] leading-relaxed text-muted-foreground">
+        {/*
+          "On this device, and shared with nobody" was one claim doing two jobs.
+          The second half still holds absolutely and is the one that matters:
+          nothing here reaches another person. The first half became a setting
+          rather than a fact once an account could hold a copy, so it is stated
+          as the setting it now is.
+        */}
         <p>
-          Everything here is worked out from the dates you entered, on this device, and shared with
-          nobody. It is an estimate, not medical advice.
+          Everything here is worked out from the dates you entered, and shared with nobody else. It
+          is an estimate, not medical advice.
+        </p>
+        <p>
+          Your cycle notes stay on this device unless you sign in and choose to sync them. If you
+          do, they are stored in your own account, readable only when signed in as you.
         </p>
         <p>{PHASE_ESTIMATE_NOTE}</p>
         <p>{CYCLE_LENGTH_NOTE}</p>

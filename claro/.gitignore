@@ -10,6 +10,8 @@ dist-ssr
 *.log
 .env
 .env.*
+# The template is meant to be committed; the filled-in copies are not.
+!.env.example
 .DS_Store
 .idea
 .vscode/*

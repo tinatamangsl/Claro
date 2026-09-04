@@ -5,6 +5,8 @@ import { useCallback, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { useClaro } from "@/lib/claro-store";
+import { useSync } from "@/lib/use-sync";
+import { CycleSyncConsent } from "@/components/cycle/CycleSyncConsent";
 import { EditableText } from "@/components/EditableText";
 import { CycleCalendar } from "@/components/cycle/CycleCalendar";
 import { GuidanceCards } from "@/components/cycle/GuidanceCards";
@@ -148,10 +150,7 @@ export function CycleNotes() {
     <div className="space-y-10">
       <header className="border-b border-border pb-5">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <Lock aria-hidden className="h-3 w-3" />
-            Private, on this device
-          </span>
+          <CyclePrivacyLine />
           <Link to="/calendar" className="btn btn-sm btn-quiet gap-1.5">
             <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
             Back to Calendar
@@ -165,6 +164,8 @@ export function CycleNotes() {
         */}
         <h1 className="sr-only">Cycle notes</h1>
       </header>
+      <CycleSyncConsent />
+
       {/*
         The whole of "today" on one screen, side by side.
 
@@ -402,6 +403,28 @@ export function CycleNotes() {
 }
 
 /** Nothing is collected or shown until this is answered. */
+/**
+ * Where these particular notes live, said accurately rather than by habit.
+ *
+ * "Private, on this device" was a promise, not a label, and it is only true
+ * while nothing is syncing them. Signed in with consent given, they are in an
+ * account; signed in without it, they really are still device-only, and saying
+ * so is the reassurance that makes the choice feel real.
+ */
+function CyclePrivacyLine() {
+  const { cycle } = useClaro();
+  const { session, available } = useSync();
+
+  const synced = available && session && cycle.settings.syncConsentAt;
+
+  return (
+    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <Lock aria-hidden className="h-3 w-3" />
+      {synced ? "Private to your account" : "Private, on this device"}
+    </span>
+  );
+}
+
 function OptIn({ onEnable }: { onEnable: () => void }) {
   return (
     <div className="mx-auto max-w-2xl">
@@ -418,9 +441,16 @@ function OptIn({ onEnable }: { onEnable: () => void }) {
 
         <ul className="mt-5 space-y-2 text-[0.88rem] leading-relaxed text-muted-foreground">
           {[
-            "Stored on this device with everything else you write in Claro.",
-            "Never shared, never sent anywhere, and never used to change your plans.",
-            "You can delete all of it in one action, at any time.",
+            /*
+             * These two lines used to read "stored on this device" and "never
+             * sent anywhere". They were true for the whole life of the app and
+             * stopped being true when an account could hold a copy. Leaving
+             * them would make this screen, the one place consent is actually
+             * given, the one place the app lied.
+             */
+            "Stored with everything else you write in Claro: on this device, and in your own account if you sign in.",
+            "Never shared with anyone else, and never used to change your plans.",
+            "You choose separately whether cycle notes sync at all, and you can delete all of it in one action, at any time.",
           ].map((line) => (
             <li key={line} className="flex items-start gap-2">
               <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gold" />

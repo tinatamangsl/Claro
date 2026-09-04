@@ -38,7 +38,7 @@ import type { CycleState, ISODate } from "./types";
 type Spec = ISODate | [ISODate, ISODate | null];
 
 const cycleWith = (...specs: Spec[]): CycleState => ({
-  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
+  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null, syncConsentAt: null },
   entries: Object.fromEntries(
     specs.map((spec, i) => {
       const [startDate, endDate] = Array.isArray(spec) ? spec : [spec, null];
@@ -135,7 +135,7 @@ describe("the next-start estimate", () => {
 const withCheckIns = (
   entries: Partial<Record<string, { energy?: number; mood?: string; stress?: number }>>,
 ): CycleState => ({
-  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
+  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null, syncConsentAt: null },
   entries: {},
   checkIns: Object.fromEntries(
     Object.entries(entries).map(([dayId, note]) => [
@@ -216,7 +216,7 @@ describe("what deleting everything has to remove", () => {
   it("reports data once the user has opted in", () => {
     const cycle: CycleState = {
       ...blankCycle(),
-      settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
+      settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null, syncConsentAt: null },
     };
 
     expect(hasAnyCycleData(cycle)).toBe(true);

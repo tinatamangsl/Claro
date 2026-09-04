@@ -10,6 +10,7 @@ import {
 import { Toaster } from "sonner";
 
 import { ClaroProvider } from "@/lib/claro-store";
+import { SyncProvider } from "@/lib/use-sync";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -62,20 +63,27 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   return (
     <ClaroProvider>
-      <Outlet />
-      <Toaster
-        position="bottom-right"
-        toastOptions={{
-          // Toasts are paper too — never sonner's default white-on-grey.
-          classNames: {
-            toast: "surface text-sm text-foreground",
-            title: "font-medium",
-            description: "text-muted-foreground",
-            actionButton: "btn btn-sm btn-primary",
-            cancelButton: "btn btn-sm btn-quiet",
-          },
-        }}
-      />
+      {/*
+        Inside the store, never around it. Sync reads the store and replaces it,
+        and it must not run before the store reports ready or it would touch the
+        first client render, which is invariant 1.
+      */}
+      <SyncProvider>
+        <Outlet />
+        <Toaster
+          position="bottom-right"
+          toastOptions={{
+            // Toasts are paper too — never sonner's default white-on-grey.
+            classNames: {
+              toast: "surface text-sm text-foreground",
+              title: "font-medium",
+              description: "text-muted-foreground",
+              actionButton: "btn btn-sm btn-primary",
+              cancelButton: "btn btn-sm btn-quiet",
+            },
+          }}
+        />
+      </SyncProvider>
     </ClaroProvider>
   );
 }

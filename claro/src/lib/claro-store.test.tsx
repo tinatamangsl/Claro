@@ -1376,7 +1376,7 @@ describe("cycle notes are private, opt-in, and fully deletable", () => {
     const stored = loadState().cycle;
     expect(stored.entries).toEqual({});
     expect(stored.checkIns).toEqual({});
-    expect(stored.settings).toEqual({ enabled: false, optedInAt: null, cycleLength: null });
+    expect(stored.settings).toEqual({ enabled: false, optedInAt: null, cycleLength: null, syncConsentAt: null });
   });
 
   it("leaves the day's own reflection untouched when cycle data is deleted", async () => {
@@ -1522,7 +1522,7 @@ describe("cycle edits recalculate, and deletion stays isolated", () => {
     const state = loadState();
     // Every trace of cycle data is gone.
     expect(state.cycle).toEqual({
-      settings: { enabled: false, optedInAt: null, cycleLength: null },
+      settings: { enabled: false, optedInAt: null, cycleLength: null, syncConsentAt: null },
       entries: {},
       checkIns: {},
       lastSeen: null,

@@ -18,7 +18,7 @@ import type { CycleCheckIn, CycleState, ISODate } from "./types";
 
 /** Four starts 28 days apart, so the median gap is a clean 28. */
 const withStarts = (...starts: ISODate[]): CycleState => ({
-  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null },
+  settings: { enabled: true, optedInAt: "2026-01-01T09:00:00.000Z", cycleLength: null, syncConsentAt: null },
   entries: Object.fromEntries(
     starts.map((startDate, i) => [`e${i}`, { id: `e${i}`, startDate, endDate: null, loggedAt: "x" }]),
   ),

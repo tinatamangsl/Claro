@@ -12,6 +12,7 @@
     "build:pages": "CLARO_BASE=/Claro/ vite build && cd dist/client && cp _shell.html index.html && cp _shell.html 404.html && rm _shell.html && touch .nojekyll"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.115.0",
     "@tanstack/react-router": "^1.170.29",
     "@tanstack/react-start": "^1.168.46",
     "clsx": "^2.1.1",
