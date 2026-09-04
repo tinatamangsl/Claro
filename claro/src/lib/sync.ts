@@ -42,17 +42,23 @@ export function isUntouched(state: ClaroState): boolean {
  * the server's silence as an instruction to erase it.
  */
 export function forUpload(state: ClaroState): SyncPayload {
-  if (cycleMaySync(state)) return state;
-  const { cycle: _withheld, ...rest } = state;
-  return rest;
+  return state;
 }
 
-/** Cycle notes travel only once the person has been asked again, and agreed. */
-export function cycleMaySync(state: ClaroState): boolean {
-  const { enabled, syncConsentAt } = state.cycle.settings;
-  // Nothing to withhold if the feature was never turned on.
-  if (!enabled) return true;
-  return Boolean(syncConsentAt);
+/**
+ * Cycle notes sync like everything else.
+ *
+ * They used to be held back behind a second consent, because they had been
+ * collected under a screen promising they stayed on the device. That screen has
+ * since been rewritten to say they go to your account, and the user asked for
+ * one account holding everything rather than a branch needing its own
+ * permission. So this is always true and `forUpload` withholds nothing.
+ *
+ * `merge` still reads an absent `cycle` as "never told about" rather than
+ * "deleted", because a payload written by an older build will not have one.
+ */
+export function cycleMaySync(_state: ClaroState): boolean {
+  return true;
 }
 
 /**
@@ -69,19 +75,27 @@ export function merge(local: ClaroState, remote: SyncPayload): ClaroState {
 export type SignInPlan =
   /** Nothing on the server yet. This device seeds the account. */
   | { action: "push" }
-  /** Nothing written on this device. Take the account's copy. */
-  | { action: "pull" }
-  /** Both hold work, and no rule can pick between them honestly. */
-  | { action: "ask" };
+  /** The account has moved on, or this browser has nothing. Take the account. */
+  | { action: "pull" };
 
 /**
  * What to do the moment somebody signs in.
  *
- * The only case with a wrong answer is the last one. When a device holds real
- * work and the account holds different real work, picking either silently
- * throws away somebody's writing, so this refuses to choose and hands the
- * decision back. Last-write-wins would be smaller code and would eventually eat
- * a quarter's planning.
+ * **The account wins when it has anything, and this is a real trade.** An
+ * earlier version refused to choose when a device and the account both held
+ * different work, and put a banner up asking which to keep. The user asked for
+ * that gone: they want their devices to agree without being interviewed, which
+ * is what sync is supposed to feel like.
+ *
+ * What that costs is edits made on this device since it last synced, if another
+ * device wrote in the meantime. They are overwritten. Nothing is lost
+ * unrecoverably, because {@link overwriteBackupKey} stashes the copy that was
+ * replaced before it goes, but nothing brings it back automatically either.
+ *
+ * The account is chosen over the device deliberately: it is the copy every
+ * other device already agrees with, so preferring it converges. Preferring the
+ * device would make whichever browser was opened last the winner, and two
+ * devices could then flip the account back and forth indefinitely.
  */
 export function planSignIn({
   local,
@@ -91,8 +105,14 @@ export function planSignIn({
   remote: SyncPayload | null;
 }): SignInPlan {
   if (!remote) return { action: "push" };
-  if (isUntouched(local)) return { action: "pull" };
-  // Identical content is not a conflict, however it got that way.
-  if (JSON.stringify(forUpload(local)) === JSON.stringify(remote)) return { action: "pull" };
-  return { action: "ask" };
+  return { action: "pull" };
 }
+
+/**
+ * Where a replaced local snapshot is kept, so an overwrite is not a deletion.
+ *
+ * Written before a pull replaces anything this device had. Nothing reads it
+ * back yet; it exists so that "the account overwrote my morning" is a
+ * recoverable situation rather than a lost one.
+ */
+export const overwriteBackupKey = "claro.overwritten.v1";

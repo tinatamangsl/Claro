@@ -1,17 +1,21 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import {
   DRIFTED_INVITATION,
   DRIFTED_NOTE,
   DRIFTED_QUESTIONS,
   PHASE_AFFIRMATIONS,
+  answerToday,
   PHASE_QUESTIONS,
   hasDrifted,
 } from "@/lib/cycle-guidance";
 import { PHASE_META } from "@/lib/cycle-phases";
 import { positionOn, whyThisForYou } from "@/lib/cycle-timeline";
-import type { CycleState, ISODate } from "@/lib/types";
+import { estimatedWindow } from "@/lib/cycle-calendar";
+import { formatDayShort } from "@/lib/dates";
+import type { CycleState, ISODate, MatchAnswer } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { MatchPrompt } from "./MatchPrompt";
 
 /**
  * Today, in as few lines as it can honestly take.
@@ -48,9 +52,21 @@ import { cn } from "@/lib/utils";
 export function PhaseInsight({
   cycle,
   todayId,
+  onAnswer,
+  children,
 }: {
   cycle: CycleState;
   todayId: ISODate;
+  /** Answering the phase card. Optional: Daily embeds the card without asking. */
+  onAnswer?: (phase: string, answer: MatchAnswer) => void;
+  /**
+   * Rendered inside the card, under the affirmation.
+   *
+   * Daily puts the one-tap energy row here so that seeing where you are and
+   * recording how it feels are one object rather than two stacked ones. The
+   * cycle page passes nothing and gets the card alone.
+   */
+  children?: ReactNode;
 }) {
   const [showWhy, setShowWhy] = useState(false);
   const position = positionOn(cycle, todayId);
@@ -68,11 +84,22 @@ export function PhaseInsight({
           Once you have logged a period start, Claro can say which day of your own cycle a date
           falls on. Until then there is nothing to count from.
         </p>
+
+        {/*
+          The energy row belongs here too, and its absence was a real hole: on
+          Daily it meant somebody who had just turned cycle notes on could not
+          log anything until they had enough history for a phase to exist.
+          Recording how a day felt needs no estimate to be worth doing, and it
+          is how the history that resolves this gets written in the first place.
+        */}
+        {children}
       </section>
     );
   }
 
   const drifted = hasDrifted(cycle.guidanceMatches, "phase", position.phase);
+  const answer = answerToday(cycle.guidanceMatches, "phase", todayId);
+  const window = estimatedWindow(cycle);
   const why = whyThisForYou(cycle, position.phase);
 
   return (
@@ -99,7 +126,7 @@ export function PhaseInsight({
             {PHASE_META[position.phase].label}
           </p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Day {position.day} of your cycle
+            Day {position.day} of about {position.ofAbout}
             {position.projected && ", projected"}
           </p>
         </div>
@@ -146,6 +173,35 @@ export function PhaseInsight({
 
         {drifted && (
           <p className="mt-2 text-[0.82rem] text-muted-foreground">{DRIFTED_INVITATION}</p>
+        )}
+
+        {/*
+          The next window, and the standing reminder of what all of this is.
+          Both came off when the card became the design's affirmation, and both
+          were asked for back: the estimate is otherwise only in the Cycle
+          length tab, and a phase name with no caveat beside it reads as a
+          measurement rather than as arithmetic on dates somebody typed.
+        */}
+        {window && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="stat-chip">
+              Next period estimated {formatDayShort(window.from)}
+            </span>
+          </div>
+        )}
+
+        <p className="mt-3 text-[10px] text-muted-foreground">
+          Estimated from the dates you logged. Not a measurement.
+        </p>
+
+        {children}
+
+        {onAnswer && (
+          <MatchPrompt
+            cardLabel="the phase card"
+            answer={answer}
+            onAnswer={(next) => onAnswer(position.phase, next)}
+          />
         )}
       </div>
 

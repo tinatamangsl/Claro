@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { useClaro } from "./claro-store";
 import { supabase, syncAvailable } from "./supabase";
 import { pull, push, type SyncToken } from "./sync-client";
-import { forUpload, merge, planSignIn, type SyncPayload } from "./sync";
+import { forUpload, merge, overwriteBackupKey, planSignIn } from "./sync";
 
 /**
  * Sync, as a layer strictly on top of a local-first app.
@@ -27,8 +27,6 @@ export type SyncStatus =
   | "signed-out"
   | "syncing"
   | "synced"
-  /** Two versions exist and the person has to choose. Nothing was overwritten. */
-  | "conflict"
   | "error";
 
 type SyncApi = {
@@ -38,9 +36,6 @@ type SyncApi = {
   message: string | null;
   signIn: (email: string) => Promise<{ ok: boolean; message: string }>;
   signOut: () => Promise<void>;
-  /** Offered only in the conflict state, where both answers lose something. */
-  resolveKeepThisDevice: () => Promise<void>;
-  resolveKeepAccount: () => Promise<void>;
 };
 
 const SyncContext = createContext<SyncApi | null>(null);
@@ -61,12 +56,30 @@ const INERT: SyncApi = {
   message: null,
   signIn: async () => ({ ok: false, message: "Sync is not set up on this build." }),
   signOut: async () => {},
-  resolveKeepThisDevice: async () => {},
-  resolveKeepAccount: async () => {},
 };
 
 export function useSync(): SyncApi {
   return useContext(SyncContext) ?? INERT;
+}
+
+/**
+ * Keep a copy of what an incoming snapshot is about to replace.
+ *
+ * Best effort and deliberately dumb: one key, overwritten each time, holding
+ * the last thing this browser had before the account won. Nothing reads it
+ * back, and it is not a version history. It exists so that being overwritten
+ * by another device is a recoverable situation rather than a deletion, which
+ * is the price of resolving conflicts without stopping to ask.
+ */
+function stashOverwritten(state: unknown) {
+  try {
+    window.localStorage.setItem(
+      overwriteBackupKey,
+      JSON.stringify({ at: new Date().toISOString(), state }),
+    );
+  } catch {
+    // A full or unavailable localStorage must not stop a sync.
+  }
 }
 
 /** How long to wait after a change before mirroring it up. */
@@ -78,7 +91,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<SyncStatus>(syncAvailable ? "signed-out" : "off");
   const [message, setMessage] = useState<string | null>(null);
-  const [remote, setRemote] = useState<SyncPayload | null>(null);
 
   /** The row version this device last saw. Null means "no row yet". */
   const token = useRef<SyncToken | null>(null);
@@ -132,13 +144,11 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       token.current = result.row?.token ?? null;
       const plan = planSignIn({ local: state, remote: result.row?.payload ?? null });
 
-      if (plan.action === "ask") {
-        setRemote(result.row!.payload);
-        setStatus("conflict");
-        return;
-      }
-
       if (plan.action === "pull" && result.row) {
+        // Keep what is about to be replaced. Being overwritten by another
+        // device should be recoverable, even though nothing reads this back
+        // automatically.
+        stashOverwritten(state);
         replaceState(merge(state, result.row.payload));
       }
 
@@ -158,14 +168,18 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
         if (!seeded.ok) {
           if (seeded.reason === "conflict") {
-            // Another device seeded it between our read and our write.
-            setMessage("Your account was written to from somewhere else while this was loading.");
+            // Another device seeded the account first. Take what it wrote.
             const fresh = await pull(session.user.id);
             if (fresh.ok && fresh.row) {
               token.current = fresh.row.token;
-              setRemote(fresh.row.payload);
+              stashOverwritten(state);
+              replaceState(merge(state, fresh.row.payload));
+              reconciled.current = true;
+              setStatus("synced");
+              return;
             }
-            setStatus("conflict");
+            setStatus("error");
+            setMessage("Your account changed while this was loading.");
             return;
           }
           setStatus("error");
@@ -202,14 +216,22 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (result.reason === "conflict") {
-        // Somebody else wrote. Nothing of theirs was overwritten, and nothing
-        // of this device's was lost either: it is still in localStorage.
+        /*
+         * Another device wrote between this one's last read and this write.
+         * Take theirs and carry on rather than stopping to ask: the account is
+         * the copy every device agrees with, so preferring it converges. What
+         * this device was about to send is stashed first.
+         */
         const fresh = await pull(session.user.id);
         if (fresh.ok && fresh.row) {
           token.current = fresh.row.token;
-          setRemote(fresh.row.payload);
+          stashOverwritten(state);
+          replaceState(merge(state, fresh.row.payload));
+          setStatus("synced");
+          return;
         }
-        setStatus("conflict");
+        setStatus("error");
+        setMessage("Your account changed elsewhere and could not be re-read.");
         return;
       }
       setStatus("error");
@@ -237,28 +259,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     await supabase?.auth.signOut();
   }, []);
 
-  const resolveKeepThisDevice = useCallback(async () => {
-    if (!session) return;
-    setStatus("syncing");
-    const result = await push(session.user.id, forUpload(state), token.current);
-    if (result.ok) {
-      token.current = result.token;
-      reconciled.current = true;
-      setMessage(null);
-      setStatus("synced");
-      return;
-    }
-    setStatus("error");
-    setMessage(result.reason === "conflict" ? "The account changed again." : result.message);
-  }, [session, state]);
-
-  const resolveKeepAccount = useCallback(async () => {
-    if (!remote) return;
-    replaceState(merge(state, remote));
-    reconciled.current = true;
-    setStatus("synced");
-  }, [remote, state, replaceState]);
-
   return (
     <SyncContext.Provider
       value={{
@@ -268,8 +268,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         message,
         signIn,
         signOut,
-        resolveKeepThisDevice,
-        resolveKeepAccount,
       }}
     >
       {children}

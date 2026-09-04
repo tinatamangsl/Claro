@@ -67,12 +67,18 @@ export function GuidanceCards({
    * load, and the point of collapsing was to rank the guidance, not hide it.
    */
   /*
-   * All four start closed, as the design has them. Opening the first was a
-   * hedge against the row of shut cards reading as empty, and it cost the thing
-   * the collapse was for: the section is four lines somebody can take in, and
-   * one card open pushed the rest of the page down by a screen on a phone.
+   * All four open. This has been round twice: they were collapsed to stop the
+   * page reading as a dump, then the user pointed out that a row of shut cards
+   * is not "what to eat, move and do", it is four labels and a chevron. The
+   * two-column layout is what makes both possible now, because the suggestions
+   * sit beside the calendar rather than pushing it down the page.
+   *
+   * Still individually collapsible: the state is per card, so one closed
+   * because it is not useful today stays closed.
    */
-  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [open, setOpen] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(GUIDANCE_CARD_ORDER.map((card) => [card, true])),
+  );
 
   const position = positionOn(cycle, todayId);
   if (!position) return null;

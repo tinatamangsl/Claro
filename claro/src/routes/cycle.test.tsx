@@ -98,10 +98,11 @@ describe("the screen once it is on", () => {
     expect(headings).toEqual([
       "Cycle notes",
       "Your cycle calendar",
-      // Today is one card, and it now says one thing. The energy row went with
-      // the stat chips and the match prompt when the card became the design's
-      // affirmation; energy is still set in the log.
+      // Today is one card carrying the reading and the two things done about
+      // it: the energy row and the match prompt were taken off when the card
+      // became the design's affirmation, and put back on request.
       "Today",
+      "Energy today",
       // No guidance section here: with no logged start there is no phase, and
       // a card of suggestions for a phase nobody is in would be invention.
       "Your cycle, part by part",
@@ -250,13 +251,10 @@ describe("the screen once it is on", () => {
       );
     });
 
-    /*
-     * The day is on the today card, as a quiet line under the phase. The next
-     * estimated window is not: the card carries one affirmation and the day it
-     * applies to, and the estimate lives with the numbers that produce it.
-     */
-    expect(h.container.textContent).toContain("Day 6 of your cycle");
-    expect(h.container.textContent).not.toContain("Next period estimated");
+    // Both on the today card: the day line carries the estimated length so the
+    // chip beside it need not repeat it.
+    expect(h.container.textContent).toContain("Day 6 of about 28");
+    expect(h.container.textContent).toContain("Next period estimated");
 
     fireEvent.click(screen.getByRole("tab", { name: "Cycle length" }));
     expect(h.container.textContent).toContain("An estimate from your own dates");
@@ -438,6 +436,11 @@ describe("the guidance, and the standing offer to disagree with it", () => {
    * is the point of the redesign: four suggestions stacked open was the
    * information dump this page was reorganised to stop being.
    */
+  /*
+   * They open by default now, so this is a guard rather than a step: it still
+   * opens anything closed, so the tests below read the same whichever way that
+   * decision goes next.
+   */
   const openEverySuggestion = () => {
     for (const name of ["Work Focus", "Movement", "Food"]) {
       const header = screen.getByRole("button", { name: new RegExp(`^${name}`) });
@@ -494,13 +497,12 @@ describe("the guidance, and the standing offer to disagree with it", () => {
 
     const notReally = screen.getAllByRole("button", { name: /^Not really, about/ });
     /*
-     * Three ask, and they are the three that make a suggestion. The journal
-     * card asks nothing because there is no right answer to something written
-     * in the reader's own words, and the today card asks nothing because it no
-     * longer offers a reading: an affirmation about what somebody is allowed to
-     * do is not a claim to be confirmed or denied.
+     * Four ask: the today card and the three that make a suggestion. The
+     * journal card is the one that does not, because there is no right answer
+     * to something written in the reader's own words, and grading it would be
+     * the page passing a verdict on what they wrote.
      */
-    expect(notReally.length).toBe(3);
+    expect(notReally.length).toBe(4);
 
     act(() => {
       notReally[0].click();
@@ -511,7 +513,7 @@ describe("the guidance, and the standing offer to disagree with it", () => {
     expect(saved[0].answer).toBe("notReally");
   });
 
-  it("opens none of the four, so the section is four lines until it is asked", async () => {
+  it("opens all four, because a shut row is a label rather than a suggestion", async () => {
     await withHistory();
 
     const headers = ["Work Focus", "Movement", "Journal Prompt", "Food"].map((name) =>
@@ -520,28 +522,25 @@ describe("the guidance, and the standing offer to disagree with it", () => {
     const open = () => headers.filter((h) => h.getAttribute("aria-expanded") === "true");
 
     /*
-     * All four closed. The first used to open, as a hedge against a row of shut
-     * cards reading as empty, and it cost the thing the collapse was for: one
-     * open card pushed the rest of the page down by a screen on a phone, which
-     * is most of what "still cluttered" meant.
+     * This went round twice: collapsed to stop the page reading as a dump, then
+     * opened again when the user pointed out that four shut rows are not "what
+     * to eat, move and do". The two-column layout is what lets them be open
+     * without pushing the rest of the page down.
      */
-    expect(open()).toEqual([]);
+    expect(open()).toEqual(headers);
 
-    fireEvent.click(headers[3]);
+    // Still individually collapsible, and independent rather than an accordion.
     fireEvent.click(headers[0]);
-    // Independent, not an accordion. Somebody comparing two of them should not
-    // have the first shut in their face to read the second.
-    expect(open()).toEqual([headers[0], headers[3]]);
+    expect(open()).toEqual([headers[1], headers[2], headers[3]]);
 
     fireEvent.click(headers[0]);
-    expect(open()).toEqual([headers[3]]);
+    expect(open()).toEqual(headers);
   });
 
   it("asks the journal prompt as a question, and never grades the answer", async () => {
     await withHistory();
 
     const header = screen.getByRole("button", { name: /^Journal Prompt/ });
-    fireEvent.click(header);
 
     const body = document.getElementById(header.getAttribute("aria-controls")!)!;
     expect(body.textContent).toContain("?");
@@ -556,8 +555,6 @@ describe("the guidance, and the standing offer to disagree with it", () => {
 
   it("keeps what was written in the journal on the same check-in as everything else", async () => {
     const h = await withHistory();
-    fireEvent.click(screen.getByRole("button", { name: /^Journal Prompt/ }));
-
     const box = screen.getByLabelText("Your answer to today's journal prompt");
     fireEvent.change(box, { target: { value: "finishing the migration, then nothing" } });
     fireEvent.blur(box);
@@ -599,7 +596,6 @@ describe("the guidance, and the standing offer to disagree with it", () => {
     expect(screen.getByRole("button", { name: "Yes, about the food card" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Yes, about the movement card" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Yes, about the work focus card" })).toBeTruthy();
-    // The today card no longer asks, so there is no phase card prompt to name.
-    expect(screen.queryByRole("button", { name: "Yes, about the phase card" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Yes, about the phase card" })).toBeTruthy();
   });
 });

@@ -36,7 +36,13 @@ export function QuickEnergy({
   cycle: CycleState;
   todayId: ISODate;
   onWrite: (energy: EnergyLevel | null) => void;
-  onOpenLog: () => void;
+  /**
+   * Where the full form is, when there is one to go to.
+   *
+   * Optional because Daily embeds this row without one: the whole form is a
+   * page away there, and a control that goes nowhere is worse than no control.
+   */
+  onOpenLog?: () => void;
 }) {
   const note = checkInOn(cycle, todayId);
   /*
@@ -64,13 +70,15 @@ export function QuickEnergy({
           >
             Change
           </button>
-          <button
-            type="button"
-            onClick={onOpenLog}
-            className="text-[0.82rem] text-primary underline-offset-2 hover:underline"
-          >
-            Full log
-          </button>
+          {onOpenLog && (
+            <button
+              type="button"
+              onClick={onOpenLog}
+              className="text-[0.82rem] text-primary underline-offset-2 hover:underline"
+            >
+              Full log
+            </button>
+          )}
         </div>
       </div>
     );
@@ -80,13 +88,15 @@ export function QuickEnergy({
     <div className="mt-4 border-t border-border/60 pt-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="eyebrow">Energy today</h2>
-        <button
-          type="button"
-          onClick={onOpenLog}
-          className="text-[0.82rem] text-primary underline-offset-2 hover:underline"
-        >
-          Log today
-        </button>
+        {onOpenLog && (
+          <button
+            type="button"
+            onClick={onOpenLog}
+            className="text-[0.82rem] text-primary underline-offset-2 hover:underline"
+          >
+            Log today
+          </button>
+        )}
       </div>
 
       <div

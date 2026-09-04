@@ -7,7 +7,6 @@ import { FocusControl } from "@/components/FocusControl";
 import { SoundControl } from "@/components/SoundControl";
 import { useClaro } from "@/lib/claro-store";
 import { AccountBar } from "@/components/AccountBar";
-import { SyncConflict } from "@/components/SyncConflict";
 import { cn } from "@/lib/utils";
 
 /** The planning hierarchy, in reverse: the level used most often comes first. */
@@ -110,15 +109,7 @@ export function AppShell({ children, wide }: { children: ReactNode; wide?: boole
       </header>
 
       <main className={cn(page, "flex-1 pb-14 pt-8 sm:pt-12")}>
-        {ready ? (
-          <>
-            {/* Interrupts on purpose: syncing is stopped until it is answered. */}
-            <SyncConflict />
-            {children}
-          </>
-        ) : (
-          <BootSkeleton />
-        )}
+        {ready ? children : <BootSkeleton />}
       </main>
 
       {/* One way back, on every screen. */}

@@ -53,9 +53,8 @@ import {
   toggleScheduleItem,
 } from "@/lib/schedule";
 import { CloseDay } from "@/components/today/CloseDay";
-import { CyclePrompt } from "@/components/today/CyclePrompt";
+import { CycleToday } from "@/components/today/CycleToday";
 import { CycleLink } from "@/components/cycle/CycleLink";
-import { hasCheckIn } from "@/lib/cycle";
 import {
   carryItem,
   closeDay,
@@ -173,7 +172,6 @@ function TodayView() {
   }, []);
 
   const [closing, setClosing] = useState(false);
-  const [cycleDismissed, setCycleDismissed] = useState(false);
   /** The hour a drag from the lists is hovering, for the schedule to light up. */
   const [dropHour, setDropHour] = useState<string | null>(null);
 
@@ -401,12 +399,6 @@ function TodayView() {
 
   const closeEligible = clock !== null && isCloseEligible(dayId, clock);
 
-  /**
-   * Offered only when the user has turned cycle notes on and written a note for
-   * this day. It asks; it never acts, and it never reads anything into the note.
-   */
-  const showCyclePrompt =
-    !cycleDismissed && cycle.settings.enabled && hasCheckIn(cycle, dayId) && dayId === today;
   const live = isSessionOpen(session) ? session : null;
 
   /** A reorder is an id sequence, resolved against live state. See `reorderPriorities`. */
@@ -568,7 +560,16 @@ function TodayView() {
               onDelete={deleteHabit}
             />
 
-            {showCyclePrompt && <CyclePrompt onDismiss={() => setCycleDismissed(true)} />}
+            {/*
+              The card, not a link away.
+
+              A dismissible strip used to sit here asking "would you like to
+              adjust today's plan?", whose only affordance was a link to
+              another screen. Everything it offered is in the card, which also
+              shows where you are and takes the day's energy in one tap, so two
+              cycle things on Daily became one usable one.
+            */}
+            <CycleToday />
 
             <CloseDay
               day={record}

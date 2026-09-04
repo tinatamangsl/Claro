@@ -46,7 +46,7 @@ export function AccountBar() {
           four-word label was the only thing on screen about it: enough to know
           something was wrong, nothing to act on.
         */}
-        {message && (status === "error" || status === "conflict") && (
+        {message && status === "error" && (
           <span className="text-destructive">{message}</span>
         )}
       </span>
@@ -113,6 +113,5 @@ export function AccountBar() {
 const WHERE: Partial<Record<ReturnType<typeof useSync>["status"], string>> = {
   syncing: "Saving to your account",
   synced: "Synced to your account",
-  conflict: "On this device, not yet synced",
   error: "On this device, sync failed",
 };

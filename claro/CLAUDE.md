@@ -609,18 +609,30 @@ value it is replacing and updates `where updated_at = token`. Zero rows affected
 device wrote in between, and that is reported as a conflict rather than allowed to overwrite work
 this device never saw.
 
-**Nothing silently picks a winner.** `sync.ts` holds every decision that could lose somebody's
-writing, kept pure and tested without a browser or a server. `planSignIn` returns `push` when the
-account is empty, `pull` when this browser holds nothing, and **`ask`** when both hold different
-work, because last-write-wins is smaller code that eventually eats a quarter of planning.
+**`sync.ts` holds every decision that could lose somebody's writing**, kept pure and tested
+without a browser or a server. `planSignIn` returns `push` only when the account is empty, and
+`pull` otherwise. See the conflict note below for what that trades away.
 
-**Cycle notes are withheld until they are separately allowed.** They were collected under a screen
-promising they stayed on the device and went nowhere, and that agreement cannot be read forward as
-agreement to upload them. `CycleSettings.syncConsentAt` is null for everyone who opted in before
-sync existed, and while it is null `forUpload` leaves the **entire `cycle` branch out of the
-payload** and the rest of the planner syncs without it. Absent is not blanked: `merge` reads a
-missing `cycle` as "the server was never told", never as "delete what is here", or a pull would
-destroy the exact data this feature is most careful about.
+**Cycle notes sync like everything else, and two screens were removed to make that true.** They
+were held back behind a second consent, on the reasoning that they had been collected under a
+promise that they stayed on the device. The user asked for that gone along with the conflict
+banner: they want one account holding everything and devices that agree without interviewing
+anybody. `cycleMaySync` is now unconditionally true and `forUpload` withholds nothing.
+`CycleSettings.syncConsentAt` stays in the type so old stores still load, and `merge` still reads
+an absent `cycle` as "never told about" rather than "deleted", because a payload written by an
+older build will not have one.
+
+**Conflicts resolve themselves, and the account wins.** `planSignIn` used to return `ask` when a
+device and the account both held different work, and a banner asked which to keep. It now pulls.
+The account is preferred over the device because it is the copy every other device already agrees
+with, so preferring it converges; preferring the device would make whichever browser was opened
+last the winner and let two of them flip the account back and forth indefinitely.
+
+**What that costs is real and should not be forgotten:** edits made on a device since its last
+sync are overwritten if another device wrote in the meantime. `overwriteBackupKey`
+(`claro.overwritten.v1`) stashes the replaced snapshot in `localStorage` first, so this is
+recoverable by hand, but nothing reads it back and it is not a version history. If sync ever
+grows beyond one person's own devices, this is the decision to revisit first.
 
 **The copy was changed before a byte could move.** "Stored on this device" in the footer, "Private,
 on this device" on the cycle page, and both bullets on the cycle consent screen were true for the
@@ -728,16 +740,19 @@ design has three, and the verdict was that it was "still so badly cluttered". Wh
 `/cycle` went from 3,583px to 2,248px on a desktop and 2,997px to 2,171px on a phone. The heading
 list in `cycle.test.tsx` is the guard: adding a block there should be hard.
 
-**The today card carries an affirmation and asks nothing back.** It opened with a question, and
-the design replaces that with a per-phase affirmation in italic serif under a swatch, the phase
-name and the cycle day. Everything else came off it: the two stat chips, the "estimated from the
-dates you logged" line, the energy row and the match prompt. Energy is still set in the log and
-the cards still key to it. The prompt went because "does this match what you are feeling today?"
-made sense against a reading and makes none against an affirmation about what somebody is
-allowed to do; the three suggestion cards still ask, and that is where drift answers now come
-from. The drift *read* survives on this card even though nothing can set it, because handing a
-confident line to somebody who has twice said the reading is the opposite of how they feel is
-exactly the wrong move.
+**The today card leads with an affirmation and carries the two things done about it.** It opened
+with a question; the design replaced that with a per-phase affirmation in italic serif under a
+swatch, the phase name and the cycle day.
+
+Everything else was stripped off it for that redesign, and **the user asked for all of it back**:
+the next-period chip, the "estimated from the dates you logged" line, the energy row and the
+match prompt. The order is reading, then estimate, then the two inputs. The day line carries
+"Day 6 of about 28" so the chip beside it need not repeat the day. The prompt's return also
+restores the drift mechanism: without it nothing could tell this card its reading was wrong,
+which mattered because the drift *read* had survived with nothing able to set it.
+
+`PhaseInsight` takes `onAnswer` and `children` as optional. Daily embeds the same card with the
+energy row and no prompt, because Daily is not the place to be asked whether a reading landed.
 
 **Three of the design's four affirmations are reworded, and `PHASE_AFFIRMATIONS` records why
 each one.** Menstrual ships verbatim. The other three each opened by telling the reader what
@@ -745,8 +760,11 @@ they were feeling, which is a reading a calendar cannot take: luteal's "your bra
 harder than usual today" would also have failed `cycle-guidance.test.ts`, which has banned the
 phrase "your brain" since long before this design existed.
 
-**All four suggestion cards start closed.** Opening the first was a hedge against a row of shut
-cards reading as empty, and it cost the thing the collapse was for.
+**All four suggestion cards open.** This went round twice. They were collapsed to stop the page
+reading as a dump, and the user then pointed out that four shut rows are not "what to eat, move
+and do", they are four labels and a chevron. The two-column layout is what makes both true at
+once: the suggestions sit beside the calendar rather than pushing it down the page. They are
+still individually collapsible, and the state is per card.
 
 **The suggestions are four collapsed cards, and only the first opens.** Work Focus, Movement,
 Journal Prompt and Food, each a real `<button>` carrying `aria-expanded` and `aria-controls`

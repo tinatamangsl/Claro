@@ -6,11 +6,11 @@ import { useCallback, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useClaro } from "@/lib/claro-store";
 import { useSync } from "@/lib/use-sync";
-import { CycleSyncConsent } from "@/components/cycle/CycleSyncConsent";
 import { EditableText } from "@/components/EditableText";
 import { CycleCalendar } from "@/components/cycle/CycleCalendar";
 import { GuidanceCards } from "@/components/cycle/GuidanceCards";
 import { PhaseInsight } from "@/components/cycle/PhaseInsight";
+import { QuickEnergy } from "@/components/cycle/QuickEnergy";
 import { FloatingLog } from "@/components/cycle/FloatingLog";
 import { CycleNumbers } from "@/components/cycle/CycleNumbers";
 import { CycleLengthChart } from "@/components/cycle/CycleLengthChart";
@@ -164,7 +164,6 @@ export function CycleNotes() {
         */}
         <h1 className="sr-only">Cycle notes</h1>
       </header>
-      <CycleSyncConsent />
 
       {/*
         The whole of "today" on one screen, side by side.
@@ -222,12 +221,26 @@ export function CycleNotes() {
             two different answers about today.
           */}
           {/*
-            The energy row moved out with everything else the design's today
-            card has no slot for. Energy is still set in the log, and the cards
-            below still key to it; what it is not any more is a control on the
-            one card whose whole job is to say one thing.
+            One card for today, carrying the reading and the two things done
+            about it. The energy row writes the same field the full form
+            writes, so the quick row and the form can never hold two different
+            answers about today, and the guidance cards below re-key to it the
+            moment it is set.
           */}
-          <PhaseInsight cycle={cycle} todayId={today} />
+          <PhaseInsight
+            cycle={cycle}
+            todayId={today}
+            onAnswer={(phase, answer) =>
+              writeGuidanceMatch("phase", phase, today, answer, new Date())
+            }
+          >
+            <QuickEnergy
+              cycle={cycle}
+              todayId={today}
+              onWrite={(energy) => writeCycleCheckIn(today, { energy }, new Date())}
+              onOpenLog={() => openLog()}
+            />
+          </PhaseInsight>
 
           <GuidanceCards
             cycle={cycle}

@@ -40,12 +40,15 @@ describe("telling a fresh browser from one holding work", () => {
 });
 
 describe("what leaves the device", () => {
-  it("withholds cycle notes from somebody who has not agreed to send them", () => {
-    const payload = forUpload(withCycle(false));
-
-    // Absent, not blanked: see the merge tests below for why that matters.
-    expect("cycle" in payload).toBe(false);
-    expect(cycleMaySync(withCycle(false))).toBe(false);
+  it("sends cycle notes with everything else", () => {
+    /*
+     * They used to be withheld behind a second consent, because they had been
+     * collected under a screen promising they stayed on the device. That screen
+     * now says they go to your account, and the user asked for one account
+     * holding everything rather than a branch needing its own permission.
+     */
+    expect("cycle" in forUpload(withCycle(false))).toBe(true);
+    expect(cycleMaySync(withCycle(false))).toBe(true);
   });
 
   it("sends them once they have agreed", () => {
@@ -110,27 +113,27 @@ describe("what to do the moment somebody signs in", () => {
     expect(planSignIn({ local, remote: forUpload(local) })).toEqual({ action: "pull" });
   });
 
-  it("refuses to choose when both sides hold different work", () => {
+  it("takes the account when both sides hold different work", () => {
     const local = withWork();
-    const other = emptyState();
     const remote = forUpload({
-      ...other,
+      ...emptyState(),
       days: { "2026-09-04": { ...blankDay("2026-09-04"), notes: "something else" } },
     });
 
     /*
-     * The one case with a wrong answer. Picking either side silently throws
-     * away somebody's writing, so the decision goes back to them. Last write
-     * wins would be smaller code and would eventually eat a quarter of
-     * planning.
+     * A banner used to ask which to keep. The user asked for it gone: devices
+     * should agree without interviewing anybody. The account wins rather than
+     * the device because it is the copy every other device already agrees
+     * with, so preferring it converges; preferring the device would make
+     * whichever browser was opened last the winner and let two of them flip
+     * the account back and forth. What it costs is this device's edits since
+     * its last sync, which `overwriteBackupKey` stashes before they go.
      */
-    expect(planSignIn({ local, remote })).toEqual({ action: "ask" });
+    expect(planSignIn({ local, remote })).toEqual({ action: "pull" });
   });
 
-  it("does not call a withheld cycle a conflict on its own", () => {
-    // Same state either side; the only difference is the branch deliberately
-    // not uploaded. That must not read as two competing versions.
-    const local = withCycle(false);
-    expect(planSignIn({ local, remote: forUpload(local) })).toEqual({ action: "pull" });
+  it("seeds the account only when there is nothing in it", () => {
+    // The one case that still writes rather than reads on sign-in.
+    expect(planSignIn({ local: withCycle(false), remote: null })).toEqual({ action: "push" });
   });
 });

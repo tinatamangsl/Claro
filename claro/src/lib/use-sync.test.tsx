@@ -66,18 +66,28 @@ describe("what signing in actually does", () => {
     expect(payload.version).toBeGreaterThan(0);
   });
 
-  it("does not overwrite an account it has not read", async () => {
+  it("takes the account rather than overwriting what it has not read", async () => {
     // Someone else seeded it between our read and our write.
     pull
       .mockResolvedValueOnce({ ok: true, row: null })
-      .mockResolvedValue({ ok: true, row: { payload: { version: 1 }, token: "t", version: 1 } });
+      .mockResolvedValue({
+        ok: true,
+        row: { payload: { version: 1, days: { "2026-01-01": {} } }, token: "t", version: 1 },
+      });
     push.mockResolvedValue({ ok: false, reason: "conflict" });
 
     mount();
 
-    await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("conflict"));
-    // One attempt, refused, and no retry that would have clobbered it.
+    await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("synced"));
+
+    /*
+     * One attempt, refused, and then the account is read and taken rather than
+     * retried over. A retry would clobber work this device never saw, which is
+     * the failure the concurrency token exists to prevent; taking theirs is the
+     * rule that replaced the banner asking which to keep.
+     */
     expect(push).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem("claro.overwritten.v1")).toBeTruthy();
   });
 
   it("says error rather than synced when the seed fails", async () => {
