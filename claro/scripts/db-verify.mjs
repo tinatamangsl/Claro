@@ -66,8 +66,9 @@ try {
 }
 
 if (Array.isArray(rows) && rows.length === 0) {
-  console.log("Read: an anonymous caller sees zero rows.");
+  console.log("Read:  an anonymous caller sees zero rows.");
   await probeWrite();
+  await reportScale(env);
   process.exit(0);
 }
 
@@ -121,4 +122,54 @@ async function probeWrite() {
 
   // Any other refusal is still a refusal, and worth reading.
   console.log(`Write: refused (${res.status}). ${(await res.text()).slice(0, 160)}`);
+}
+
+/**
+ * How much there is to hide, read over the admin connection.
+ *
+ * "An anonymous caller sees zero rows" is only reassuring if there are rows to
+ * miss. This says how many there are, so the check above means something.
+ *
+ * **It fails loudly when it cannot measure.** An earlier version of this used
+ * `supabase db dump`, which needs Docker; without Docker it wrote an empty file
+ * and the parser read that as "zero rows" and said so three times, while the
+ * table in fact held a row. A measurement that cannot run must never return the
+ * reassuring answer.
+ */
+async function reportScale(env) {
+  const conn = env.SUPABASE_DB_URL;
+  if (!conn) {
+    console.log("Scale: not checked (no SUPABASE_DB_URL). The read check above is inconclusive.");
+    return;
+  }
+
+  let Client;
+  try {
+    ({ Client } = await import("pg"));
+  } catch {
+    console.error("Scale: CANNOT MEASURE. `pg` is not installed, so the read check above proves nothing.");
+    process.exitCode = 1;
+    return;
+  }
+
+  const client = new Client({ connectionString: conn, ssl: { rejectUnauthorized: false } });
+  try {
+    await client.connect();
+    // Counts and flags only. Nothing anybody wrote is read.
+    const { rows } = await client.query(
+      "select count(*)::int as rows, coalesce(sum(pg_column_size(state)), 0)::int as bytes from public.claro_state",
+    );
+    const users = await client.query("select count(*)::int as n from auth.users");
+    console.log(`Scale: ${rows[0].rows} row(s), ${rows[0].bytes} bytes, ${users.rows[0].n} user(s).`);
+    if (rows[0].rows === 0) {
+      console.log("       Nothing stored yet, so the read check is inconclusive. Sign in and save something.");
+    } else {
+      console.log("       There is data to hide, so the read check above is a real result.");
+    }
+  } catch (e) {
+    console.error(`Scale: CANNOT MEASURE (${e.message}). The read check above proves nothing.`);
+    process.exitCode = 1;
+  } finally {
+    await client.end().catch(() => {});
+  }
 }

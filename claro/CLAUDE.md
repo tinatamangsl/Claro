@@ -49,10 +49,23 @@ Everything hangs off a single three-level hierarchy:
 QUARTER  Direction    → WEEK  Commitment  → DAY  Execution
 ```
 
-Nav is **Daily | Week | Quarter | Calendar**, and gains a fifth item, **Cycle**, once cycle notes
-are turned on. Four items on a fresh install, five after: a nav item on an app nobody has opted
-into would advertise an optional private feature to somebody who never asked for it, and hiding a
-five-screen destination behind links inside other pages misdescribed the product. The sub-routes
+Nav is **Daily | Week | Quarter | Calendar | Cycle**, five items, always.
+
+Cycle used to appear only once cycle notes were turned on, so that a fresh install would not
+advertise an optional private feature to somebody who never asked for it. **The user reversed
+that, and the reasoning had a hole they walked straight into**: turning cycle notes on happens
+*on the cycle page*, so while the feature was off the only routes to it were typing the URL or
+finding a link buried in the Calendar page. It was hidden from the person it belonged to, and
+they reported it as a bug.
+
+What the old rule protected is still protected, by the thing that actually protects it. The nav
+item is a word and a link: no cycle day, no phase, no dates, nothing about a body. Everything
+private stays behind the opt-in on the page itself, which is where consent is asked and always
+has been, and `AppShell.test.tsx` asserts the header leaks no reading even with a period logged.
+That test matters more than it looks: a cycle day in the shell would put it on every screen in
+the app, including whatever is on a monitor in a room with other people in it.
+
+The sub-routes
 `/cycle-day` and `/cycle-guide` light the Cycle item, and `/quarter-plan` lights Quarter, so the
 nav never looks like the user has left the app. Calendar was added deliberately as a
 *review* surface, not a fifth planning level: it holds Month (the detailed view), Quarter and Year,

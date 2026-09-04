@@ -19,11 +19,21 @@ const NAV = [
 ] as const;
 
 /**
- * Cycle is a real destination and the heaviest page in Claro, so hiding it
- * behind links inside other screens misdescribed the product. It joins the nav
- * once the user has turned it on, and not before: a fifth item on a fresh
- * install would advertise an optional, private feature to somebody who never
- * asked for it, which is the one thing this feature must not do.
+ * Cycle is a real destination and the heaviest page in Claro, so it sits in the
+ * nav like the others.
+ *
+ * It used to appear only once the feature was turned on, so that a fresh
+ * install would not advertise an optional, private feature to somebody who
+ * never asked for it. That reasoning had a hole the user walked straight into:
+ * turning it on happens *on the cycle page*, so the only ways to reach it while
+ * it was off were typing the URL or finding a link buried in the Calendar page.
+ * The feature was effectively hidden from the person it belonged to.
+ *
+ * What the old version was protecting is still protected, and by the thing that
+ * actually protects it. The item is a word and a link: no cycle day, no phase,
+ * no dates, nothing about a body. Everything private stays behind the opt-in on
+ * the page itself, which is where consent is asked and where it has always
+ * been. A menu item saying "Cycle" reveals no more than this file's own source.
  */
 const CYCLE_NAV = { to: "/cycle", label: "Cycle" } as const;
 
@@ -33,9 +43,9 @@ const CYCLE_NAV = { to: "/cycle", label: "Cycle" } as const;
  * content it frames.
  */
 export function AppShell({ children, wide }: { children: ReactNode; wide?: boolean }) {
-  const { ready, saveStatus, today, cycle } = useClaro();
+  const { ready, saveStatus, today } = useClaro();
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const nav = cycle.settings.enabled ? [...NAV, CYCLE_NAV] : NAV;
+  const nav = [...NAV, CYCLE_NAV];
   const page = cn("page", wide && "page-wide");
 
   return (
