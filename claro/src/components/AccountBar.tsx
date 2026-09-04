@@ -40,7 +40,13 @@ export function AccountBar() {
         >
           Sign out
         </button>
-        {status === "error" && message && (
+        {/*
+          Shown for anything that went wrong, not only the "error" state. A
+          refused write once reported itself as a conflict, and the footer's
+          four-word label was the only thing on screen about it: enough to know
+          something was wrong, nothing to act on.
+        */}
+        {message && (status === "error" || status === "conflict") && (
           <span className="text-destructive">{message}</span>
         )}
       </span>

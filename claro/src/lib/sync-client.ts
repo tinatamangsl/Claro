@@ -80,10 +80,22 @@ export async function push(
     // A duplicate key means the account was seeded elsewhere first, which is a
     // conflict rather than a failure: something is there that we have not read.
     if (error) {
+      // Only a real duplicate key is a conflict. Everything else is a failure
+      // and must say so: reporting a refused insert as "two versions exist"
+      // sends somebody to a resolution screen for a problem they do not have.
       if (error.code === "23505") return { ok: false, reason: "conflict" };
-      return { ok: false, reason: "error", message: error.message };
+      return { ok: false, reason: "error", message: describe(error) };
     }
-    return { ok: true, token: data!.updated_at as string };
+    if (!data?.updated_at) {
+      // Insert accepted but nothing came back. Without the row's timestamp
+      // there is no concurrency token, so the next write would be blind.
+      return {
+        ok: false,
+        reason: "error",
+        message: "The row was written but the server returned nothing to track it by.",
+      };
+    }
+    return { ok: true, token: data.updated_at as string };
   }
 
   const { data, error } = await supabase
@@ -94,7 +106,21 @@ export async function push(
     .select("updated_at")
     .maybeSingle();
 
-  if (error) return { ok: false, reason: "error", message: error.message };
+  if (error) return { ok: false, reason: "error", message: describe(error) };
   if (!data) return { ok: false, reason: "conflict" };
   return { ok: true, token: data.updated_at as string };
+}
+
+/**
+ * A Supabase error in a form somebody can act on.
+ *
+ * `error.message` alone is often "" or a bare code, which produces a footer
+ * that says something failed and nothing about what. The code is what
+ * identifies an RLS refusal (42501) or a missing table (42P01), so it travels
+ * with the text.
+ */
+function describe(error: { message?: string; code?: string; details?: string; hint?: string }) {
+  const parts = [error.message, error.details, error.hint].filter(Boolean);
+  const text = parts.join(" ") || "Unknown error";
+  return error.code ? `${text} [${error.code}]` : text;
 }

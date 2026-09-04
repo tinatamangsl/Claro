@@ -84,6 +84,16 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const token = useRef<SyncToken | null>(null);
   /** Set once the first sign-in reconciliation has run, so pushes may begin. */
   const reconciled = useRef(false);
+  /**
+   * Held for the whole of a reconciliation, not just after it succeeds.
+   *
+   * `reconciled` is only set at the end, so a second run of the effect while
+   * the first was still awaiting the network would sail past that guard and
+   * start its own pull and insert. Two inserts of the same primary key race,
+   * one loses on a duplicate key, and the loser reports a conflict against a
+   * table that had nothing in it a moment earlier.
+   */
+  const reconciling = useRef(false);
   const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Watch the session rather than reading it once: a magic-link return lands
@@ -104,8 +114,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   // Reconcile once, on sign-in, before any push is allowed to happen.
   useEffect(() => {
-    if (!ready || !session || reconciled.current) return;
+    if (!ready || !session || reconciled.current || reconciling.current) return;
     let cancelled = false;
+    reconciling.current = true;
 
     (async () => {
       setStatus("syncing");
@@ -148,6 +159,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         if (!seeded.ok) {
           if (seeded.reason === "conflict") {
             // Another device seeded it between our read and our write.
+            setMessage("Your account was written to from somewhere else while this was loading.");
             const fresh = await pull(session.user.id);
             if (fresh.ok && fresh.row) {
               token.current = fresh.row.token;
@@ -164,8 +176,11 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       }
 
       reconciled.current = true;
+      setMessage(null);
       setStatus("synced");
-    })();
+    })().finally(() => {
+      reconciling.current = false;
+    });
 
     return () => {
       cancelled = true;
@@ -229,6 +244,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     if (result.ok) {
       token.current = result.token;
       reconciled.current = true;
+      setMessage(null);
       setStatus("synced");
       return;
     }
