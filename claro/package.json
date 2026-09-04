@@ -9,7 +9,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build:pages": "CLARO_BASE=/Claro/ vite build && cd dist/client && cp _shell.html index.html && cp _shell.html 404.html && rm _shell.html && touch .nojekyll"
+    "build:pages": "CLARO_BASE=/Claro/ vite build && cd dist/client && cp _shell.html index.html && cp _shell.html 404.html && rm _shell.html && touch .nojekyll",
+    "db:push": "bash scripts/db-push.sh",
+    "db:check": "bash scripts/db-check.sh",
+    "db:verify": "node scripts/db-verify.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.115.0",

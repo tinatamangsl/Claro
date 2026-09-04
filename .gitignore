@@ -1,0 +1,5 @@
+# The repository root holds no application: Claro lives in claro/ and has its
+# own .gitignore. This exists because tooling run from the root, mostly Vite's
+# dependency cache, was writing here and being picked up as tracked files.
+node_modules/
+.DS_Store

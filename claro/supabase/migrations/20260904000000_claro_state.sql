@@ -7,10 +7,9 @@
 -- a quarter or a habit is. The schema version travels with the row so an older
 -- client can refuse a snapshot it would not understand rather than mangling it.
 --
--- The readable copy. The one that is actually applied is the identical file in
--- supabase/migrations/, run by `npm run db:push`, so that setting the database
--- up is a command rather than a hand copy into a web editor. `npm run db:check`
--- fails if the two drift apart.
+-- Applied by `npm run db:push`, which is the path to prefer over the dashboard
+-- SQL Editor: pasting into that is a hand copy, and a hand copy is how a stray
+-- character got into it once already. Every statement here is safe to re-run.
 
 create table if not exists public.claro_state (
   user_id uuid primary key references auth.users (id) on delete cascade,

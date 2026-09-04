@@ -16,3 +16,6 @@ dist-ssr
 .idea
 .vscode/*
 !.vscode/extensions.json
+
+# Scratch written by the Supabase CLI. Not ours, not useful in the repo.
+supabase/.temp/
