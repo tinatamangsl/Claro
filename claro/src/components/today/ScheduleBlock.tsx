@@ -98,18 +98,29 @@ export function ScheduleBlock({
   /** Only ever writes a standalone block: linking is a deliberate act elsewhere. */
   const writeBlock = (time: string, text: string) => {
     const existing = day.scheduleItems.find((i) => i.time === time);
-    const trimmed = text.trim();
+
+    /*
+     * Trimmed to decide whether there is anything here, stored as typed.
+     *
+     * This used to store the trimmed text, and because the save runs 350ms
+     * after the last keystroke, it fired on the pause after a space and wrote
+     * back a value one character shorter than what was on screen. The field
+     * took that as the truth, the space vanished, and the next word ran into
+     * the last one: "morning run" came out "morningrun". Whitespace on its own
+     * is still nothing, so an all-space entry is removed rather than kept.
+     */
+    const empty = text.trim() === "";
 
     if (existing) {
       onChange(
-        trimmed
-          ? day.scheduleItems.map((i) => (i.id === existing.id ? { ...i, text: trimmed } : i))
-          : day.scheduleItems.filter((i) => i.id !== existing.id),
+        empty
+          ? day.scheduleItems.filter((i) => i.id !== existing.id)
+          : day.scheduleItems.map((i) => (i.id === existing.id ? { ...i, text } : i)),
       );
       return;
     }
-    if (!trimmed) return;
-    onChange([...day.scheduleItems, blockItem(time, trimmed)]);
+    if (empty) return;
+    onChange([...day.scheduleItems, blockItem(time, text)]);
   };
 
   const removeRow = (id: string) => onChange(day.scheduleItems.filter((i) => i.id !== id));
@@ -145,51 +156,75 @@ export function ScheduleBlock({
               <span className="schedule-time">{hour}</span>
 
               <span className="schedule-body flex-col items-stretch gap-0.5">
-                {rows.map((row) => (
-                  <span key={row.item.id} className="flex items-start gap-1.5">
-                    <DragHandle
-                      {...sortable.handleProps(row.item)}
-                      dragging={sortable.draggingId === row.item.id}
-                      className="mt-[1px]"
-                    />
-                    <span ref={sortable.itemRef(row.item.id)} className="flex min-w-0 flex-1 gap-1.5">
-                      <MinutePicker
-                        time={row.item.time}
-                        day={day}
-                        onChange={(next) =>
-                          onChange(
-                            day.scheduleItems.map((i) =>
-                              i.id === row.item.id ? { ...i, time: next } : i,
-                            ),
-                          )
-                        }
+                {/*
+                  An empty hour renders the same line a filled one does, with
+                  `row` null, and the first line is keyed by the hour rather
+                  than by the item that may not exist yet.
+
+                  Both of those are load-bearing. This used to branch: an empty
+                  hour got a bare EditableText, and the moment the debounce
+                  committed, the branch flipped to the row list and the field
+                  being typed into was unmounted mid-sentence. It surfaced as
+                  "pressing space throws me out of the box", because 350ms after
+                  the last keystroke is, in practice, the first time you pause,
+                  and that is usually just after a space.
+
+                  The handle and the minute picker appear beside the line once
+                  there is an item to drag or reschedule. They carry explicit
+                  keys so React matches the field to the field across that,
+                  rather than by sibling index, which shifts as they arrive.
+                */}
+                {(rows.length ? rows : [null]).map((row, index) => (
+                  <span
+                    key={row && index > 0 ? row.item.id : `line-${time}`}
+                    className="flex items-start gap-1.5"
+                  >
+                    {row && (
+                      <DragHandle
+                        key="handle"
+                        {...sortable.handleProps(row.item)}
+                        dragging={sortable.draggingId === row.item.id}
+                        className="mt-[1px]"
                       />
+                    )}
+                    <span
+                      key="body"
+                      ref={row ? sortable.itemRef(row.item.id) : undefined}
+                      className="flex min-w-0 flex-1 gap-1.5"
+                    >
+                      {row && (
+                        <MinutePicker
+                          key="minute"
+                          time={row.item.time}
+                          day={day}
+                          onChange={(next) =>
+                            onChange(
+                              day.scheduleItems.map((i) =>
+                                i.id === row.item.id ? { ...i, time: next } : i,
+                              ),
+                            )
+                          }
+                        />
+                      )}
                       <ScheduleRow
+                        key="line"
                         row={row}
-                        hour={formatTimeLabel(row.item.time)}
-                        onToggle={() => onToggle(row.item.id)}
-                        onCommit={(text) => writeBlock(row.item.time, text)}
-                        onRemove={() => removeRow(row.item.id)}
+                        hour={row ? formatTimeLabel(row.item.time) : hour}
+                        onToggle={() => row && onToggle(row.item.id)}
+                        onCommit={(text) => writeBlock(row ? row.item.time : time, text)}
+                        onRemove={() => row && removeRow(row.item.id)}
                       />
                     </span>
                   </span>
                 ))}
 
                 {/*
-                  An empty hour offers its line straight away. An hour that
-                  already holds something offers a quiet plus instead: putting a
-                  second textarea in all eighteen rows would fill the page with
-                  fields nobody asked for, and duplicate every row's label.
+                  An hour that already holds something offers a quiet plus for a
+                  second entry: putting another textarea in all eighteen rows
+                  would fill the page with fields nobody asked for, and duplicate
+                  every row's label.
                 */}
-                {rows.length === 0 ? (
-                  <EditableText
-                    value=""
-                    onCommit={(text) => writeBlock(time, text)}
-                    wrap
-                    ariaLabel={`Schedule at ${hour}`}
-                    className="-ml-2 min-w-0 flex-1 py-0 text-[0.8rem] leading-snug"
-                  />
-                ) : adding === time ? (
+                {rows.length === 0 ? null : adding === time ? (
                   <EditableText
                     value=""
                     onCommit={(text) => {
@@ -372,12 +407,39 @@ function ScheduleRow({
   onCommit,
   onRemove,
 }: {
-  row: ResolvedSchedule;
+  /** Null while the hour is still empty: the same line, with nothing in it yet. */
+  row: ResolvedSchedule | null;
   hour: string;
   onToggle: () => void;
   onCommit: (text: string) => void;
   onRemove: () => void;
 }) {
+  /*
+   * An empty hour is this component with nothing in it, not a different
+   * component. It has to be, or the field is destroyed and rebuilt the instant
+   * the first commit lands, which takes the cursor with it.
+   *
+   * The checkbox is here as a reserved, hidden space rather than left out, so
+   * that when the real one arrives it appears beside the words instead of
+   * shoving them sideways.
+   */
+  if (!row) {
+    return (
+      <span className="flex min-w-0 flex-1 items-start gap-1.5">
+        <span aria-hidden className="invisible mt-[1px]">
+          <CheckToggle checked={false} onChange={() => {}} label="" size="sm" />
+        </span>
+        <EditableText
+          value=""
+          onCommit={onCommit}
+          wrap
+          ariaLabel={`Schedule at ${hour}`}
+          className="-ml-2 min-w-0 flex-1 py-0 text-[0.8rem] leading-snug"
+        />
+      </span>
+    );
+  }
+
   const { item, title, done, kind, available } = row;
 
   /**

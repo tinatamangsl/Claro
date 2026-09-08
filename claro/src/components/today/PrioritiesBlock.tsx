@@ -81,7 +81,20 @@ export function PrioritiesBlock({
       <SortAnnouncer message={sortable.announcement} />
 
       {sortable.ordered.map((slot, index) => (
-        <div key={slot.id} ref={sortable.itemRef(slot.id)}>
+        /*
+          Keyed by rank, not by id.
+
+          A blank slot has no id, so `slot.id` is the stand-in `empty-2` until
+          the moment somebody writes in it, and then it becomes a real one. That
+          is a changed key, so React threw the row away and built a new one, and
+          the input being typed into went with it. It happened 350ms after the
+          last keystroke, when the debounce committed, which in practice is the
+          first time you pause: usually right after a space.
+
+          Rank is stable across that transition and still travels with the slot
+          when the three are reordered, so the row keeps its identity either way.
+        */
+        <div key={slot.rank} ref={sortable.itemRef(slot.id)}>
           {index > 0 && <div aria-hidden className="mb-1.5 h-px bg-border/70" />}
           <PriorityEntry
             position={index + 1}

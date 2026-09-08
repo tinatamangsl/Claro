@@ -125,8 +125,21 @@ export function resolveSchedule(
 // ------------------------------------------------------------------ writing
 
 /** A standalone block, owned entirely by the hour it sits on. */
+/**
+ * Text is stored as given, not trimmed.
+ *
+ * It used to be trimmed here, and that quietly ate a character out of live
+ * typing: the schedule field saves 350ms after the last keystroke, which lands
+ * on the pause after a space, and the trimmed value came back one character
+ * shorter than what was on screen. `useDebouncedField` reads a value that
+ * differs from what it committed as the record having changed underneath it and
+ * resyncs, so the space disappeared and the next word ran into the last.
+ *
+ * Callers that decide whether an entry exists at all still test the trimmed
+ * text; this only governs what gets stored once they have decided it does.
+ */
 export function blockItem(time: string, text: string): ScheduleItem {
-  return { id: newId(), time, text: text.trim(), link: null, done: false };
+  return { id: newId(), time, text, link: null, done: false };
 }
 
 /**
