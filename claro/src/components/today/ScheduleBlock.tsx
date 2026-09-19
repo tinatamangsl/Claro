@@ -82,6 +82,15 @@ export function ScheduleBlock({
 
   /** Which hour has its extra line open. One at a time keeps the page calm. */
   const [adding, setAdding] = useState<string | null>(null);
+  /*
+   * Where a not-yet-written entry will land, per hour.
+   *
+   * An empty hour used to offer one line and write it at :00, so anything at
+   * half past took two goes: type it, then re-time it. The minute control on a
+   * filled row already does this job, so the empty line gets the same one, with
+   * the chosen minute held here until there is an item to carry it.
+   */
+  const [draftMinute, setDraftMinute] = useState<Record<string, number>>({});
 
   const sortable = useSortable<ScheduleItem>({
     items: day.scheduleItems,
@@ -192,6 +201,17 @@ export function ScheduleBlock({
                       ref={row ? sortable.itemRef(row.item.id) : undefined}
                       className="flex min-w-0 flex-1 gap-1.5"
                     >
+                      {!row && (
+                        <MinutePicker
+                          key="minute"
+                          time={atMinutes(time, draftMinute[time] ?? 0)}
+                          day={day}
+                          alwaysVisible
+                          onChange={(next) =>
+                            setDraftMinute((d) => ({ ...d, [time]: minutesOf(next) }))
+                          }
+                        />
+                      )}
                       {row && (
                         <MinutePicker
                           key="minute"
@@ -209,9 +229,20 @@ export function ScheduleBlock({
                       <ScheduleRow
                         key="line"
                         row={row}
-                        hour={row ? formatTimeLabel(row.item.time) : hour}
+                        hour={
+                          row
+                            ? formatTimeLabel(row.item.time)
+                            : formatTimeLabel(atMinutes(time, draftMinute[time] ?? 0))
+                        }
                         onToggle={() => row && onToggle(row.item.id)}
-                        onCommit={(text) => writeBlock(row ? row.item.time : time, text)}
+                        onCommit={(text) => {
+                          if (row) return writeBlock(row.item.time, text);
+                          const minute = draftMinute[time] ?? 0;
+                          writeBlock(atMinutes(time, minute), text);
+                          // The draft has become a real block; the next empty
+                          // line in this hour starts from the top again.
+                          if (minute !== 0) setDraftMinute((d) => ({ ...d, [time]: 0 }));
+                        }}
                         onRemove={() => row && removeRow(row.item.id)}
                       />
                     </span>
@@ -292,10 +323,19 @@ function MinutePicker({
   time,
   day,
   onChange,
+  alwaysVisible = false,
 }: {
   time: string;
   day: Day;
   onChange: (time: string) => void;
+  /**
+   * Kept on screen even at the top of the hour.
+   *
+   * On a filled row the control hides at :00 so eighteen rows are not eighteen
+   * time pickers. On an empty line it is the only way to aim the thing being
+   * written, so hiding it is hiding the feature.
+   */
+  alwaysVisible?: boolean;
 }) {
   const hour = hourOf(time);
   const taken = new Set(
@@ -331,6 +371,7 @@ function MinutePicker({
           exact minute was unreachable on a phone entirely.
         */
         minutes === 0 &&
+          !alwaysVisible &&
           "opacity-60 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-60",
       )}
       options={[...new Set([...SCHEDULE_MINUTES, minutes])]

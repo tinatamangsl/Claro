@@ -156,7 +156,7 @@ src/lib/focus-session.ts the focus session state machine — pure, now-injected,
 src/lib/focus-presets.ts    how long a block is, and whether a break follows it
 src/lib/rollover.ts     the 10 PM carry-forward rule and the review-area decisions
 src/lib/reorder.ts      pure list movement — every drag and every keyboard nudge goes through it
-src/lib/schedule.ts     moving a schedule entry between hours, and the swap when one is taken
+src/lib/schedule.ts     moving a schedule entry between hours, and the push-down when one is taken
 src/lib/calendar.ts     month grid + habit aggregation (counts only, never a streak)
 src/lib/cycle.ts        logged period ranges, and estimates from the user's own history alone
 src/lib/cycle-calendar.ts   what each calendar day is: logged, estimated, or neither
@@ -665,6 +665,22 @@ in one hour was a dead end with no reason given.
 
 **The exact-minute control is reachable without a mouse.** It was `opacity-0` until the row was
 hovered, which on a touch screen is never, so setting a precise time was impossible on a phone.
+
+**An empty hour can be aimed before anything is written in it.** It offered one line and wrote it
+at :00, so anything at half past took two goes: type it, then re-time it. The minute control a
+filled row already has now sits on the empty line too, with the chosen minute held in
+`draftMinute` until there is an item to carry it. It passes `alwaysVisible`, because on an empty
+line it is the only way to aim the thing being written and hiding it hides the feature.
+
+**Dropping onto something moves that thing later, never earlier.** `settleHours` used to swap:
+the entry already sitting there took the time the dragged one had just left. Nothing was lost,
+but an entry nobody touched jumped backwards across the day, which is not what dragging does
+anywhere else. The dropped entry holds the time it was aimed at, and the occupant gives way
+downwards, cascading past anything already below it until a gap is found.
+
+**An entry with nowhere left to go keeps its time rather than being dropped.** Two entries
+sharing the last minute of the day is a visible, fixable oddity; silently deleting somebody's
+evening is not.
 
 ## Habits: an intention, never a score
 

@@ -1,3 +1,4 @@
+import { SCHEDULE_HOURS, atMinutes, hourOf } from "./dates";
 import { isDoneOn } from "./habits";
 import { newId } from "./id";
 import {
@@ -12,30 +13,89 @@ import {
 } from "./types";
 
 /**
- * The schedule is keyed by hour, not by position, so "reordering" it means
- * moving an entry to another hour. Two entries can therefore land on the same
- * hour, which the grid cannot show — so the entry that was already there takes
- * the hour the moved one just left. A straight swap, and nothing is lost.
+ * Dropping one entry onto another moves the other one later, never earlier.
+ *
+ * This used to be a swap: the entry already sitting there took the time the
+ * dragged one had just left. Nothing was lost, but something you were not
+ * touching jumped backwards across the day, which is not what dragging
+ * anything anywhere else does. A calendar pushes the thing you landed on
+ * *down*, and the day keeps its order.
+ *
+ * It cascades. Pushing 2:15 to 2:30 when 2:30 is also taken pushes that one on
+ * as well, and so on until a gap is found. The moved entry stays exactly where
+ * it was dropped: it is the one the user aimed, so it is the one that holds.
+ *
+ * An entry with nowhere left to go, at the very end of the day, keeps its time
+ * rather than being dropped from the schedule. Two entries sharing the last
+ * minute of the day is a visible, fixable oddity; silently deleting somebody's
+ * evening is not.
  */
 export function settleHours(
   previous: ScheduleItem[],
   next: ScheduleItem[],
 ): ScheduleItem[] {
   const before = new Map(previous.map((item) => [item.id, item.time]));
-
   const moved = next.find((item) => {
     const was = before.get(item.id);
     return was !== undefined && was !== item.time;
   });
   if (!moved) return next;
 
-  const vacated = before.get(moved.id) as string;
-  const occupied = next.some((item) => item.id !== moved.id && item.time === moved.time);
-  if (!occupied) return next;
+  const settled = [...next];
+  // Each pass resolves one collision. The bound is generous and only exists so
+  // that an unforeseen cycle cannot hang the page.
+  for (let pass = 0; pass < settled.length + 2; pass++) {
+    const anchors = new Set([moved.id]);
+    const clash = findClash(settled, anchors);
+    if (!clash) break;
 
-  return next.map((item) =>
-    item.id !== moved.id && item.time === moved.time ? { ...item, time: vacated } : item,
-  );
+    const taken = new Set(
+      settled.filter((i) => i.carriedTo == null).map((item) => item.time),
+    );
+    const to = nextFreeTime(taken, clash.time);
+    if (!to) break;
+
+    const index = settled.findIndex((item) => item.id === clash.id);
+    settled[index] = { ...settled[index], time: to };
+  }
+  return settled;
+}
+
+/** The first entry sharing a time with another, excluding the ones that hold. */
+function findClash(
+  items: ScheduleItem[],
+  anchors: Set<string>,
+): { id: string; time: string } | null {
+  const live = items.filter((item) => item.carriedTo == null);
+  const byTime = new Map<string, ScheduleItem[]>();
+  for (const item of live) {
+    byTime.set(item.time, [...(byTime.get(item.time) ?? []), item]);
+  }
+
+  for (const [time, sharing] of byTime) {
+    if (sharing.length < 2) continue;
+    // The dragged entry holds its time; something else gives way. When none of
+    // them is the anchor, the later-listed one moves.
+    const giving = sharing.find((item) => !anchors.has(item.id)) ?? sharing[sharing.length - 1];
+    return { id: giving.id, time };
+  }
+  return null;
+}
+
+/** The next free minute strictly after a time, inside the scheduled day. */
+function nextFreeTime(taken: Set<string>, after: string): string | null {
+  const hours = SCHEDULE_HOURS;
+  const start = hours.indexOf(hourOf(after));
+  if (start === -1) return null;
+
+  for (let h = start; h < hours.length; h++) {
+    for (let m = 0; m < 60; m++) {
+      const slot = atMinutes(hours[h], m);
+      if (slot <= after) continue;
+      if (!taken.has(slot)) return slot;
+    }
+  }
+  return null;
 }
 
 /**

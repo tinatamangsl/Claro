@@ -41,11 +41,40 @@ describe("settleHours", () => {
     expect(settleHours(before, after)).toEqual([at("a", "11:00")]);
   });
 
-  it("swaps when the destination hour is already taken", () => {
+  it("moves the entry you landed on later, not backwards", () => {
     const before = [at("a", "09:00"), at("b", "13:00")];
     const after = [at("a", "13:00"), at("b", "13:00")];
 
-    expect(settleHours(before, after)).toEqual([at("a", "13:00"), at("b", "09:00")]);
+    /*
+     * This used to swap: `b` took the 9 AM slot `a` had just left. Nothing was
+     * lost, but an entry nobody touched jumped backwards across the day, which
+     * is not what dragging does anywhere else. The dropped entry holds its
+     * time and the one already there gives way downwards.
+     */
+    expect(settleHours(before, after)).toEqual([at("a", "13:00"), at("b", "13:01")]);
+  });
+
+  it("finds the next gap rather than stopping at the first taken minute", () => {
+    const before = [at("a", "09:00"), at("b", "13:00"), at("c", "13:01")];
+    const after = [at("a", "13:00"), at("b", "13:00"), at("c", "13:01")];
+
+    const settled = settleHours(before, after);
+    const timeOf = (id: string) => settled.find((i) => i.id === id)!.time;
+
+    // The dropped entry holds. The one it landed on steps past the occupied
+    // minute below it rather than colliding again.
+    expect(timeOf("a")).toBe("13:00");
+    expect(timeOf("c")).toBe("13:01");
+    expect(timeOf("b")).toBe("13:02");
+  });
+
+  it("would rather double-book the last minute of the day than delete an entry", () => {
+    // 10 PM is the last scheduled hour, so there is nowhere below 22:59.
+    const before = [at("a", "09:00"), at("b", "22:59")];
+    const after = [at("a", "22:59"), at("b", "22:59")];
+
+    const settled = settleHours(before, after);
+    expect(settled.map((i) => i.id).sort()).toEqual(["a", "b"]);
   });
 
   it("never leaves two entries on one hour", () => {
