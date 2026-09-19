@@ -34,6 +34,7 @@ const handlers = () => ({
   onReorder: vi.fn(),
   onToggle: vi.fn(),
   onArchive: vi.fn(),
+    onPatch: vi.fn(),
   onRestore: vi.fn(),
   onDelete: vi.fn(),
 });

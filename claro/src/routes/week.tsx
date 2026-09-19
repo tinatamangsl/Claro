@@ -5,6 +5,7 @@ import { AddItem } from "@/components/AddItem";
 import { AppShell } from "@/components/AppShell";
 import { EditableText } from "@/components/EditableText";
 import { FocusOn } from "@/components/FocusOn";
+import { HabitWeekCard } from "@/components/week/HabitWeekCard";
 import { CycleWeekCard } from "@/components/cycle/CycleWeekCard";
 import { SortableRows } from "@/components/SortableRows";
 import { PeriodHeader } from "@/components/PeriodHeader";
@@ -108,7 +109,10 @@ function WeekView() {
         Below the hierarchy on purpose: private, small and inert. It reports,
         it never adjusts the week, and weekly planning still leads the page.
       */}
-      <CycleWeekCard className="sm:max-w-md" />
+      <div className="grid gap-5 md:grid-cols-2">
+        <HabitWeekCard weekId={weekId} />
+        <CycleWeekCard />
+      </div>
 
       <div className="grid items-stretch gap-8 md:grid-cols-2">
         {DOMAINS.map((domain) => (

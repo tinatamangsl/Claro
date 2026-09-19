@@ -641,6 +641,41 @@ read off the real state rather than asserted, and the consent screen, the one pl
 actually given, says what it now does. What did not change is the half that still holds
 absolutely: nothing reaches another person.
 
+## Habits: an intention, never a score
+
+A habit can carry **how often it is meant to happen** — a plain count ("four a week"), or
+particular days ("Mondays, Wednesdays, Fridays"). `targetPerWeek` and `targetDays` are both
+additive and optional, so a habit with neither behaves exactly as habits always have.
+
+**Pinned days win, and the count follows from them.** `weeklyIntent` is the one place that rule
+lives. Saying "Mondays and Thursdays" already says "twice", and letting the two fields disagree
+would produce a row reading "1 of 3" with two days marked, which is a puzzle rather than a
+prompt. Choosing a plain number therefore clears the days, and pinning days sets the number.
+
+**Still never a streak, and never a verdict.** "2 of 4 days this week" states what happened
+beside what was meant and stops: no "only", no "missed", no colour for falling short. A pinned
+day is drawn a little firmer and is *never* marked when it is unkept, so an unkept Tuesday looks
+exactly like an unkept Wednesday. A day kept outside the pinned ones still counts, because doing
+it on an unplanned day is still doing it.
+
+**An aggregate is only shown where it can be counted honestly.** `intendedDaysIn` returns a
+number for pinned days, because "Mondays and Thursdays over September" is countable, and `null`
+for a plain weekly count, because a month is not a whole number of weeks and any rounding would
+invent a denominator the reader never set. The calendar therefore shows "of 9 days you meant to"
+for pinned habits and "aiming for 4 a week" for counted ones, rather than a fabricated fraction.
+
+**Count days, not finished habits.** The week card on `/week` first reported how many practices
+had *reached* their number, which on a Friday read "0 of 3" while the rows above it said 3 of 4,
+2 of 3 and 5 of 7 — true, and exactly the discouraging framing this feature is not allowed to
+have. It sums days instead, which is accurate at any point in the week.
+
+**The week grid is one grid.** `HABIT_GRID` defines the columns once and every row borrows them
+with `grid-cols-subgrid`. Giving the header and each row the same `grid-template-columns` string
+does *not* line them up: they are separate grid containers, so each sizes its own `auto` and
+`1fr` tracks from its own contents, and the labels ended up 86px off the circles they name.
+Below `sm` the seven cells drop to a line of their own, because at 390px they leave nothing for
+the habit's name.
+
 ## Private cycle notes
 
 Four routes, none of them in the nav: `/cycle` is the centralised view, `/cycle-day` the daily

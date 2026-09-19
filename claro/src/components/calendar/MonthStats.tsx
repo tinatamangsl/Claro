@@ -1,5 +1,5 @@
 import { formatFocusTotal, type MonthSummary } from "@/lib/calendar";
-import { consistencyLabel } from "@/lib/habits";
+import { consistencyLabel, weeklyIntent } from "@/lib/habits";
 
 /**
  * The month's totals, as plain counts. There is no score here, nothing to
@@ -39,17 +39,35 @@ export function HabitConsistencyList({ month }: { month: MonthSummary }) {
 
   return (
     <ul className="divide-y divide-subtle">
-      {month.perHabit.map(({ habit, kept }) => (
-        <li
-          key={habit.id}
-          className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2"
-        >
-          <span className="min-w-0 flex-1 text-[0.88rem] leading-snug">{habit.name}</span>
-          <span className="tnum shrink-0 text-[11px] text-muted-foreground">
-            {consistencyLabel(kept, "month")}
-          </span>
-        </li>
-      ))}
+      {month.perHabit.map(({ habit, kept, intended }) => {
+        const intent = weeklyIntent(habit);
+        return (
+          <li
+            key={habit.id}
+            className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2"
+          >
+            <span className="min-w-0 flex-1 text-[0.88rem] leading-snug">{habit.name}</span>
+            <span className="tnum shrink-0 text-right text-[11px] text-muted-foreground">
+              {consistencyLabel(kept, "month")}
+              {/*
+                The intention as context, never as a fraction on its own. Pinned
+                days can be counted exactly over a month; a plain weekly count
+                cannot, so it is shown as the weekly figure the reader actually
+                set rather than as a monthly denominator nobody chose.
+              */}
+              {intended !== null ? (
+                <span className="block text-muted-foreground/80">
+                  of {intended} {intended === 1 ? "day" : "days"} you meant to
+                </span>
+              ) : intent ? (
+                <span className="block text-muted-foreground/80">
+                  aiming for {intent.count} a week
+                </span>
+              ) : null}
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

@@ -8,7 +8,7 @@ import { addDays, addMonths, endOfMonth, format, startOfISOWeek, startOfMonth } 
 import { formatDayId, parseDayId, weekDayIds, weekOfDay } from "./dates";
 import { hasReflection } from "./day-close";
 import { goalKey, resolveGoal } from "./goals";
-import { countCompletions, isDoneOn } from "./habits";
+import { countCompletions, intendedDaysIn, isDoneOn } from "./habits";
 import { resolveSchedule } from "./schedule";
 import { readDay, readQuarter } from "./storage";
 import {
@@ -312,7 +312,17 @@ export function goalProgress(
 
 // ------------------------------------------------------- month summaries
 
-export type HabitConsistency = { habit: Habit; kept: number; of: number };
+export type HabitConsistency = {
+  habit: Habit;
+  kept: number;
+  of: number;
+  /**
+   * Days in the range the habit was meant to happen, when pinned days make
+   * that countable. Null for a plain weekly count, which has no honest
+   * denominator over a month: see `intendedDaysIn`.
+   */
+  intended: number | null;
+};
 
 export type MonthSummary = {
   monthId: MonthId;
@@ -356,6 +366,7 @@ export function summariseMonth(
       habit,
       kept: countCompletions(state.habitCompletions, habit.id, dayIds),
       of: dayIds.length,
+      intended: intendedDaysIn(habit, dayIds),
     })),
     empty: days.every((d) => d.empty),
   };
@@ -373,6 +384,8 @@ export type QuarterSummary = {
   focusSessions: number;
   daysWithHabit: number;
   goals: GoalProgress[];
+  /** Which practices held across the quarter, and which faded. Counts only. */
+  perHabit: HabitConsistency[];
   empty: boolean;
 };
 
@@ -399,6 +412,12 @@ export function summariseQuarter(
     focusSessions: total("focusSessions"),
     daysWithHabit: total("daysWithHabit"),
     goals: goalProgress(state, dayIds, readQuarter(state, quarterId)),
+    perHabit: habits.map((habit) => ({
+      habit,
+      kept: countCompletions(state.habitCompletions, habit.id, dayIds),
+      of: dayIds.length,
+      intended: intendedDaysIn(habit, dayIds),
+    })),
     empty: months.every((m) => m.empty),
   };
 }

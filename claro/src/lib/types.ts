@@ -512,7 +512,27 @@ export type Habit = {
   archivedAt: string | null;
   /** Explicit position. Absent on habits created before reordering existed. */
   order?: number;
+  /**
+   * Additive: how many days a week this is meant to happen, if the user has
+   * said. Absent or null means no intention has been set, which stays the
+   * default — a habit with no target behaves exactly as it always has.
+   */
+  targetPerWeek?: number | null;
+  /**
+   * Additive: the specific weekdays it is meant to happen on, if any.
+   *
+   * Monday is 1 and Sunday is 7, matching ISO, because the week grid runs
+   * Monday to Sunday and an off-by-one here would be invisible until somebody
+   * noticed their Tuesday marked on Wednesday. Empty or absent means any day
+   * counts, and then `targetPerWeek` alone carries the intention.
+   */
+  targetDays?: Weekday[];
 };
+
+/** Monday is 1, Sunday is 7. ISO ordering, matching the week grid. */
+export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export const WEEKDAYS: Weekday[] = [1, 2, 3, 4, 5, 6, 7];
 
 /** Keyed `${habitId}:${dayId}` — one completion per habit per day. */
 export type HabitCompletion = {

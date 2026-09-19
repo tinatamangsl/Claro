@@ -553,6 +553,7 @@ function TodayView() {
               }
               onHoverHour={setDropHour}
               scheduleHours={openHours}
+              onPatch={patchHabit}
               onArchive={(habitId) =>
                 patchHabit(habitId, { archivedAt: new Date().toISOString() })
               }
