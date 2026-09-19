@@ -186,11 +186,23 @@ export function ScheduleBlock({
                 {(rows.length ? rows : [null]).map((row, index) => (
                   <span
                     key={row && index > 0 ? row.item.id : `line-${time}`}
-                    className="flex items-start gap-1.5"
+                    {...(row ? sortable.rowProps(row.item) : {})}
+                    className={cn(
+                      "flex items-start gap-1.5",
+                      // Only a row holding something can be picked up, and the
+                      // cursor says so before the press does.
+                      row && "cursor-grab",
+                      row && sortable.draggingId === row.item.id && "cursor-grabbing",
+                    )}
                   >
                     {row && (
                       <DragHandle
                         key="handle"
+                        // Bigger than it looks: the visible grip stays small so
+                        // eighteen rows are not eighteen grab bars, but the
+                        // press area is padded out to something a finger can
+                        // actually land on.
+                        hitArea
                         {...sortable.handleProps(row.item)}
                         dragging={sortable.draggingId === row.item.id}
                         className="mt-[1px]"

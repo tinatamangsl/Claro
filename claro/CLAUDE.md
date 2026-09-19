@@ -330,6 +330,28 @@ standing open reads as though nothing happened; and the panel's key handling sta
 an input, or the list would swallow every digit and Enter would choose an option instead of
 committing what was typed.
 
+## A row is the grab point, not just its grip
+
+The grip was the only way to pick anything up, and it is **18px square at 45% opacity** — under
+half the 44px a touch target is usually given, on a control that has to be found before it can be
+used, on a phone that has no hover to find it with. It worked, and people did not find it.
+
+**A row now starts a drag, and a press-then-travel threshold is what makes that safe.**
+`rowProps` records a held press without preventing anything; only once the pointer has moved
+`DRAG_THRESHOLD` (5px) does it become a drag. A press that goes nowhere is still a click, so
+putting the cursor in a schedule row works exactly as it did.
+
+**An unfocused text field can start a drag; a focused one cannot.** This is the part that makes
+it work at all: a schedule row is almost entirely its own textarea, so excluding text fields
+outright excludes the row. A press on text nobody is editing means "I am pointing at this", not
+"select from here" — but the moment the field *is* being edited it owns its press again, and
+selecting a word behaves normally. `ownsItsPress` is the rule; buttons, links and pickers are
+always excluded. On promotion the selection the browser has been extending is cleared, or the row
+drags with half its words highlighted behind it.
+
+The grip stays, bigger where it counts: `hitArea` pads the button to 40px with a matching negative
+margin, so the dots stay 14px and nothing beside them shifts.
+
 ## Dragging across the day, not just within a list
 
 `useSortable` reorders one set of items, which is the right shape for a list and the wrong shape

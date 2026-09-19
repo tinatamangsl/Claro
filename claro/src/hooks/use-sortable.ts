@@ -99,6 +99,95 @@ export function useSortable<T extends { id: string }>({
 
   // --------------------------------------------------------------- pointer
 
+  /**
+   * A press that has not yet become a drag.
+   *
+   * The grip can start one on contact, because pressing a grip means only one
+   * thing. A row cannot: pressing a row usually means "put the cursor here" or
+   * "select this word", and hijacking that would make the schedule impossible
+   * to edit. So a row press is held here until the pointer has actually
+   * travelled, and released as an ordinary click if it never does.
+   */
+  const pending = useRef<{ id: string; pointerId: number; x: number; y: number } | null>(null);
+
+  /** Far enough to mean "I am moving this", short enough to feel immediate. */
+  const DRAG_THRESHOLD = 5;
+
+  /**
+   * Somewhere a press means something other than "pick this up".
+   *
+   * Buttons, links and the pickers always own their own press: a drag starting
+   * inside one would steal the interaction the element exists for.
+   *
+   * **A text field is different, and this is the whole reason row dragging
+   * works at all.** A schedule row is almost entirely its own textarea, so
+   * excluding text fields excludes the row. But a press on text you are not
+   * editing does not mean "select from here" — it means "I am pointing at
+   * this". So an *unfocused* field can start a drag, while a focused one is
+   * left alone and selecting a word still works exactly as it should. The
+   * press-then-travel threshold is what keeps a plain click landing the cursor
+   * where it always did.
+   */
+  const ownsItsPress = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return false;
+    if (target.closest("button, a, select, [role='button'], [role='listbox']")) return true;
+
+    const field = target.closest("input, textarea, [contenteditable='true']");
+    return field !== null && field === document.activeElement;
+  };
+
+  /**
+   * The whole row as a grab point, without taking its clicks.
+   *
+   * The grip is 18px square, which is under half the 44px a finger is usually
+   * given, and it sits at 45% opacity until hovered. It works, but it has to be
+   * found first, and on a phone there is no hover to find it with. Letting the
+   * row itself be dragged is what people try before they look for a handle.
+   */
+  const rowProps = (item: T) => ({
+    onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
+      if (event.button !== 0 || ownsItsPress(event.target)) return;
+      // Nothing is prevented and no drag begins: this is still a plain press
+      // until the pointer proves otherwise.
+      pending.current = {
+        id: item.id,
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+      };
+    },
+  });
+
+  // Promote a held press into a drag once it has travelled far enough.
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const held = pending.current;
+      if (!held || event.pointerId !== held.pointerId) return;
+      if (Math.hypot(event.clientX - held.x, event.clientY - held.y) < DRAG_THRESHOLD) return;
+
+      pending.current = null;
+      /*
+       * The press began on text, so the browser has been extending a selection
+       * the whole way here. Clear it, or the row is dragged with half its words
+       * highlighted behind it.
+       */
+      window.getSelection?.()?.removeAllRanges();
+      setDrag({ id: held.id, pointerId: held.pointerId });
+      setLiveIds(latest.current.items.map((i) => i.id));
+    };
+    const drop = () => {
+      pending.current = null;
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", drop);
+    window.addEventListener("pointercancel", drop);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", drop);
+      window.removeEventListener("pointercancel", drop);
+    };
+  }, []);
+
   const onPointerDown = (item: T) => (event: React.PointerEvent<HTMLElement>) => {
     // Left button or touch only — a right-click must not start a drag.
     if (event.button !== 0) return;
@@ -334,6 +423,7 @@ export function useSortable<T extends { id: string }>({
     groupRef: registerGroup,
     itemRef: registerItem,
     /** Spread onto the grip button — never onto a text field. */
+    rowProps,
     handleProps: (item: T) => ({
       type: "button" as const,
       "aria-label": `Reorder ${label(item)}. ${hint}`,

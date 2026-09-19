@@ -4,6 +4,13 @@ import { cn } from "@/lib/utils";
 
 type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   dragging?: boolean;
+  /**
+   * Pad the press area out to roughly a finger's width without growing the
+   * grip itself. The dots stay 14px so a dense list is not a column of grab
+   * bars, while the thing you can actually hit stops being under half the
+   * 44px a touch target is usually given.
+   */
+  hitArea?: boolean;
 };
 
 /**
@@ -11,7 +18,7 @@ type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
  * keyboard and carries its own instructions — the row's text field is never
  * draggable, which keeps selecting and editing text working normally.
  */
-export function DragHandle({ dragging, className, ...props }: Props) {
+export function DragHandle({ dragging, hitArea, className, ...props }: Props) {
   return (
     <button
       {...props}
@@ -21,6 +28,9 @@ export function DragHandle({ dragging, className, ...props }: Props) {
         // Present at all times for keyboard and touch; it only gains contrast on hover.
         "opacity-45 focus-visible:opacity-100 group-hover:opacity-100",
         dragging && "cursor-grabbing text-foreground opacity-100",
+        // Negative margin keeps the layout identical while the button itself
+        // grows, so nothing beside it shifts.
+        hitArea && "-m-[13px] p-[13px]",
         className,
       )}
     >
