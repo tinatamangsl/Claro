@@ -404,6 +404,21 @@ here a keyboard can take. Only free slots are offered, so the taken-hour refusal
 and the labels are `formatTimeLabel`'s minute-accurate ones — `formatHourLabel` collapsed four
 quarter slots onto a single "3 PM" and put one name on four options of the same listbox.
 
+**The list is a portal to the body, not an absolutely positioned child.** `position: absolute` is
+clipped by any ancestor with `overflow: hidden` no matter what z-index it carries, and both
+`.spread` and the schedule's own `.paper-panel` are such ancestors. On the first and last rows of
+the schedule the panel was drawn almost entirely outside them — measured at 201px tall with two
+pixels inside the clip — so the time could not be seen, let alone changed. It is placed from the
+trigger's rectangle with `position: fixed` now, and re-placed on scroll and resize with `capture`
+so the inner panes are heard too, because a fixed panel does not travel with the page the way an
+absolute one did.
+
+Two things follow from the panel no longer being a descendant of the picker's root. The
+outside-press check has to ask the panel separately, or pressing an option reads as a press
+outside and the list shuts before anything is chosen. And `picker-panel-above` stays a class even
+though the offsets are inline: it is the observable record of which way the list chose to open,
+and the tests read it.
+
 `Picker` opens its list upward when the trigger is nearer the bottom of the viewport than the
 panel is tall. It is 15rem and was always hung below, which is fine halfway up a page and useless
 for a control on the last row of a phone: the list drew off-screen entirely. The panel also

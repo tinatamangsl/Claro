@@ -1337,6 +1337,17 @@
   }
 
   /* Opens upward when the trigger is too near the bottom for 15rem below it. */
+  /*
+    Placed from the trigger's rectangle rather than from its box, so the
+    absolute offsets the anchored version needs must not apply.
+  */
+  .picker-panel-floating {
+    top: auto;
+    left: auto;
+    right: auto;
+    bottom: auto;
+  }
+
   .picker-panel-above {
     top: auto;
     bottom: calc(100% + 0.25rem);

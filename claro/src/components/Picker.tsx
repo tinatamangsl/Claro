@@ -1,5 +1,6 @@
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 /** Matches `.picker-panel`'s max-height. Kept in step by the test below it. */
 const PANEL_MAX = 240;
@@ -67,6 +68,21 @@ export function Picker<T extends string>({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const [dropUp, setDropUp] = useState(false);
+  /**
+   * Where the panel sits on screen, in viewport coordinates.
+   *
+   * The panel used to be `position: absolute` inside the trigger's own box,
+   * which any ancestor with `overflow: hidden` clips no matter what z-index it
+   * carries. Both `.spread` and the schedule's own `.paper-panel` are such
+   * ancestors, so on the first and last rows of the schedule the list was drawn
+   * almost entirely outside them: measured at 201px tall with only the last
+   * two pixels inside the clip. The time could not be seen, let alone changed.
+   *
+   * It is a portal to the body now, positioned from the trigger's rectangle. A
+   * fixed element in the body has nothing above it to clip against.
+   */
+  const [at, setAt] = useState<{ left: number; top: number; width: number } | null>(null);
+  const panel = useRef<HTMLDivElement | null>(null);
   const root = useRef<HTMLDivElement | null>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const listId = useId();
@@ -77,7 +93,11 @@ export function Picker<T extends string>({
     if (!open) return;
 
     const onPointerDown = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      // The panel is no longer inside `root`, so it has to be asked separately
+      // or every click on an option would read as a click outside.
+      if (root.current?.contains(target) || panel.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
@@ -95,14 +115,42 @@ export function Picker<T extends string>({
    * Measured when the list opens rather than tracked, because the only moment
    * it matters is the moment it is drawn.
    */
-  useEffect(() => {
-    if (!open) return setDropUp(false);
-    const rect = trigger.current?.getBoundingClientRect();
-    if (!rect) return;
-    const below = window.innerHeight - rect.bottom;
-    const above = rect.top;
-    setDropUp(below < PANEL_MAX + 8 && above > below);
-  }, [open]);
+  useLayoutEffect(() => {
+    if (!open) {
+      setDropUp(false);
+      setAt(null);
+      return;
+    }
+
+    const place = () => {
+      const rect = trigger.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const below = window.innerHeight - rect.bottom;
+      const above = rect.top;
+      const up = below < PANEL_MAX + 8 && above > below;
+      setDropUp(up);
+      setAt({
+        left: align === "right" ? rect.right : rect.left,
+        top: up ? rect.top : rect.bottom,
+        width: rect.width,
+      });
+    };
+
+    place();
+    /*
+     * Re-placed on scroll and resize, because a fixed panel does not travel
+     * with the page the way an absolute one did. `capture` catches the inner
+     * panes too: the schedule scrolls inside itself, and a list anchored to a
+     * row that has moved is worse than one that is clipped.
+     */
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open, align]);
 
   const choose = (option: PickerOption<T>) => {
     onChange(option.value);
@@ -171,14 +219,31 @@ export function Picker<T extends string>({
         />
       </button>
 
-      {open && (
-        <div
-          className={cn(
-            "picker-panel",
-            align === "right" && "right-0 left-auto",
-            dropUp && "picker-panel-above",
-          )}
-        >
+      {open &&
+        at &&
+        createPortal(
+          <div
+            ref={panel}
+            onKeyDown={onKeyDown}
+            style={{
+              position: "fixed",
+              left: align === "right" ? undefined : at.left,
+              right: align === "right" ? window.innerWidth - at.left : undefined,
+              top: dropUp ? undefined : at.top + 4,
+              bottom: dropUp ? window.innerHeight - at.top + 4 : undefined,
+              minWidth: Math.max(at.width, 160),
+            }}
+            /*
+              The up/down decision stays a class even though the offsets are
+              now inline: it is the observable record of which way the list
+              chose to open, and the tests read it. Inline styles win over it,
+              so the old anchored offsets it carries are inert here.
+            */
+            className={cn(
+              "picker-panel picker-panel-floating",
+              dropUp && "picker-panel-above",
+            )}
+          >
           {/*
             The listbox is inside the panel rather than being it, because a
             `listbox` may hold nothing but options and the footer is a field.
@@ -219,9 +284,10 @@ export function Picker<T extends string>({
                 },
               })}
             </div>
-          ) : null}
-        </div>
-      )}
+            ) : null}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
