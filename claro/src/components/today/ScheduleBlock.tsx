@@ -21,7 +21,7 @@ import { useState } from "react";
 
 import { Picker } from "@/components/Picker";
 import { registerZone } from "@/lib/drop-zones";
-import { nextFreeSlot } from "@/lib/day-plan";
+import { hourHasRoom, nextFreeSlot } from "@/lib/day-plan";
 import { cn } from "@/lib/utils";
 import type { Day, Habit, HabitCompletion, ScheduleItem } from "@/lib/types";
 
@@ -240,7 +240,14 @@ export function ScheduleBlock({
                     className="-ml-2 min-w-0 flex-1 py-0 text-[0.8rem] leading-snug"
                   />
                 ) : (
-                  nextFreeSlot(day, time) !== time && (
+                  /*
+                    Shown whenever the hour has room, asked plainly rather than
+                    inferred from what `nextFreeSlot` returns. The old test was
+                    `nextFreeSlot(day, time) !== time`, which reads as "full"
+                    the moment :00 is free, so an hour holding one 2:40 block
+                    offered no way to add anything beside it.
+                  */
+                  hourHasRoom(day, time) && (
                     <button
                       type="button"
                       onClick={() => setAdding(time)}
@@ -318,7 +325,13 @@ function MinutePicker({
       className="shrink-0"
       triggerClassName={cn(
         "minute-trigger",
-        minutes === 0 && "opacity-0 focus-visible:opacity-100 group-hover:opacity-60",
+        /*
+          Hidden at rest on a desktop, where hovering the row reveals it. Always
+          there on a touch screen, which has no hover: the control that sets an
+          exact minute was unreachable on a phone entirely.
+        */
+        minutes === 0 &&
+          "opacity-60 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-60",
       )}
       options={[...new Set([...SCHEDULE_MINUTES, minutes])]
         .sort((a, b) => a - b)

@@ -13,7 +13,7 @@
  */
 
 import { blockItem, linkedItem } from "./schedule";
-import { SCHEDULE_HOURS, SCHEDULE_MINUTES, atMinutes, scheduleSlots } from "./dates";
+import { SCHEDULE_HOURS, SCHEDULE_MINUTES, atMinutes, hourOf, scheduleSlots } from "./dates";
 import { newId } from "./id";
 import { PRIORITY_KEYS, type Day, type PriorityKey, type ScheduleItem } from "./types";
 
@@ -111,8 +111,62 @@ function place(day: Day, item: ScheduleItem): Day {
  * then refuses with a reason.
  */
 export function nextFreeSlot(day: Day, hour: string): string {
-  const taken = new Set(
-    day.scheduleItems.filter((item) => item.carriedTo == null).map((item) => item.time),
-  );
-  return SCHEDULE_MINUTES.map((m) => atMinutes(hour, m)).find((slot) => !taken.has(slot)) ?? hour;
+  return freeSlotAfterLast(day, hour) ?? hour;
+}
+
+/**
+ * Where a second entry in an hour should go, or null when there is no room.
+ *
+ * **Null rather than the hour itself, because the hour is a real answer.** The
+ * old version returned `hour` for both "the hour is full" and "2:00 is free",
+ * and the caller distinguished them by testing `nextFreeSlot(...) !== hour`.
+ * That reads as full whenever :00 happens to be free, so an hour holding a
+ * single 2:40 block offered no way to add anything beside it: the plus vanished
+ * and there was no way back except editing the block that was already there.
+ *
+ * **It looks forward from what is already booked.** Having just written
+ * something at 2:40, the next thing is almost always after it, not at 2:00. So
+ * this takes the first free quarter at or after the latest item in the hour,
+ * and only falls back to an earlier gap when there is nothing later — filling a
+ * hole at 2:15 is still better than refusing.
+ */
+export function freeSlotAfterLast(day: Day, hour: string): string | null {
+  const live = day.scheduleItems.filter((item) => item.carriedTo == null);
+  const taken = new Set(live.map((item) => item.time));
+
+  /*
+   * Quarters first, then every other minute.
+   *
+   * The quarters keep ordinary days tidy: four things in an hour land on
+   * 2:00, 2:15, 2:30, 2:45 rather than on whatever minute the clock happened
+   * to read. Past that the hour used to simply refuse, and the plus vanished
+   * with no reason given, which is a dead end on a day that genuinely had five
+   * things in it. The remaining minutes are the overflow, so an hour is never
+   * closed; they are only reached once the tidy slots are gone.
+   */
+  const quarters = SCHEDULE_MINUTES.map((m) => atMinutes(hour, m));
+  const rest = Array.from({ length: 60 }, (_, m) => m)
+    .filter((m) => !SCHEDULE_MINUTES.includes(m as (typeof SCHEDULE_MINUTES)[number]))
+    .map((m) => atMinutes(hour, m));
+
+  const inHour = live.map((item) => item.time).filter((time) => hourOf(time) === hour);
+  const latest = inHour.length > 0 ? inHour.reduce((a, b) => (a > b ? a : b)) : null;
+
+  const free = (list: string[]) => list.filter((slot) => !taken.has(slot));
+  const after = (list: string[]) => (latest ? free(list).find((slot) => slot > latest) : undefined);
+
+  /*
+   * A tidy quarter always beats a stray minute, even an earlier one.
+   *
+   * With 2:00 and 2:45 booked, going strictly forward would offer 2:46, and a
+   * day of 2:46s and 3:17s reads as noise. 2:15 is both free and the shape the
+   * rest of the hour is already in, so the gap is the better answer. Minutes
+   * are the overflow and are only reached once no quarter is left.
+   */
+  return after(quarters) ?? free(quarters)[0] ?? after(rest) ?? free(rest)[0] ?? null;
+}
+
+/** Whether an hour has any quarter left. Asked plainly, not inferred. */
+export function hourHasRoom(day: Day, hour: string): boolean {
+  return freeSlotAfterLast(day, hour) !== null;
 }

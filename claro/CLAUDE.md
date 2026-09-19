@@ -641,6 +641,31 @@ read off the real state rather than asserted, and the consent screen, the one pl
 actually given, says what it now does. What did not change is the half that still holds
 absolutely: nothing reaches another person.
 
+## The schedule: an hour is a frame, and it never closes
+
+**"Is there room?" and "which slot?" are different questions.** `nextFreeSlot` used to answer
+both, returning the hour itself for "this hour is full" *and* for "2:00 is free", and the plus
+button tested `nextFreeSlot(...) !== hour` to decide whether to appear. That reads as full the
+moment :00 happens to be free, so an hour holding a single 2:40 block offered no way to add
+anything beside it and no way back except editing what was there. `hourHasRoom` now asks
+plainly and `freeSlotAfterLast` returns `null` rather than an ambiguous time.
+
+**It looks forward from what is already booked.** Having just written something at 2:40, the
+next thing is almost always after it, not at 2:00.
+
+**A tidy quarter beats a stray minute, even an earlier one.** With 2:00 and 2:45 booked, going
+strictly forward would offer 2:46, and a day of 2:46s and 3:17s reads as noise; 2:15 is free and
+is the shape the hour is already in. So the order is: a quarter after the last item, then any
+free quarter, then a minute after the last item, then any free minute.
+
+**Four entries no longer close an hour.** The quarters are the tidy default and the remaining
+minutes are overflow, reached only once the quarters are gone, so an hour is open until all
+sixty minutes are taken. Silently hiding the affordance on a day that genuinely had five things
+in one hour was a dead end with no reason given.
+
+**The exact-minute control is reachable without a mouse.** It was `opacity-0` until the row was
+hovered, which on a touch screen is never, so setting a precise time was impossible on a phone.
+
 ## Habits: an intention, never a score
 
 A habit can carry **how often it is meant to happen** — a plain count ("four a week"), or
