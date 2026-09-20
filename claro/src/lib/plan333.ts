@@ -72,7 +72,14 @@ export function meaningfulProject(day: Day): string {
   return day.priority1.text;
 }
 
-function addAction(day: Day, text: string, bucket: Bucket, now: Date): Day {
+/**
+ * The one definition of what an action is.
+ *
+ * Exported because the week grid composes them too: writing a second builder
+ * there would be a second opinion about what a task is, and the two would drift
+ * the first time either changed.
+ */
+export function addAction(day: Day, text: string, bucket: Bucket, now: Date): Day {
   const trimmed = text.trim();
   if (!trimmed) return day;
 

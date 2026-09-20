@@ -349,10 +349,46 @@ different moment, and a count of three cannot answer it: you need the words. Pas
 cell stops listing and says how many are left, because five blocks in 72px makes all five
 unreadable.
 
-**Both are read-only, and that is load-bearing.** Every block belongs to a `Day`, and there is
-still no separate store of calendar events — two stores of the same thing is how a planner and a
-calendar start disagreeing about Thursday. The way to change a block is to open its day, which is
-what every cell links to.
+**The week grid writes; the month does not.** Seeing the week and then having to go somewhere
+else to change it is half a feature, so a cell of the week can be dragged into and written into.
+A month cell seventy pixels tall cannot hold an editor worth using, so it stays a reader.
+
+**There is still no second store, and that is load-bearing.** Every block belongs to a `Day`, and
+every write from the grid goes through the same `updateDay` Daily uses — `src/lib/week-plan.ts`
+holds the pure functions and returns ordinary `Day` records. Two stores of the same thing is how
+a planner and a calendar start disagreeing about Thursday.
+
+`moveBlock` returns **a pair of days**, because a move across days is the block leaving one
+record and joining another and both have to be written. It keeps the minute: a 9:40 block dropped
+on the 2 PM row lands at 2:40, because somebody who set that minute meant it. When the minute is
+taken the hour's own `freeSlotAfterLast` rules pick the next slot rather than refusing the drop.
+
+`addEntry` makes either a booking or a record. A **block** is written to the schedule and nowhere
+else. A **task, quick tick or project** joins that day's `actions` — the list Daily, the carry
+forward and the quarter all read from — and the schedule gets a `linkedItem` pointing at it
+rather than a second copy of its words, so renaming it in either place renames it in both.
+
+**Dragging is pointer events, not HTML5 drag-and-drop**, so it works on a touch screen, and so
+there is one answer in this codebase to "how do things move". The listeners are on the window and
+read through refs, so a press that leaves its cell is still followed and a re-render mid-drag
+cannot detach them; the cell under the pointer is found by hit-testing `[data-cell]` rather than
+by a registry of rectangles that scrolling would put out of date. A drag past the 5px threshold
+sets a `dragged` ref, because a drag ending on a block still reads as a click to the browser and
+would otherwise navigate to Daily. The chip that follows the pointer is **portalled to the body**:
+the grid scrolls inside `overflow-x-auto`, which clips anything positioned within it.
+
+**A linked row does not drag.** Moving it would move the booking and leave the priority, action
+or habit it points at behind.
+
+**An empty week still draws.** It used to refuse, which was honest while it could only read; now
+that a cell can be written into, the week with nothing on it is exactly the week that needs the
+grid, so it opens on 8 AM to 6 PM.
+
+Month to week to day is the path down, and the month was missing its first step: every cell only
+ever led to a single day. The **week numbers down the left margin** open that week in the grid
+beside it, the way a paper diary marks them, and a day cell opens Daily. Neither component knows
+about routing — `/week` passes `onOpenWeek` and `onOpenDay` — so the grids stay testable without
+a router.
 
 The scale is component state, not a search param: it is a way of looking at the week you are
 already on rather than a different place, so it does not deserve a shareable address. `?w=` still

@@ -30,6 +30,7 @@ import {
   DOMAINS,
   MAX_WEEK_ACTIONS,
   type Domain,
+  type ISODate,
   type Week,
   type WeekId,
 } from "@/lib/types";
@@ -66,6 +67,17 @@ function WeekView() {
   const parentQuarter = quarter(quarterId);
 
   const go = (id: WeekId) => navigate({ to: "/week", search: { w: id } });
+  const openDay = (id: ISODate) =>
+    navigate({ to: "/today", search: id === today ? {} : { d: id } });
+  /*
+   * Month to week is a change of scale *and* of week, so both happen at once:
+   * picking week 38 out of September should land on week 38, not on whichever
+   * week the page was already showing.
+   */
+  const openWeek = (id: WeekId) => {
+    setScale("week");
+    go(id);
+  };
 
   return (
     <div className="space-y-10">
@@ -160,13 +172,15 @@ function WeekView() {
 
         <div className="surface-quiet mt-2 p-3 sm:p-4">
           {scale === "week" ? (
-            <ScheduleWeek weekId={weekId} todayId={today} />
+            <ScheduleWeek weekId={weekId} todayId={today} onOpenDay={openDay} />
           ) : (
             <ScheduleMonth
               // Thursday, so a week straddling two months shows the one that
               // owns most of it. The same rule `quarterOfWeek` resolves by.
               anchor={weekDayIds(weekId)[3]}
               todayId={today}
+              onOpenWeek={openWeek}
+              onOpenDay={openDay}
             />
           )}
         </div>
