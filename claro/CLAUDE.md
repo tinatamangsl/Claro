@@ -384,6 +384,44 @@ or habit it points at behind.
 that a cell can be written into, the week with nothing on it is exactly the week that needs the
 grid, so it opens on 8 AM to 6 PM.
 
+**Any minute of the hour, not just the one offered.** A cell offers the next free slot and the
+same `MinutePicker` the day view uses sits beside the kind buttons to change it, so a stand-up at
+2:45 takes one pass rather than two. The pick is held as `null` until it is made deliberately,
+which is what lets three lines typed into 2 PM land at 2:00, 2:15 and 2:30 without the control
+being touched; it resets after each write, because the minute belonged to the line just written.
+`addEntry` and `addBlock` take a **time**, not an hour, and `freeAt` gives way to the hour's own
+rules only when that exact minute is taken.
+
+## What a day *is*, not what is in it
+
+Office day, annual leave, in Berlin, somebody's birthday. Half of what a calendar tells you at a
+glance is this sort of thing, and none of it belongs at a time: booking annual leave at 9 AM is a
+lie about when it applies. `AllDayRow` is the band between the day headings and the hours, and
+`src/lib/day-labels.ts` is its model.
+
+**A stretch is one `DayLabel` per day sharing a `spanId`, not a range record.** Everything in
+Claro hangs off a `Day`, and a range would be a second place a Tuesday could be described from.
+This way a day still answers for itself, clearing one day out of a week of leave is an ordinary
+edit rather than a range that has to be split, and `renameSpan` / `removeSpan` still act on the
+whole stretch because the id is what the days have in common. Contiguity is by `spanId` rather
+than by matching text, so two trips both called "London" stay two bars and a broken stretch draws
+as the pieces that are actually left.
+
+`spansOf` lays the bars into **lanes**, each the first one free from that column on, so an
+overlapping stretch is never hidden behind another and the band is only as tall as it has to be.
+A spare empty lane is always drawn under them: it is somewhere to start, and it is where a new
+stretch is typed, which means the editor can never land on top of a bar whatever range was
+dragged. **Drag across the band to cover several days** — the same gesture as a single click,
+over one day, so there is one thing to learn.
+
+`Day.dayLabels` is additive and needs no version bump: `readDay` spreads over `blankDay`, so a
+record written before labels existed arrives with none. `labelsOf` tolerates the field being
+absent anyway, because the Supabase copy of a store can be older than the build reading it.
+
+The month grid and Daily both **show** labels and neither writes them. A stretch is written on
+the week, where the days it covers are all in front of you; a 72px month cell cannot hold that
+editor, and Daily can only ever see one day of a stretch at a time.
+
 Month to week to day is the path down, and the month was missing its first step: every cell only
 ever led to a single day. The **week numbers down the left margin** open that week in the grid
 beside it, the way a paper diary marks them, and a day cell opens Daily. Neither component knows

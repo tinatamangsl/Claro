@@ -81,8 +81,10 @@ import {
 } from "@/lib/focus-session";
 import { cn } from "@/lib/utils";
 import { FOCUS_BLOCK_MS, PRIORITY_KEYS, priorityKey, type ScheduleLink } from "@/lib/types";
+import { labelsOf } from "@/lib/day-labels";
 import type {
   Day,
+  DayLabel,
   FocusSession,
   ISODate,
   Priority,
@@ -434,6 +436,7 @@ function TodayView() {
           <DayHeading
             dayId={dayId}
             today={today}
+            labels={labelsOf(record)}
             weekId={weekId}
             quarterId={quarterId}
             onPrev={() => go(shiftDayId(dayId, -1))}
@@ -619,6 +622,7 @@ function TodayView() {
 function DayHeading({
   dayId,
   today,
+  labels,
   weekId,
   quarterId,
   onPrev,
@@ -627,6 +631,8 @@ function DayHeading({
 }: {
   dayId: ISODate;
   today: ISODate;
+  /** What the day is. Written on the week, where a stretch can span days. */
+  labels: DayLabel[];
   weekId: string;
   quarterId: string;
   onPrev: () => void;
@@ -665,6 +671,20 @@ function DayHeading({
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3">
           <h1 className="display text-[2rem] sm:text-[2.3rem]">{formatDayWeekday(dayId)}</h1>
           <p className="tnum text-[0.88rem] text-muted-foreground">{formatDayDate(dayId)}</p>
+          {/*
+            What the day is, beside its name. Read-only here: a stretch of
+            leave is written on the week, where the days it covers are all in
+            front of you, and showing it in only one of the two places would
+            leave Daily quietly wrong about the day it is describing.
+          */}
+          {labels.map((label) => (
+            <span
+              key={label.id}
+              className="rounded-full bg-gold/25 px-2 py-0.5 text-[0.72rem] leading-tight"
+            >
+              {label.text}
+            </span>
+          ))}
         </div>
 
         <div className="flex items-center gap-2">

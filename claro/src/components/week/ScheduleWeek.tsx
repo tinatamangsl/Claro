@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Plus } from "lucide-react";
 
+import { AllDayRow } from "./AllDayRow";
 import { WeekCellComposer } from "./WeekCellComposer";
 
 import { useClaro } from "@/lib/claro-store";
@@ -16,6 +17,7 @@ import {
   minutesOf,
   weekDayIds,
 } from "@/lib/dates";
+import { labelsOf } from "@/lib/day-labels";
 import { readDay } from "@/lib/storage";
 import { moveBlock } from "@/lib/week-plan";
 import { resolveSchedule, type ResolvedSchedule } from "@/lib/schedule";
@@ -166,6 +168,11 @@ export function ScheduleWeek({
   );
 
   const booked = [...byDay.values()].flat();
+  /*
+   * A week with leave written across it is not an empty week, even with no
+   * hours booked, so the prompt to fill one stands down.
+   */
+  const labelled = days.some((dayId) => labelsOf(readDay(state, dayId)).length > 0);
 
   /*
    * Only the hours in use, plus one either side so the first and last things
@@ -185,7 +192,7 @@ export function ScheduleWeek({
   return (
     <div className="overflow-x-auto">
       <div className="min-w-[38rem]">
-        {booked.length === 0 && (
+        {booked.length === 0 && !labelled && (
           <p className="pb-2 text-[0.8rem] leading-relaxed text-muted-foreground">
             Nothing is on this week yet. Click an hour to put something in it.
           </p>
@@ -216,6 +223,14 @@ export function ScheduleWeek({
               </span>
             </button>
           ))}
+
+          {/*
+            What the days *are*, before what is in them. It sits under the
+            headings and above the hours because that is where every calendar
+            puts it, and because leave or an office day frames how the hours
+            below should be read.
+          */}
+          <AllDayRow days={days} />
 
           {hours.map((hour) => (
             <Row

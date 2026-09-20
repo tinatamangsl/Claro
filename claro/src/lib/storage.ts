@@ -136,6 +136,7 @@ export function blankDay(id: ISODate): Day {
     scheduleItems: [],
     actions: [],
     nonNegotiables: [],
+    dayLabels: [],
     carriedForward: [],
     plan333: null,
     sleepHours: null,

@@ -252,6 +252,21 @@ export type ActionItem = {
 
 export type NonNegotiable = { id: string; text: string; done: boolean };
 
+/**
+ * A word about the whole day: "office day", "annual leave", "in Berlin".
+ *
+ * It is not an entry on the schedule and deliberately has no time. Half of
+ * what a calendar tells you at a glance is this sort of thing, and booking it
+ * at 9 AM would be a lie about when it applies.
+ *
+ * One label is stored per day even when it spans a week, because everything in
+ * Claro hangs off a `Day` and a range record would be a second place a
+ * Tuesday could be described from. `spanId` is what the days have in common,
+ * so renaming or removing a stretch of leave touches all of it at once, and so
+ * two unrelated leaves that happen to read the same are still two things.
+ */
+export type DayLabel = { id: string; text: string; spanId: string };
+
 export type Mood = 1 | 2 | 3 | 4 | 5;
 
 /**
@@ -282,6 +297,8 @@ export type Day = {
   scheduleItems: ScheduleItem[];
   actions: ActionItem[];
   nonNegotiables: NonNegotiable[]; // capped at MAX_NON_NEGOTIABLES
+  /** What the day is, rather than what is in it. Untimed, and may span days. */
+  dayLabels: DayLabel[];
   /** Awaiting an explicit decision — never silently merged into the day. */
   carriedForward: CarriedItem[];
   /** Set when the day was planned with the 3-3-3 framework. */

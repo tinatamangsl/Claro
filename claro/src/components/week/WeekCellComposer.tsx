@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { MinutePicker } from "@/components/MinutePicker";
 import { useClaro } from "@/lib/claro-store";
 import { formatDayLong, formatTimeLabel } from "@/lib/dates";
 import { addEntry, slotFor, type WeekEntryKind } from "@/lib/week-plan";
@@ -39,14 +40,26 @@ export function WeekCellComposer({
   const { state, updateDay } = useClaro();
   const [kind, setKind] = useState<WeekEntryKind>("block");
   const [text, setText] = useState("");
+  /*
+   * The minute, once it has been chosen deliberately.
+   *
+   * Until then the cell offers the next free slot of the hour that was
+   * clicked, which is right nearly always. Null rather than that slot, so the
+   * offer keeps moving as lines are added: type three things into 2 PM and
+   * they land at 2:00, 2:15 and 2:30 without touching the control once.
+   */
+  const [picked, setPicked] = useState<string | null>(null);
 
-  const time = slotFor(readDay(state, dayId), hour);
+  const day = readDay(state, dayId);
+  const time = picked ?? slotFor(day, hour);
 
   const submit = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    updateDay(dayId, (day) => addEntry(day, hour, trimmed, kind, new Date()));
+    updateDay(dayId, (d) => addEntry(d, time, trimmed, kind, new Date()));
     setText("");
+    // The minute was for the line just written; the next one starts fresh.
+    setPicked(null);
   };
 
   return (
@@ -79,7 +92,13 @@ export function WeekCellComposer({
         className="w-full rounded bg-transparent px-1 py-0.5 text-[11px] leading-tight outline-none placeholder:text-muted-foreground"
       />
 
-      <div className="mt-0.5 flex flex-wrap gap-0.5">
+      <div className="mt-0.5 flex flex-wrap items-center gap-0.5">
+        {/*
+          Any minute of the hour, not just the one the cell picked. A stand-up
+          at 9:05 and a train at 4:37 are ordinary times, and the same control
+          the day view uses answers for both here.
+        */}
+        <MinutePicker time={time} day={day} onChange={setPicked} alwaysVisible />
         {KINDS.map((option) => (
           <button
             key={option.kind}

@@ -7,7 +7,7 @@
  * draws are the same records and cannot drift apart.
  */
 
-import { atMinutes, minutesOf } from "./dates";
+import { atMinutes, hourOf, minutesOf } from "./dates";
 import { freeSlotAfterLast } from "./day-plan";
 import { addAction } from "./plan333";
 import { blockItem, linkedItem, settleHours } from "./schedule";
@@ -71,13 +71,26 @@ export function slotFor(day: Day, hour: string): string {
   return freeSlotAfterLast(day, hour) ?? hour;
 }
 
-/** A new block on a day, at the first sensible slot of an hour. */
-export function addBlock(day: Day, hour: string, text: string): Day {
+/**
+ * The time asked for, or the nearest free one in that hour.
+ *
+ * A cell offers a default minute and lets it be changed, so the answer here is
+ * usually just what was asked for. It gives way only when that exact minute is
+ * already taken, because refusing to write something somebody has typed is
+ * worse than writing it a minute or two along.
+ */
+export function freeAt(day: Day, time: string): string {
+  const taken = day.scheduleItems.some((i) => i.carriedTo == null && i.time === time);
+  return taken ? slotFor(day, hourOf(time)) : time;
+}
+
+/** A new block on a day, at the time asked for or the nearest free one. */
+export function addBlock(day: Day, time: string, text: string): Day {
   const trimmed = text.trim();
   if (!trimmed) return day;
   return {
     ...day,
-    scheduleItems: [...day.scheduleItems, blockItem(slotFor(day, hour), trimmed)],
+    scheduleItems: [...day.scheduleItems, blockItem(freeAt(day, time), trimmed)],
   };
 }
 
@@ -93,16 +106,16 @@ export function addBlock(day: Day, hour: string, text: string): Day {
  */
 export function addEntry(
   day: Day,
-  hour: string,
+  time: string,
   text: string,
   kind: WeekEntryKind,
   now: Date,
 ): Day {
   const trimmed = text.trim();
   if (!trimmed) return day;
-  if (kind === "block") return addBlock(day, hour, trimmed);
+  if (kind === "block") return addBlock(day, time, trimmed);
 
-  const time = slotFor(day, hour);
+  const at = freeAt(day, time);
   const withAction = addAction(day, trimmed, kind, now);
   const action = withAction.actions[withAction.actions.length - 1];
 
@@ -110,7 +123,7 @@ export function addEntry(
     ...withAction,
     scheduleItems: [
       ...withAction.scheduleItems,
-      linkedItem(time, { kind: "action", actionId: action.id }, trimmed),
+      linkedItem(at, { kind: "action", actionId: action.id }, trimmed),
     ],
   };
 }

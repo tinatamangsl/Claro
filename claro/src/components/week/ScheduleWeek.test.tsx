@@ -57,6 +57,9 @@ const book = (api: Api, dayId: ISODate, time: string, text: string, patch: Parti
 
 const days = (api: Api) => weekDayIds(weekOfDay(api.store!.today));
 
+/** jsdom has no layout, so it does not implement hit testing at all. */
+type Hit = { elementFromPoint?: (x: number, y: number) => Element | null };
+
 /** The empty part of a cell, which is also the cell's drop target. */
 const adder = (dayId: ISODate, label: string) =>
   screen.getByLabelText(`Add at ${label} on ${formatDayLong(dayId)}`);
@@ -139,7 +142,6 @@ describe("moving a block around the week", () => {
    * that finds the cell under the pointer is stubbed; that it finds the right
    * cell in a real browser is not something jsdom can answer either way.
    */
-  type Hit = { elementFromPoint?: (x: number, y: number) => Element | null };
   const dragTo = (block: HTMLElement, cell: HTMLElement) => {
     // jsdom has no layout, so it does not implement hit testing at all.
     const hit = document as unknown as Hit;
@@ -302,6 +304,56 @@ describe("writing into a cell of the week", () => {
     expect(api.store!.day(week[0]).actions[0].bucket).toBe("quickTick");
   });
 
+  it("puts the entry on any minute of the hour, not just the one offered", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+
+    const field = await compose(api, week[2], "2 PM");
+    // The cell offers 2:00; a stand-up at 2:45 is an ordinary time and the
+    // same control the day view uses answers for it here.
+    fireEvent.click(screen.getByRole("button", { name: /^Time of the block at/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "2:45 PM" }));
+    fireEvent.change(field, { target: { value: "stand-up" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(api.store!.day(week[2]).scheduleItems.map((i) => i.time)).toEqual(["14:45"]),
+    );
+  });
+
+  it("goes back to offering the next free slot after a line is written", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+
+    const field = await compose(api, week[5], "2 PM");
+    fireEvent.click(screen.getByRole("button", { name: "Time of the block at 2 PM" }));
+    fireEvent.click(await screen.findByRole("option", { name: "2:30 PM" }));
+    fireEvent.change(field, { target: { value: "first" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    await waitFor(() => expect(api.store!.day(week[5]).scheduleItems).toHaveLength(1));
+
+    /*
+     * The minute belonged to the line just written. The control goes back to
+     * offering, and the offer follows what is now booked, so a second line
+     * lands after 2:30 without anyone touching the control again. The written
+     * times cannot show this on their own: a stale 2:30 would be bumped to
+     * 2:45 too, so what is asserted is what the control is now saying.
+     */
+    expect(screen.getByRole("button", { name: "Time of the block at 2:45 PM" })).toBeTruthy();
+
+    fireEvent.change(field, { target: { value: "second" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    await waitFor(() =>
+      expect(api.store!.day(week[5]).scheduleItems.map((i) => i.time)).toEqual([
+        "14:30",
+        "14:45",
+      ]),
+    );
+  });
+
   it("stays open for the next line rather than closing after one", async () => {
     const { api } = harness();
     await ready(api);
@@ -343,6 +395,129 @@ describe("writing into a cell of the week", () => {
   });
 });
 
+describe("what the day is, not what is in it", () => {
+  const cell = (dayId: ISODate) =>
+    screen.getByLabelText(`Add an all day note on ${formatDayLong(dayId)}`);
+  const field = () => screen.getByLabelText(/^All day note on /);
+
+  it("labels a single day", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+
+    fireEvent.click(cell(week[2]));
+    fireEvent.change(field(), { target: { value: "Office day" } });
+    fireEvent.keyDown(field(), { key: "Enter" });
+
+    await waitFor(() =>
+      expect(api.store!.day(week[2]).dayLabels.map((l) => l.text)).toEqual(["Office day"]),
+    );
+    // Untimed on purpose: booking annual leave at 9 AM is a lie about when it
+    // applies, so nothing lands on the schedule.
+    expect(api.store!.day(week[2]).scheduleItems).toEqual([]);
+  });
+
+  it("drags across days and writes one stretch to every one of them", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+
+    const hit = document as unknown as Hit;
+    hit.elementFromPoint = () => cell(week[3]);
+    fireEvent.pointerDown(cell(week[1]), { clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(window, { clientX: 300, clientY: 0 });
+    fireEvent.pointerUp(window, { clientX: 300, clientY: 0 });
+    delete hit.elementFromPoint;
+
+    await waitFor(() => expect(field()).toBeTruthy());
+    fireEvent.change(field(), { target: { value: "Annual leave" } });
+    fireEvent.keyDown(field(), { key: "Enter" });
+
+    await waitFor(() => expect(api.store!.day(week[3]).dayLabels).toHaveLength(1));
+    const covered = [1, 2, 3].map((i) => api.store!.day(week[i]).dayLabels);
+
+    // One label per day, so each day still answers for itself, sharing one
+    // span id, so the stretch can be renamed or dropped in one go.
+    expect(covered.map((labels) => labels.map((l) => l.text))).toEqual([
+      ["Annual leave"],
+      ["Annual leave"],
+      ["Annual leave"],
+    ]);
+    expect(new Set(covered.map((labels) => labels[0].spanId)).size).toBe(1);
+    expect(api.store!.day(week[0]).dayLabels).toEqual([]);
+    expect(api.store!.day(week[4]).dayLabels).toEqual([]);
+  });
+
+  it("draws a stretch as one bar rather than one chip per day", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+
+    act(() => {
+      for (const i of [1, 2, 3]) {
+        api.store!.updateDay(week[i], (day) => ({
+          ...day,
+          dayLabels: [{ id: `l${i}`, text: "Annual leave", spanId: "s1" }],
+        }));
+      }
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(
+          `Annual leave, ${formatDayLong(week[1])} to ${formatDayLong(week[3])}. Edit`,
+        ),
+      ).toBeTruthy(),
+    );
+    expect(screen.getAllByTitle("Annual leave")).toHaveLength(1);
+  });
+
+  it("renames the whole stretch from the bar", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+
+    act(() => {
+      for (const i of [0, 1]) {
+        api.store!.updateDay(week[i], (day) => ({
+          ...day,
+          dayLabels: [{ id: `l${i}`, text: "Leve", spanId: "s1" }],
+        }));
+      }
+    });
+
+    await waitFor(() => expect(screen.getByTitle("Leve")).toBeTruthy());
+    fireEvent.click(screen.getByTitle("Leve"));
+    fireEvent.change(field(), { target: { value: "Annual leave" } });
+    fireEvent.keyDown(field(), { key: "Enter" });
+
+    await waitFor(() =>
+      expect(api.store!.day(week[1]).dayLabels[0].text).toBe("Annual leave"),
+    );
+    expect(api.store!.day(week[0]).dayLabels[0].text).toBe("Annual leave");
+  });
+
+  it("removes the stretch when it is emptied", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+
+    act(() =>
+      api.store!.updateDay(week[2], (day) => ({
+        ...day,
+        dayLabels: [{ id: "l1", text: "Office day", spanId: "s1" }],
+      })),
+    );
+
+    await waitFor(() => expect(screen.getByTitle("Office day")).toBeTruthy());
+    fireEvent.click(screen.getByTitle("Office day"));
+    fireEvent.change(field(), { target: { value: "" } });
+    fireEvent.keyDown(field(), { key: "Enter" });
+
+    await waitFor(() => expect(api.store!.day(week[2]).dayLabels).toEqual([]));
+  });
+});
+
 describe("the month, as what is booked in it", () => {
   it("lists the blocks on a day rather than counting them", async () => {
     const { api } = harness("month");
@@ -366,6 +541,20 @@ describe("the month, as what is booked in it", () => {
 
     // Squeezing five blocks into a 72px cell makes every one unreadable.
     await waitFor(() => expect(container.textContent).toContain("2 more"));
+  });
+
+  it("shows what a day is, above what is in it", async () => {
+    const { api } = harness("month");
+    await ready(api);
+
+    act(() =>
+      api.store!.updateDay(api.store!.today, (day) => ({
+        ...day,
+        dayLabels: [{ id: "l1", text: "Annual leave", spanId: "s1" }],
+      })),
+    );
+
+    await waitFor(() => expect(screen.getByTitle("Annual leave")).toBeTruthy());
   });
 
   it("opens a week from the number in the margin", async () => {

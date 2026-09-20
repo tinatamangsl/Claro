@@ -1,5 +1,6 @@
 import { useClaro } from "@/lib/claro-store";
 import { monthGrid, monthOfDay } from "@/lib/calendar";
+import { labelsOf } from "@/lib/day-labels";
 import {
   formatDayLong,
   formatTimeLabel,
@@ -157,6 +158,20 @@ function WeekRow({
             >
               {Number(cell.dayId.slice(-2))}
             </span>
+
+            {/*
+              What the day is, above what is in it, the same order the week
+              band uses. Leave or an office day frames the rest of the cell.
+            */}
+            {labelsOf(readDay(state, cell.dayId)).map((label) => (
+              <span
+                key={label.id}
+                title={label.text}
+                className="mt-0.5 block truncate rounded bg-gold/25 px-1 text-[10px] leading-tight"
+              >
+                {label.text}
+              </span>
+            ))}
 
             <span className="mt-1 block space-y-0.5">
               {rows.slice(0, SHOWN).map((item) => (
