@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowUpRight } from "lucide-react";
 
@@ -5,7 +6,11 @@ import { AddItem } from "@/components/AddItem";
 import { AppShell } from "@/components/AppShell";
 import { EditableText } from "@/components/EditableText";
 import { FocusOn } from "@/components/FocusOn";
+import { cn } from "@/lib/utils";
 import { HabitWeekCard } from "@/components/week/HabitWeekCard";
+import { ScheduleMonth } from "@/components/week/ScheduleMonth";
+import { ScheduleWeek } from "@/components/week/ScheduleWeek";
+import { weekDayIds } from "@/lib/dates";
 import { CycleWeekCard } from "@/components/cycle/CycleWeekCard";
 import { SortableRows } from "@/components/SortableRows";
 import { PeriodHeader } from "@/components/PeriodHeader";
@@ -42,6 +47,14 @@ export const Route = createFileRoute("/week")({
 
 function WeekView() {
   const { today, week, quarter, updateWeek, recordUndo } = useClaro();
+  /*
+   * Week or month, kept on the page rather than in the URL.
+   *
+   * It is a way of looking at the week you are already on, not a different
+   * place, so it does not deserve a shareable address. `?w=` still names the
+   * week itself, which is the thing a link to this page is about.
+   */
+  const [scale, setScale] = useState<"week" | "month">("week");
   const { w } = Route.useSearch();
   const navigate = useNavigate();
 
@@ -109,6 +122,56 @@ function WeekView() {
         Below the hierarchy on purpose: private, small and inert. It reports,
         it never adjusts the week, and weekly planning still leads the page.
       */}
+      {/*
+        What is actually booked, before the goals that the week is for.
+
+        Claro had no view of a week's schedule at all: `SCHEDULE_HOURS` was used
+        by one component and that component draws a single day, so a week could
+        be filled an hour at a time and never once be seen whole. It sits above
+        the goal columns because "what is already on this week" is the thing
+        that decides whether this week's commitments are realistic.
+      */}
+      <section>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+          <div className="flex items-baseline gap-2.5">
+            <h2 className="eyebrow">What is on</h2>
+            <span className="text-[10px] text-muted-foreground">from your daily schedule</span>
+          </div>
+          <div role="tablist" aria-label="Calendar scale" className="flex gap-1 rounded-lg bg-muted p-0.5">
+            {(["week", "month"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                role="tab"
+                aria-selected={scale === option}
+                onClick={() => setScale(option)}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[0.78rem] capitalize transition-colors",
+                  scale === option
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="surface-quiet mt-2 p-3 sm:p-4">
+          {scale === "week" ? (
+            <ScheduleWeek weekId={weekId} todayId={today} />
+          ) : (
+            <ScheduleMonth
+              // Thursday, so a week straddling two months shows the one that
+              // owns most of it. The same rule `quarterOfWeek` resolves by.
+              anchor={weekDayIds(weekId)[3]}
+              todayId={today}
+            />
+          )}
+        </div>
+      </section>
+
       <div className="grid gap-5 md:grid-cols-2">
         <HabitWeekCard weekId={weekId} />
         <CycleWeekCard />

@@ -330,6 +330,35 @@ standing open reads as though nothing happened; and the panel's key handling sta
 an input, or the list would swallow every digit and Enter would choose an option instead of
 committing what was typed.
 
+## The week, as what is actually on it
+
+Claro had no view of a week's schedule. `SCHEDULE_HOURS` was used by exactly one component and
+that component draws a **single day**, so a week could be filled in an hour at a time and never
+once be seen whole — which is the question a week page exists to answer. `ScheduleWeek` is a
+seven-column time grid on `/week`, above the goal columns, because what is already booked is what
+decides whether this week's commitments are realistic.
+
+**It draws only the hours the week uses**, bounded by the earliest and latest thing booked plus
+one either side. Eighteen empty rows is a spreadsheet; four rows around a 9am and a 4pm is a week
+somebody can read at a glance.
+
+**Two months, and the difference is the reason both exist.** `/calendar`'s month answers *"how
+did my month go"* — habits kept, focus time, days with something on them, all as counts.
+`ScheduleMonth` answers *"what is on my month"*, which is a different question asked at a
+different moment, and a count of three cannot answer it: you need the words. Past three blocks a
+cell stops listing and says how many are left, because five blocks in 72px makes all five
+unreadable.
+
+**Both are read-only, and that is load-bearing.** Every block belongs to a `Day`, and there is
+still no separate store of calendar events — two stores of the same thing is how a planner and a
+calendar start disagreeing about Thursday. The way to change a block is to open its day, which is
+what every cell links to.
+
+The scale is component state, not a search param: it is a way of looking at the week you are
+already on rather than a different place, so it does not deserve a shareable address. `?w=` still
+names the week itself. The month is anchored on the week's **Thursday**, so a week straddling two
+months shows the one that owns most of it — the same rule `quarterOfWeek` resolves by.
+
 ## A row is the grab point, not just its grip
 
 The grip was the only way to pick anything up, and it is **18px square at 45% opacity** — under
