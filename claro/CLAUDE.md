@@ -678,6 +678,21 @@ read off the real state rather than asserted, and the consent screen, the one pl
 actually given, says what it now does. What did not change is the half that still holds
 absolutely: nothing reaches another person.
 
+## `/today` means today, and must never pin a date
+
+`dayId` is `d ?? today`, so the search param wins when it is there. The day arrows and the Today
+button used to write `?d=` for **every** move, including the move back to today, so the moment
+somebody touched them the URL carried a fixed date. Correct for that day and wrong every day
+after: a reload, a bookmark, or a tab left open overnight all came back to the pinned date, with
+nothing on screen explaining why it was not today.
+
+Navigating to today now produces a bare `/today`; any other day still names itself, because a
+link to last Tuesday has to survive being shared. Note that the search key must be *absent*
+rather than `undefined` — invariant 4 — or every `<Link>` to this route needs the prop.
+
+Both routes back from a stale link work and are worth keeping working: the Daily nav item and the
+Today button, which is already offered whenever the day on screen is not today.
+
 ## The schedule: an hour is a frame, and it never closes
 
 **"Is there room?" and "which slot?" are different questions.** `nextFreeSlot` used to answer

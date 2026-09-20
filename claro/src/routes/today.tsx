@@ -228,7 +228,21 @@ function TodayView() {
     focus.dismissSoundQuestion();
   };
 
-  const go = (id: ISODate) => navigate({ to: "/today", search: { d: id } });
+  /**
+   * `/today` means today, whatever day that turns out to be.
+   *
+   * This used to write `?d=` for every move, including the move back to today,
+   * so the moment somebody touched the arrows the URL pinned a fixed date. That
+   * is right for the day it was written and wrong every day after: a reload, a
+   * bookmark, or a tab left open overnight all came back to the pinned date
+   * rather than to today, and there was no sign of why.
+   *
+   * A specific day still says so in the URL, because a link to last Tuesday has
+   * to survive being shared. Today is the one that must not, since the whole
+   * point of it is that it moves.
+   */
+  const go = (id: ISODate) =>
+    navigate({ to: "/today", search: id === today ? {} : { d: id } });
   const patch = (p: Partial<Day>) => updateDay(dayId, (current) => ({ ...current, ...p }));
 
   /**
