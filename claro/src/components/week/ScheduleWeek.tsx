@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 
 import { AllDayRow } from "./AllDayRow";
 import { WeekCellComposer } from "./WeekCellComposer";
@@ -24,8 +24,16 @@ import { resolveSchedule, type ResolvedSchedule } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import type { ISODate, WeekId } from "@/lib/types";
 
-/** The hours an empty week opens on, so there is somewhere to click. */
-const EMPTY_WINDOW: [string, string] = ["08:00", "18:00"];
+/**
+ * The working day the grid always draws, whatever is booked.
+ *
+ * This used to be the *empty* week's window, and only the empty week's: one
+ * block booked at 7 AM collapsed the whole grid to 6, 7 and 8 AM, because the
+ * window was the booked hours and nothing else. Every other hour of every day
+ * then had no cell to click, so a week with one early thing in it could not be
+ * planned at all. The booked hours now widen this rather than replace it.
+ */
+const DAY_WINDOW: [string, string] = ["08:00", "18:00"];
 
 /** How far the pointer moves before a press becomes a drag rather than a tap. */
 const DRAG_THRESHOLD = 5;
@@ -63,6 +71,8 @@ export function ScheduleWeek({
   onOpenDay: (dayId: ISODate) => void;
 }) {
   const { state, updateDay } = useClaro();
+  /** Opened out to the full 5 AM to 10 PM, once somebody asks for it. */
+  const [expanded, setExpanded] = useState(false);
   /** The cell being written into, as `dayId|hour`. */
   const [composing, setComposing] = useState<string | null>(null);
   /** What the drag looks like: the block lifted, the cell under it, the chip. */
@@ -175,19 +185,24 @@ export function ScheduleWeek({
   const labelled = days.some((dayId) => labelsOf(readDay(state, dayId)).length > 0);
 
   /*
-   * Only the hours in use, plus one either side so the first and last things
-   * are not flush against the edge. A week with one 9am meeting should be four
-   * rows, not eighteen. An empty week opens on a working day rather than on
-   * nothing, because a grid you cannot click is not a way to plan a week.
+   * A working day, widened by anything booked outside it, plus one hour either
+   * side so the earliest and latest things are not flush against the edge.
+   *
+   * Widened rather than replaced. Eighteen rows every time is a spreadsheet,
+   * but a window that only ever covers what is already booked is worse: it
+   * leaves most of the week with no cell to click, which is exactly the state
+   * a half-empty week is in when you sit down to fill it. The hours outside
+   * are one press away.
    */
   const used = booked.map((row) => SCHEDULE_HOURS.indexOf(hourOf(row.item.time)));
-  const first = booked.length
-    ? Math.max(0, Math.min(...used) - 1)
-    : SCHEDULE_HOURS.indexOf(EMPTY_WINDOW[0]);
-  const last = booked.length
-    ? Math.min(SCHEDULE_HOURS.length - 1, Math.max(...used) + 1)
-    : SCHEDULE_HOURS.indexOf(EMPTY_WINDOW[1]);
-  const hours = SCHEDULE_HOURS.slice(first, last + 1);
+  const last = SCHEDULE_HOURS.length - 1;
+  const from = expanded
+    ? 0
+    : Math.max(0, Math.min(SCHEDULE_HOURS.indexOf(DAY_WINDOW[0]), ...used.map((i) => i - 1)));
+  const to = expanded
+    ? last
+    : Math.min(last, Math.max(SCHEDULE_HOURS.indexOf(DAY_WINDOW[1]), ...used.map((i) => i + 1)));
+  const hours = SCHEDULE_HOURS.slice(from, to + 1);
 
   return (
     <div className="overflow-x-auto">
@@ -232,6 +247,14 @@ export function ScheduleWeek({
           */}
           <AllDayRow days={days} />
 
+          {from > 0 && (
+            <MoreHours
+              direction="up"
+              label={`Earlier, from ${formatHourLabel(SCHEDULE_HOURS[0])}`}
+              onClick={() => setExpanded(true)}
+            />
+          )}
+
           {hours.map((hour) => (
             <Row
               key={hour}
@@ -263,6 +286,14 @@ export function ScheduleWeek({
               onCompose={setComposing}
             />
           ))}
+
+          {to < last && (
+            <MoreHours
+              direction="down"
+              label={`Later, to ${formatHourLabel(SCHEDULE_HOURS[last])}`}
+              onClick={() => setExpanded(true)}
+            />
+          )}
         </div>
       </div>
 
@@ -284,6 +315,41 @@ export function ScheduleWeek({
           document.body,
         )}
     </div>
+  );
+}
+
+/**
+ * The way out to the rest of the day.
+ *
+ * A full row rather than a control tucked in the time rail, because it is the
+ * answer to "there is nowhere to put my 8 PM thing" and that question is asked
+ * while looking at the bottom edge of the grid.
+ */
+function MoreHours({
+  direction,
+  label,
+  onClick,
+}: {
+  direction: "up" | "down";
+  label: string;
+  onClick: () => void;
+}) {
+  const Icon = direction === "up" ? ChevronUp : ChevronDown;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      /*
+        Aligned to where the day columns start, not centred. Centred put the
+        label near the middle of a 38rem grid, which is off the right-hand
+        edge of a phone: the control that reaches the rest of the day was the
+        one control you could not read on the screen that needs it most.
+      */
+      className="col-span-full flex items-center gap-1 rounded py-1 pl-[3.25rem] text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      <Icon className="h-3 w-3" aria-hidden />
+      {label}
+    </button>
   );
 }
 

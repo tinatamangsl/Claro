@@ -338,9 +338,13 @@ once be seen whole — which is the question a week page exists to answer. `Sche
 seven-column time grid on `/week`, above the goal columns, because what is already booked is what
 decides whether this week's commitments are realistic.
 
-**It draws only the hours the week uses**, bounded by the earliest and latest thing booked plus
-one either side. Eighteen empty rows is a spreadsheet; four rows around a 9am and a 4pm is a week
-somebody can read at a glance.
+**It draws a working day, 8 AM to 6 PM, widened by anything booked outside it** plus one hour
+either side. Eighteen empty rows every time is a spreadsheet, but the window used to be the
+booked hours *and nothing else*, and that was worse: a single block at 7 AM collapsed the grid to
+6, 7 and 8 AM, so every other hour of every day had no cell to click and a half-empty week could
+not be planned at all. Two quiet rows, `MoreHours`, open the grid out to the full 5 AM to 10 PM,
+and they sit at the start of the day columns rather than centred, because centred put them off
+the right-hand edge of a phone.
 
 **Two months, and the difference is the reason both exist.** `/calendar`'s month answers *"how
 did my month go"* — habits kept, focus time, days with something on them, all as counts.

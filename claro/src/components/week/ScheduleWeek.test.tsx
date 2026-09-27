@@ -87,20 +87,66 @@ describe("the week, as what is booked in it", () => {
     expect(screen.getByText("1 PM")).toBeTruthy();
   });
 
-  it("draws only the hours the week uses, not all eighteen", async () => {
-    const { api, container } = harness();
+  it("draws a working day rather than all eighteen hours", async () => {
+    const { api } = harness();
     await ready(api);
     book(api, days(api)[0], "09:00", "standup");
 
     /*
-     * Eighteen empty rows is a spreadsheet. One hour either side of what is
-     * actually booked is a week somebody can read at a glance.
+     * Eighteen rows every time is a spreadsheet, so the far ends stay folded.
+     * Asked of the hour rail rather than the whole panel, because the two
+     * ways out name those hours in their own labels.
      */
     await waitFor(() => expect(screen.getByText("9 AM")).toBeTruthy());
     expect(screen.getByText("8 AM")).toBeTruthy();
-    expect(screen.getByText("10 AM")).toBeTruthy();
-    expect(container.textContent).not.toContain("5 AM");
-    expect(container.textContent).not.toContain("10 PM");
+    expect(screen.getByText("6 PM")).toBeTruthy();
+    expect(screen.queryByText("5 AM")).toBeNull();
+    expect(screen.queryByText("10 PM")).toBeNull();
+  });
+
+  it("still offers the working day when one early thing is booked", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+    book(api, week[6], "07:00", "HCP Running Festival");
+
+    /*
+     * The window used to be the booked hours and nothing else, so a single
+     * 7 AM block collapsed the grid to 6, 7 and 8 AM and every other hour of
+     * the week had no cell to click. A half-empty week is exactly the week
+     * somebody has sat down to fill.
+     */
+    await waitFor(() => expect(screen.getByText("7 AM")).toBeTruthy());
+    expect(adder(week[2], "2 PM")).toBeTruthy();
+    expect(adder(week[0], "6 PM")).toBeTruthy();
+    // And it still reaches out to the early block, plus an hour above it.
+    expect(screen.getByText("6 AM")).toBeTruthy();
+  });
+
+  it("opens out to the whole day when asked, in either direction", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Later, to 10 PM/ }));
+
+    await waitFor(() => expect(screen.getByText("10 PM")).toBeTruthy());
+    expect(screen.getByText("5 AM")).toBeTruthy();
+    expect(adder(week[4], "9 PM")).toBeTruthy();
+    // Nothing left to open, so neither way out is offered any more.
+    expect(screen.queryByRole("button", { name: /^Earlier, from/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Later, to/ })).toBeNull();
+  });
+
+  it("offers no way out of a day that is already whole", async () => {
+    const { api } = harness();
+    await ready(api);
+    book(api, days(api)[0], "05:00", "first thing");
+    book(api, days(api)[0], "22:00", "last thing");
+
+    await waitFor(() => expect(screen.getByText("5 AM")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /^Earlier, from/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Later, to/ })).toBeNull();
   });
 
   it("leaves out work that was carried to another day", async () => {
