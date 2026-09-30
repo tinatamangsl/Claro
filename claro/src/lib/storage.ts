@@ -12,6 +12,7 @@ import {
   type FocusSession,
   type Habit,
   type HabitCompletion,
+  type Initiative,
   type Interruption,
   type SessionMode,
   type SoundFeedback,
@@ -59,6 +60,7 @@ export function emptyState(): ClaroState {
     soundPresets: {},
     soundFeedback: {},
     monthPlans: {},
+    initiatives: {},
   };
 }
 
@@ -140,6 +142,7 @@ export function blankDay(id: ISODate): Day {
     carriedForward: [],
     plan333: null,
     sleepHours: null,
+    sleepQuality: null,
     waterGlasses: 0,
     steps: null,
     mood: null,
@@ -201,6 +204,8 @@ export function migrate(raw: unknown): ClaroState {
       : {},
     // Additive: a store saved before monthly plans existed simply arrives empty.
     monthPlans: isRecord<MonthPlan>(candidate.monthPlans) ? candidate.monthPlans : {},
+    // Additive too: no initiative is the state every store was in until now.
+    initiatives: isRecord<Initiative>(candidate.initiatives) ? candidate.initiatives : {},
   };
 }
 

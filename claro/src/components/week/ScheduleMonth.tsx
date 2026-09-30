@@ -1,6 +1,7 @@
 import { useClaro } from "@/lib/claro-store";
 import { monthGrid, monthOfDay } from "@/lib/calendar";
 import { labelsOf } from "@/lib/day-labels";
+import { initiativeOn, labelledActions } from "@/lib/initiatives";
 import {
   formatDayLong,
   formatTimeLabel,
@@ -125,17 +126,39 @@ function WeekRow({
       </button>
 
       {row.map((cell) => {
-        const rows = resolveSchedule(
-          readDay(state, cell.dayId),
-          state.habits,
-          state.habitCompletions,
-        )
+        const day = readDay(state, cell.dayId);
+        const rows = resolveSchedule(day, state.habits, state.habitCompletions)
           .filter((item) => item.item.carriedTo == null)
           .sort(
             (a, b) =>
               hourOf(a.item.time).localeCompare(hourOf(b.item.time)) ||
               minutesOf(a.item.time) - minutesOf(b.item.time),
           );
+
+        /*
+         * An initiative's dated work is mostly actions, not bookings: a
+         * Substack Saturday and a midpoint review have no time on them and
+         * would otherwise be invisible on the one view meant to answer "what
+         * is on my month". They come first in the cell, because the point of
+         * a milestone is that it is not one of the ordinary rows.
+         */
+        const running = initiativeOn(state, cell.dayId);
+        const milestones = running ? labelledActions(day, running.id) : [];
+
+        const entries = [
+          ...milestones.map((action) => ({
+            id: action.id,
+            title: action.text,
+            done: action.done,
+            kind: "milestone" as const,
+          })),
+          ...rows.map((item) => ({
+            id: item.item.id,
+            title: `${formatTimeLabel(item.item.time)} · ${item.title}`,
+            done: item.done,
+            kind: item.kind === "block" ? ("block" as const) : ("linked" as const),
+          })),
+        ];
 
         return (
           <button
@@ -174,17 +197,21 @@ function WeekRow({
             ))}
 
             <span className="mt-1 block space-y-0.5">
-              {rows.slice(0, SHOWN).map((item) => (
+              {entries.slice(0, SHOWN).map((entry) => (
                 <span
-                  key={item.item.id}
-                  title={`${formatTimeLabel(item.item.time)} · ${item.title}`}
+                  key={entry.id}
+                  title={entry.title}
                   className={cn(
                     "block truncate rounded px-1 py-0.5 text-[10px] leading-tight",
-                    item.kind === "block" ? "bg-muted" : "bg-gold/20",
-                    item.done && "text-muted-foreground line-through",
+                    entry.kind === "block" && "bg-muted",
+                    entry.kind === "linked" && "bg-gold/20",
+                    // A milestone is outlined rather than filled, so it reads
+                    // as a marker on the month rather than another booking.
+                    entry.kind === "milestone" && "bg-transparent ring-1 ring-gold/60",
+                    entry.done && "text-muted-foreground line-through",
                   )}
                 >
-                  {item.title || "Untitled"}
+                  {entry.title || "Untitled"}
                 </span>
               ))}
               {/*
@@ -192,9 +219,9 @@ function WeekRow({
                 Squeezing six blocks into 72px makes every one of them
                 unreadable, which serves nobody.
               */}
-              {rows.length > SHOWN && (
+              {entries.length > SHOWN && (
                 <span className="block px-1 text-[10px] text-muted-foreground">
-                  {rows.length - SHOWN} more
+                  {entries.length - SHOWN} more
                 </span>
               )}
             </span>

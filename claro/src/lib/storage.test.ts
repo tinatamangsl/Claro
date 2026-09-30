@@ -43,6 +43,7 @@ describe("blank records", () => {
       focusPrefs: DEFAULT_FOCUS_PREFS,
       habits: {},
       habitCompletions: {},
+      initiatives: {},
       cycle: {
         settings: { enabled: false, optedInAt: null, cycleLength: null, syncConsentAt: null },
         entries: {},

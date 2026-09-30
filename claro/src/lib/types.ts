@@ -229,6 +229,8 @@ export type ScheduleItem = {
    * historical record rather than open work, so it cannot be active twice.
    */
   carriedTo?: ISODate | null;
+  /** The initiative this belongs to, if any. Additive and always optional. */
+  initiativeId?: string | null;
 };
 
 /**
@@ -248,9 +250,22 @@ export type ActionItem = {
   originDayId?: ISODate | null;
   /** The day it was carried into. Set once, so it can never be carried again. */
   carriedTo?: ISODate | null;
+  /** The initiative this belongs to, if any. Additive and always optional. */
+  initiativeId?: string | null;
 };
 
 export type NonNegotiable = { id: string; text: string; done: boolean };
+
+/** Last night, 1 to 5. Labelled in words at every point, never as a score. */
+export type SleepQuality = 1 | 2 | 3 | 4 | 5;
+
+export const SLEEP_QUALITY_LABELS: Record<SleepQuality, string> = {
+  1: "Rough",
+  2: "Broken",
+  3: "Ok",
+  4: "Good",
+  5: "Deep",
+};
 
 /**
  * A word about the whole day: "office day", "annual leave", "in Berlin".
@@ -304,6 +319,15 @@ export type Day = {
   /** Set when the day was planned with the 3-3-3 framework. */
   plan333: Plan333 | null;
   sleepHours: number | null;
+  /**
+   * Last night's sleep, 1 to 5, asked the following morning.
+   *
+   * Separate from `sleepHours` because they are different facts: eight hours
+   * badly slept is not the same night as six slept well, and only the person
+   * who slept it can say which. Deliberately not tied to whether an evening
+   * routine happened, so it stays an observation rather than a mark for one.
+   */
+  sleepQuality?: SleepQuality | null;
   waterGlasses: number;
   steps: number | null;
   mood: Mood | null;
@@ -921,6 +945,63 @@ export type SoundFeedback = {
 
 // ------------------------------------------------------------------ store
 
+/**
+ * A named stretch of weeks, with an identity behind it.
+ *
+ * **Not a fourth level of the hierarchy.** Quarter, Week and Day still own
+ * planning; an initiative is a thread running sideways through them, saying
+ * which of the things already on those pages belong together and what they
+ * were for. It owns no priorities, no goals and no schedule of its own, and
+ * removing one leaves every action and habit exactly where it was.
+ *
+ * It is also not a project. `Bucket`'s "project" means an action of thirty
+ * minutes or more, which is a size, and this is a purpose held over two
+ * months.
+ */
+export type Initiative = {
+  id: string;
+  name: string;
+  /** Who the user said they are becoming. Their words, never generated. */
+  identity: string;
+  /** Inclusive on both ends. */
+  from: ISODate;
+  to: ISODate;
+  /** The habits whose completions count as promises kept. */
+  habitIds: string[];
+  outcomes: OutcomeSnapshot[];
+  reviews: InitiativeReview[];
+  createdAt: string;
+};
+
+/**
+ * Numbers logged on a date, and nothing else.
+ *
+ * Deliberately has no target field. The point of logging followers or drafts
+ * beside a practice is to see what happened, and a target would turn the same
+ * number into a mark out of ten, which is the one thing Claro never does.
+ */
+export type OutcomeSnapshot = {
+  id: string;
+  dayId: ISODate;
+  values: { id: string; label: string; value: number | null }[];
+};
+
+export type ReviewKind = "week" | "midpoint" | "close";
+
+/**
+ * A dated reflection against the initiative.
+ *
+ * `answers` is keyed by prompt rather than typed per kind, because the prompts
+ * are copy and copy changes. A fixed field per question would make rewording
+ * one of them a schema migration over somebody's own writing.
+ */
+export type InitiativeReview = {
+  id: string;
+  dayId: ISODate;
+  kind: ReviewKind;
+  answers: Record<string, string>;
+};
+
 export type ClaroState = {
   version: number;
   quarters: Record<QuarterId, Quarter>;
@@ -940,6 +1021,8 @@ export type ClaroState = {
   soundFeedback: Record<string, SoundFeedback>;
   /** Keyed by month id, so a month's intention has one canonical record. */
   monthPlans: Record<string, MonthPlan>;
+  /** Named stretches of weeks. Additive: an older store simply has none. */
+  initiatives: Record<string, Initiative>;
 };
 
 // ------------------------------------------------------------ presentation

@@ -437,6 +437,71 @@ already on rather than a different place, so it does not deserve a shareable add
 names the week itself. The month is anchored on the week's **Thursday**, so a week straddling two
 months shows the one that owns most of it — the same rule `quarterOfWeek` resolves by.
 
+## Initiatives: a thread sideways through the hierarchy
+
+Quarter, Week and Day still own planning. An `Initiative` is a named stretch of weeks with an
+identity behind it, saying which of the things already on those pages belong together and what
+they were for. It owns no priorities, no goals and no schedule of its own, and deleting one
+leaves every action, block and habit exactly where it was.
+
+**It is not a fourth level, and it is not a project.** `Bucket`'s "project" means an action of
+thirty minutes or more, which is a *size*; an initiative is a *purpose* held over two months.
+`initiativeId` is an optional field on `ActionItem` and `ScheduleItem`, and `Initiative.habitIds`
+names the practices that count. All additive, so no version bump: a store written before
+initiatives existed loads with none.
+
+**`promisesIn` reports kept beside due and stops.** `due` goes **null** the moment any one part
+cannot be counted honestly, so the caller says "9 kept" rather than inventing a denominator, and
+`habitDue` only takes a plain weekly count over whole weeks for the same reason `intendedDaysIn`
+refuses a monthly one. `kept` is never capped at `due`: running four times in a week you meant to
+run three is not an error to be clipped back to three. There is no percentage and no progress bar
+anywhere in this feature.
+
+**The banner keys on the quarter on screen, not on today.** `initiativeBetween` asks for overlap
+with the quarter being viewed. Keying on today made an initiative starting tomorrow invisible on
+the page it belongs to: set up on 30 September, the whole thing vanished. `SetUpInitiative` is
+scoped the same way, or pressing it would create something that appears on a different page.
+
+**`midpointOf` is the first day of the second half, `ceil` not `floor`.** Over 61 days `floor`
+gives 31 October while the seed writes the midpoint review on 1 November, and the card would sit
+on a different day from the action it belongs to.
+
+### The seed, and why there is one
+
+Claro has no recurrence, so "every Friday until 30 November" is nine ordinary actions on nine
+ordinary days. `selfLoveLockIn()` is that expanded as data, and `applySeed` is **one pure step
+from state to state** so the whole two months lands as a single save and a single undo rather
+than thirty-five writes with a half-applied month if one throws.
+
+It is **safe to run twice**: habits are matched by name (case-insensitively, skipping archived
+ones) and patched rather than duplicated, an initiative with the same name and dates is reused,
+and `alreadySeeded` skips a line already written. It also preserves the identity statement and
+any reviews written since, because a button gets pressed again.
+
+Everything it writes is an ordinary entry. There is no machinery keeping the nine Fridays in
+step afterwards, which is the honest cost of not having recurrence and is worth revisiting before
+a second initiative is ever seeded.
+
+### Sleep quality is a separate fact from sleep hours
+
+`Day.sleepQuality` is 1 to 5, asked the next morning, labelled in words at every point. Eight
+hours badly slept is not the same night as six slept well, and only the person who slept it can
+say which. It is deliberately **not tied to whether an evening routine happened**, so it stays an
+observation rather than a mark for one.
+
+### Outcome numbers carry no target, ever
+
+`OutcomeSnapshot` has a label, a date and a number, and no target field. These are counts of
+things other people did: followers, replies, whether a draft went out. The practices are the part
+anybody can keep a promise about, and a progress bar under a follower count would quietly make
+the wrong half of the page the scoreboard. They sit in their own section below everything else.
+
+**A changed target applies to the whole stretch, and the midpoint review says so.** A habit
+carries one `targetPerWeek`, not one per week, so adjusting it on 1 November changes how October
+reads too. That is a fair trade for being able to change your mind halfway, and it is stated in
+the interface rather than left to be discovered. Nothing anywhere marks a change as a miss,
+because Claro has no misses.
+
 ## A row is the grab point, not just its grip
 
 The grip was the only way to pick anything up, and it is **18px square at 45% opacity** — under

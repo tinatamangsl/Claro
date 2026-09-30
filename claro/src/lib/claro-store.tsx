@@ -28,8 +28,10 @@ import {
 } from "./storage";
 import { matchKey } from "./cycle-guidance";
 import { removeHabitCompletions, toggleCompletion } from "./habits";
+import { applySeed, initiativeOn, type InitiativeSeed } from "./initiatives";
 import { queueCarried, takeCarried } from "./rollover";
 import type {
+  Initiative,
   GuidanceCard,
   MatchAnswer,
   ClaroState,
@@ -138,6 +140,16 @@ type ClaroContextValue = {
   /** A month's calm intention. One record per month, created on first write. */
   monthPlan: (id: string) => MonthPlan;
   updateMonthPlan: (id: string, recipe: (p: MonthPlan) => MonthPlan) => void;
+
+  /** The initiative a day falls inside, or null. At most one is shown. */
+  initiativeOn: (dayId: ISODate) => Initiative | null;
+  updateInitiative: (id: string, recipe: (i: Initiative) => Initiative) => void;
+  /**
+   * Laying a whole initiative down in one step: its habits, its dated actions
+   * and its blocks. One `setSnap`, so it is one save and one undo rather than
+   * thirty-five separate writes, and safe to run twice.
+   */
+  applyInitiativeSeed: (seed: InitiativeSeed, now: Date) => void;
 
   /** Private cycle awareness, kept apart from planning and focus records. */
   cycle: CycleState;
@@ -482,6 +494,30 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const initiativeOnDay = useCallback(
+    (dayId: ISODate) => initiativeOn(state, dayId),
+    [state],
+  );
+
+  const updateInitiative = useCallback((id: string, recipe: (i: Initiative) => Initiative) => {
+    setSnap((prev) => {
+      if (!prev) return prev;
+      const current = prev.state.initiatives?.[id];
+      if (!current) return prev;
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          initiatives: { ...prev.state.initiatives, [id]: recipe(current) },
+        },
+      };
+    });
+  }, []);
+
+  const applyInitiativeSeed = useCallback((seed: InitiativeSeed, now: Date) => {
+    setSnap((prev) => (prev ? { ...prev, state: applySeed(prev.state, seed, now).state } : prev));
+  }, []);
+
   const setCycleEnabled = useCallback((enabled: boolean, now: Date) => {
     setSnap((prev) => {
       if (!prev) return prev;
@@ -804,6 +840,9 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       toggleHabitDone,
       monthPlan,
       updateMonthPlan,
+      initiativeOn: initiativeOnDay,
+      updateInitiative,
+      applyInitiativeSeed,
       cycle: state.cycle,
       setCycleEnabled,
       setCycleSyncConsent,
@@ -853,6 +892,9 @@ export function ClaroProvider({ children }: { children: ReactNode }) {
       toggleHabitDone,
       monthPlan,
       updateMonthPlan,
+      initiativeOnDay,
+      updateInitiative,
+      applyInitiativeSeed,
       setCycleEnabled,
       setCycleSyncConsent,
       logCycleStart,

@@ -1,6 +1,12 @@
 import { Minus, Plus } from "lucide-react";
 
-import { MOOD_LABELS, type Day, type Mood } from "@/lib/types";
+import {
+  MOOD_LABELS,
+  SLEEP_QUALITY_LABELS,
+  type Day,
+  type Mood,
+  type SleepQuality,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -10,6 +16,7 @@ type Props = {
 };
 
 const MOODS: Mood[] = [1, 2, 3, 4, 5];
+const SLEEP_RATINGS: SleepQuality[] = [1, 2, 3, 4, 5];
 const MAX_WATER = 8;
 
 /**
@@ -33,6 +40,35 @@ export function WellbeingBlock({ day, onPatch, className }: Props) {
             display={day.sleepHours === null ? "·" : `${day.sleepHours}`}
             label="hours of sleep"
           />
+        </Field>
+
+        {/*
+          How last night went, beside how long it was. Eight hours badly slept
+          is not the same night as six slept well, and only the person who
+          slept it can say which. Deliberately not tied to whether an evening
+          routine happened: it is an observation, not a mark for one.
+        */}
+        <Field label="Slept">
+          <div className="flex gap-1">
+            {SLEEP_RATINGS.map((rating) => (
+              <button
+                key={rating}
+                type="button"
+                aria-label={`Last night: ${SLEEP_QUALITY_LABELS[rating]}`}
+                aria-pressed={day.sleepQuality === rating}
+                title={SLEEP_QUALITY_LABELS[rating]}
+                onClick={() =>
+                  onPatch({ sleepQuality: day.sleepQuality === rating ? null : rating })
+                }
+                className={cn(
+                  "h-3.5 w-3.5 shrink-0 rounded-[3px] border transition-colors",
+                  day.sleepQuality != null && rating <= day.sleepQuality
+                    ? "border-gold bg-gold"
+                    : "border-border bg-transparent hover:border-foreground/40",
+                )}
+              />
+            ))}
+          </div>
         </Field>
 
         <Field label="Water">

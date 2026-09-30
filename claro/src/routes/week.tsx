@@ -8,9 +8,12 @@ import { EditableText } from "@/components/EditableText";
 import { FocusOn } from "@/components/FocusOn";
 import { cn } from "@/lib/utils";
 import { HabitWeekCard } from "@/components/week/HabitWeekCard";
+import { InitiativeWeekCard } from "@/components/initiative/InitiativeWeekCard";
 import { ScheduleMonth } from "@/components/week/ScheduleMonth";
 import { ScheduleWeek } from "@/components/week/ScheduleWeek";
 import { weekDayIds } from "@/lib/dates";
+import { monthOfDay } from "@/lib/calendar";
+import { InitiativeMonthCard } from "@/components/initiative/InitiativeMonthCard";
 import { CycleWeekCard } from "@/components/cycle/CycleWeekCard";
 import { SortableRows } from "@/components/SortableRows";
 import { PeriodHeader } from "@/components/PeriodHeader";
@@ -47,7 +50,7 @@ export const Route = createFileRoute("/week")({
 });
 
 function WeekView() {
-  const { today, week, quarter, updateWeek, recordUndo } = useClaro();
+  const { today, week, quarter, updateWeek, recordUndo, initiativeOn } = useClaro();
   /*
    * Week or month, kept on the page rather than in the URL.
    *
@@ -65,6 +68,20 @@ function WeekView() {
 
   const quarterId = quarterOfWeek(weekId);
   const parentQuarter = quarter(quarterId);
+
+  /* Anchored on the week's Thursday, the same rule `quarterOfWeek` resolves by. */
+  const running = initiativeOn(weekDayIds(weekId)[3]);
+
+  /*
+   * One month normally. Two when a running initiative spans a second one that
+   * has already begun, which is the case the spread was asked for.
+   */
+  const anchor = weekDayIds(weekId)[3];
+  const second = running && monthOfDay(running.to) !== monthOfDay(running.from) ? running.to : null;
+  const months =
+    second && today >= `${monthOfDay(second)}-01` && monthOfDay(anchor) !== monthOfDay(second)
+      ? [anchor, second]
+      : [anchor];
 
   const go = (id: WeekId) => navigate({ to: "/week", search: { w: id } });
   const openDay = (id: ISODate) =>
@@ -174,20 +191,47 @@ function WeekView() {
           {scale === "week" ? (
             <ScheduleWeek weekId={weekId} todayId={today} onOpenDay={openDay} />
           ) : (
-            <ScheduleMonth
-              // Thursday, so a week straddling two months shows the one that
-              // owns most of it. The same rule `quarterOfWeek` resolves by.
-              anchor={weekDayIds(weekId)[3]}
-              todayId={today}
-              onOpenWeek={openWeek}
-              onOpenDay={openDay}
-            />
+            /*
+              Both months of an initiative once the second has started, so the
+              stretch can be read as the one thing it is. Not before it starts:
+              a blank November beside a full October says only that November
+              has not happened yet, which is something a calendar already
+              implies.
+            */
+            <div className={cn("gap-5", months.length > 1 && "grid xl:grid-cols-2")}>
+              {months.map((anchor) => (
+                <ScheduleMonth
+                  key={anchor}
+                  // Thursday, so a week straddling two months shows the one
+                  // that owns most of it. The rule `quarterOfWeek` resolves by.
+                  anchor={anchor}
+                  todayId={today}
+                  onOpenWeek={openWeek}
+                  onOpenDay={openDay}
+                />
+              ))}
+            </div>
           )}
         </div>
+
+        {scale === "month" && running ? (
+          <div className="mt-5">
+            <InitiativeMonthCard initiative={running} />
+          </div>
+        ) : null}
       </section>
 
+      {/*
+        Beside the practices rather than above them: the two answer the same
+        question at different altitudes. That card says which days each
+        practice was kept, this one says what the week added up to.
+      */}
       <div className="grid gap-5 md:grid-cols-2">
         <HabitWeekCard weekId={weekId} />
+        {running ? <InitiativeWeekCard initiative={running} weekId={weekId} todayId={today} /> : null}
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-2">
         <CycleWeekCard />
       </div>
 

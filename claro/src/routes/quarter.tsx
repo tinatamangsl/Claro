@@ -7,12 +7,18 @@ import { EditableText } from "@/components/EditableText";
 import { FocusOn } from "@/components/FocusOn";
 import { SortableRows } from "@/components/SortableRows";
 import { PeriodHeader } from "@/components/PeriodHeader";
+import { InitiativeBanner } from "@/components/initiative/InitiativeBanner";
+import { SetUpInitiative } from "@/components/initiative/SetUpInitiative";
+import { InitiativeReview } from "@/components/initiative/InitiativeReview";
+import { initiativeBetween, midpointOf } from "@/lib/initiatives";
 import { useClaro } from "@/lib/claro-store";
 import {
   formatDayDate,
+  formatDayId,
   formatQuarterMonths,
   formatQuarterShort,
   quarterOfDay,
+  quarterRange,
   shiftQuarterId,
 } from "@/lib/dates";
 import { newId } from "@/lib/id";
@@ -42,13 +48,22 @@ export const Route = createFileRoute("/quarter")({
 });
 
 function QuarterView() {
-  const { today, quarter, updateQuarter, recordUndo, monthPlan, updateMonthPlan } = useClaro();
+  const { today, state, quarter, updateQuarter, recordUndo, monthPlan, updateMonthPlan } =
+    useClaro();
   const { q } = Route.useSearch();
   const navigate = useNavigate();
 
   const currentQuarterId = quarterOfDay(today);
   const quarterId: QuarterId = q ?? currentQuarterId;
   const record = quarter(quarterId);
+
+  /*
+   * The initiative in the quarter on screen, not the one covering today. A
+   * quarter page is a view of a quarter, and keying on today made an
+   * initiative starting tomorrow invisible on the page it belongs to.
+   */
+  const span = quarterRange(quarterId);
+  const running = initiativeBetween(state, formatDayId(span.start), formatDayId(span.end));
 
   const go = (id: QuarterId) => navigate({ to: "/quarter", search: { q: id } });
 
@@ -65,6 +80,32 @@ function QuarterView() {
         onToday={quarterId !== currentQuarterId ? () => go(currentQuarterId) : undefined}
         todayLabel="This quarter"
       />
+
+      {running ? (
+        <>
+          <InitiativeBanner initiative={running} todayId={today} />
+          {/*
+            The midpoint sits on the middle day of the stretch and the close on
+            its last. Both are found from the initiative's own dates rather
+            than hard-coded, so a second initiative gets the same two reviews
+            without a line of new code.
+          */}
+          <InitiativeReview
+            initiative={running}
+            kind="midpoint"
+            dayId={midpointOf(running)}
+            todayId={today}
+          />
+          <InitiativeReview
+            initiative={running}
+            kind="close"
+            dayId={running.to}
+            todayId={today}
+          />
+        </>
+      ) : (
+        <SetUpInitiative todayId={today} quarterId={quarterId} />
+      )}
 
       <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
         <div className="max-w-2xl">
