@@ -622,3 +622,102 @@ describe("the month, as what is booked in it", () => {
     expect(openDay).toHaveBeenCalledWith(api.store!.today);
   });
 });
+
+describe("an initiative's untimed work, on the week", () => {
+  /** The id the store generated, not one invented here: they must match. */
+  const idOf = (api: Api) => Object.keys(api.store!.state.initiatives)[0];
+
+  const label = (api: Api, dayId: ISODate, text: string, done = false) =>
+    act(() => {
+      api.store!.updateDay(dayId, (day) => ({
+        ...day,
+        actions: [
+          ...day.actions,
+          {
+            id: `a-${dayId}`,
+            text,
+            bucket: "project",
+            done,
+            createdAt: "x",
+            initiativeId: idOf(api),
+          },
+        ],
+      }));
+    });
+
+  const withInitiative = (api: Api, from: ISODate, to: ISODate) =>
+    act(() => {
+      api.store!.applyInitiativeSeed(
+        { name: "Lock In", identity: "", from, to, habits: [], days: [], outcomes: [] },
+        new Date("2026-09-30T09:00:00.000Z"),
+      );
+    });
+
+  it("draws an action that has no time yet", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+    withInitiative(api, week[0], week[6]);
+    label(api, week[4], "Content day");
+
+    /*
+     * Drawn only in the hours below, a week holding a content day, a Substack
+     * block and a review looked like a week with nothing in it: an action has
+     * no time until one is given to it.
+     */
+    await waitFor(() =>
+      expect(screen.getByLabelText(`Content day on ${formatDayLong(week[4])}. Open on Daily`)).toBeTruthy(),
+    );
+  });
+
+  it("opens the day it belongs to", async () => {
+    const { api, openDay } = harness();
+    await ready(api);
+    const week = days(api);
+    withInitiative(api, week[0], week[6]);
+    label(api, week[4], "Content day");
+
+    const chip = await screen.findByLabelText(new RegExp("^Content day on "));
+    fireEvent.click(chip);
+    expect(openDay).toHaveBeenCalledWith(week[4]);
+  });
+
+  it("stands down once the action has an hour of its own", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+    withInitiative(api, week[0], week[6]);
+    label(api, week[4], "Content day");
+    await waitFor(() => expect(screen.getByTitle(/^Content day · /)).toBeTruthy());
+
+    act(() => {
+      api.store!.updateDay(week[4], (day) => ({
+        ...day,
+        scheduleItems: [
+          {
+            id: "s1",
+            time: "10:00",
+            text: "Content day",
+            link: { kind: "action", actionId: `a-${week[4]}` },
+            done: false,
+          },
+        ],
+      }));
+    });
+
+    // Otherwise the same content day is drawn twice in one column, which
+    // reads as two content days.
+    await waitFor(() => expect(screen.queryByTitle(/^Content day · /)).toBeNull());
+    expect(screen.getByTitle(/10 AM · Content day/)).toBeTruthy();
+  });
+
+  it("draws no band at all when the week has no untimed work", async () => {
+    const { api, container } = harness();
+    await ready(api);
+    const week = days(api);
+    withInitiative(api, week[0], week[6]);
+
+    await waitFor(() => expect(api.store?.ready).toBe(true));
+    expect(container.textContent).not.toContain("planned");
+  });
+});

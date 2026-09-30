@@ -18,6 +18,7 @@ import {
   weekDayIds,
 } from "@/lib/dates";
 import { labelsOf } from "@/lib/day-labels";
+import { initiativeOn, unscheduledActions } from "@/lib/initiatives";
 import { readDay } from "@/lib/storage";
 import { moveBlock } from "@/lib/week-plan";
 import { resolveSchedule, type ResolvedSchedule } from "@/lib/schedule";
@@ -247,6 +248,15 @@ export function ScheduleWeek({
           */}
           <AllDayRow days={days} />
 
+          {/*
+            An initiative's dated work is mostly actions, and an action has no
+            time until one is given to it. Drawn only in the hours below, a
+            week holding a content day, a Substack block and a review looked
+            like a week with one run club in it. The month grid already showed
+            them; this is the same answer on the view you plan the week from.
+          */}
+          <PlannedRow days={days} todayId={todayId} onOpenDay={onOpenDay} />
+
           {from > 0 && (
             <MoreHours
               direction="up"
@@ -350,6 +360,62 @@ function MoreHours({
       <Icon className="h-3 w-3" aria-hidden />
       {label}
     </button>
+  );
+}
+
+/**
+ * The initiative's untimed work for each day, under the all-day band.
+ *
+ * Read-only on purpose. These are actions, and Daily is where an action is
+ * ticked, renamed or given an hour; a second editor for the same record on a
+ * grid this dense is how the two start disagreeing.
+ */
+function PlannedRow({
+  days,
+  todayId,
+  onOpenDay,
+}: {
+  days: ISODate[];
+  todayId: ISODate;
+  onOpenDay: (dayId: ISODate) => void;
+}) {
+  const { state } = useClaro();
+
+  const byDay = days.map((dayId) => {
+    const running = initiativeOn(state, dayId);
+    return running ? unscheduledActions(readDay(state, dayId), running.id) : [];
+  });
+  if (byDay.every((actions) => actions.length === 0)) return null;
+
+  return (
+    <div className="col-span-full grid grid-cols-subgrid gap-px border-b border-border/70 pb-1">
+      <span className="self-start whitespace-nowrap pr-1.5 pt-0.5 text-right text-[9px] uppercase leading-none text-muted-foreground">
+        planned
+      </span>
+      {days.map((dayId, index) => (
+        <div
+          key={dayId}
+          className={cn("space-y-0.5 py-0.5", dayId === todayId && "bg-gold/[0.06]")}
+        >
+          {byDay[index].map((action) => (
+            <button
+              key={action.id}
+              type="button"
+              onClick={() => onOpenDay(dayId)}
+              title={`${action.text} · ${formatDayLong(dayId)}`}
+              aria-label={`${action.text} on ${formatDayLong(dayId)}. Open on Daily`}
+              className={cn(
+                "block w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] leading-tight ring-1 ring-gold/60 transition-colors hover:bg-gold/15",
+                action.done &&
+                  "text-muted-foreground line-through decoration-muted-foreground/60",
+              )}
+            >
+              {action.text}
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 

@@ -77,6 +77,23 @@ export function labelledActions(day: Day, initiativeId: string): ActionItem[] {
   return day.actions.filter((a) => a.initiativeId === initiativeId && a.carriedTo == null);
 }
 
+/**
+ * Labelled actions that are not already booked on the day's schedule.
+ *
+ * The week grid draws these in its own band, and anything with a time is
+ * already drawn in the hours below it. Without the exclusion a content day
+ * given an hour would appear twice on the same column, which reads as two
+ * content days.
+ */
+export function unscheduledActions(day: Day, initiativeId: string): ActionItem[] {
+  const booked = new Set(
+    day.scheduleItems
+      .filter((item) => item.carriedTo == null && item.link?.kind === "action")
+      .map((item) => (item.link as { kind: "action"; actionId: string }).actionId),
+  );
+  return labelledActions(day, initiativeId).filter((action) => !booked.has(action.id));
+}
+
 export function labelledBlocks(day: Day, initiativeId: string): ScheduleItem[] {
   return day.scheduleItems.filter(
     (i) => i.initiativeId === initiativeId && i.carriedTo == null,
