@@ -120,7 +120,21 @@ describe("remembering the choice", () => {
   it("keeps a stored pair as it was saved", () => {
     const stored = { plannedMs: 18 * MINUTE, breakMs: 3 * MINUTE, presetId: "custom" };
 
-    expect(readFocusPrefs(stored)).toEqual(stored);
+    expect(readFocusPrefs(stored)).toEqual({ ...stored, blockAppsOnIphone: false });
+  });
+
+  it("leaves the iPhone bridge off unless it was explicitly turned on", () => {
+    /*
+     * Read through rather than migrated. A store saved before the bridge
+     * existed has no such key, and the one thing it must not do on somebody's
+     * phone is start navigating to Shortcuts because a field was missing.
+     */
+    const base = { plannedMs: 25 * MINUTE, breakMs: 5 * MINUTE };
+
+    expect(readFocusPrefs(base).blockAppsOnIphone).toBe(false);
+    expect(readFocusPrefs({ ...base, blockAppsOnIphone: true }).blockAppsOnIphone).toBe(true);
+    // Anything but a real `true` is off, including a truthy string.
+    expect(readFocusPrefs({ ...base, blockAppsOnIphone: "yes" }).blockAppsOnIphone).toBe(false);
   });
 
   it("falls back rather than crashing on anything unusable", () => {
@@ -130,6 +144,7 @@ describe("remembering the choice", () => {
       plannedMs: 25 * MINUTE,
       breakMs: 0,
       presetId: "custom",
+      blockAppsOnIphone: false,
     });
   });
 

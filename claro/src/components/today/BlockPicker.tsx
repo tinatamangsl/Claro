@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 
 import {
   CUSTOM_PRESET_ID,
@@ -182,6 +183,28 @@ export function BlockPicker({ prefs, onChange, onStart }: Props) {
       <p className="mt-3 text-[0.85rem] leading-relaxed text-muted-foreground">
         {describeBlock(plannedMs, breakMs)}
       </p>
+
+      {/*
+        Beside the block length because it is a property of a block, not of the
+        app: it describes what starting one does to the phone in your pocket.
+      */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <label className="flex items-center gap-2 text-[0.85rem]">
+          <input
+            type="checkbox"
+            checked={prefs.blockAppsOnIphone === true}
+            onChange={(event) => onChange({ blockAppsOnIphone: event.target.checked })}
+            className="h-3.5 w-3.5 accent-[var(--primary)]"
+          />
+          Block apps on iPhone during focus
+        </label>
+        <Link
+          to="/focus-shortcuts"
+          className="text-[11px] text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
+        >
+          How to set this up
+        </Link>
+      </div>
 
       <button
         type="button"

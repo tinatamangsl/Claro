@@ -20,6 +20,8 @@ import {
   settleSession,
   startFocusSession,
 } from "@/lib/focus-session";
+import { msToMinutes } from "@/lib/focus-presets";
+import { endShortcutUrl, openShortcut, shouldBridge, startShortcutUrl } from "@/lib/ios-shortcuts";
 import type {
   FocusOutcome,
   FocusPhase,
@@ -37,6 +39,23 @@ import type {
  * sound and every later instance would conclude there had never been any.
  */
 const endedSessions = new Map<string, boolean>();
+
+/**
+ * Sessions whose end has already been handed to Shortcuts.
+ *
+ * Same reason as `endedSessions` above, and one more: a block can reach its
+ * end twice over. The timer running out and "End block" both land on the
+ * `ended` phase, and closing it afterwards is a third path through. The
+ * handover is once per session, whichever of them gets there first, or the
+ * user's phone is asked to unblock itself three times.
+ */
+const bridgedEnds = new Set<string>();
+
+/** Whether this browser should hand a block over, asked at the moment of use. */
+function bridging(enabled: boolean): boolean {
+  if (typeof navigator === "undefined") return false;
+  return shouldBridge(enabled, navigator.userAgent, navigator.maxTouchPoints ?? 0);
+}
 
 /**
  * The one canonical focus session, and everything that can be done to it.
@@ -112,19 +131,52 @@ export function useFocusSession() {
    */
   const start = useCallback(
     (target: FocusTargetRef | null, plannedMs?: number, breakMs?: number) => {
+      const length = plannedMs ?? focusPrefs.plannedMs;
+
       startSession(
         startFocusSession({
           dayId: today,
           target,
           intention: target?.title ?? "",
-          plannedMs: plannedMs ?? focusPrefs.plannedMs,
+          plannedMs: length,
           breakMs: breakMs ?? (plannedMs === undefined ? focusPrefs.breakMs : 0),
           now: new Date(),
           timeZone: localTimeZone(),
         }),
       );
+
+      /*
+       * Handed over *after* the session is written, not before. Opening the
+       * URL switches apps on iOS, so anything left until afterwards might
+       * never run; the block has to exist first, and the bridge is an extra on
+       * top of a session that has already started.
+       *
+       * Here rather than at the three buttons, because all three go through
+       * this one call and a bridge wired per button would be three places to
+       * forget.
+       */
+      if (bridging(focusPrefs.blockAppsOnIphone === true)) {
+        openShortcut(startShortcutUrl(msToMinutes(length)));
+      }
     },
-    [startSession, today, focusPrefs.plannedMs, focusPrefs.breakMs],
+    [
+      startSession,
+      today,
+      focusPrefs.plannedMs,
+      focusPrefs.breakMs,
+      focusPrefs.blockAppsOnIphone,
+    ],
+  );
+
+  /** The end of a block, handed over once however it was reached. */
+  const bridgeEnd = useCallback(
+    (sessionId: string) => {
+      if (bridgedEnds.has(sessionId)) return;
+      if (!bridging(focusPrefs.blockAppsOnIphone === true)) return;
+      bridgedEnds.add(sessionId);
+      openShortcut(endShortcutUrl());
+    },
+    [focusPrefs.blockAppsOnIphone],
   );
 
   /** The break a finished block earns. Only ever entered by choosing it. */
@@ -185,6 +237,9 @@ export function useFocusSession() {
     lastPhase.current = phase;
 
     if (phase === "ended" && session) {
+      // The timer running out and "End block" both arrive here.
+      bridgeEnd(session.id);
+
       // Handled once for the session, then agreed on by every instance.
       if (!endedSessions.has(session.id)) {
         const wasPlaying = sound.isPlaying();
@@ -199,7 +254,7 @@ export function useFocusSession() {
     // A new or resumed block starts the question fresh.
     if (phase === null || phase === "running") setEndedWithSound(false);
     void previous;
-  }, [session, prefs.endChime, prefs.volume, prefs.muted]);
+  }, [session, prefs.endChime, prefs.volume, prefs.muted, bridgeEnd]);
 
   /**
    * Resolves the session. It never touches the priority or goal it was for, and
@@ -209,7 +264,14 @@ export function useFocusSession() {
    */
   const close = useCallback(
     (outcome: FocusOutcome) => {
-      if (session) endedSessions.delete(session.id);
+      // Leaving early never passes through `ended`, so the handover is made
+      // here too. `bridgeEnd` is once per session, so the ordinary path that
+      // did pass through `ended` does not fire a second time.
+      if (session) {
+        bridgeEnd(session.id);
+        bridgedEnds.delete(session.id);
+        endedSessions.delete(session.id);
+      }
       updateSession((s) => closeSession(s, outcome, new Date()));
       clearActiveSession();
       if (sound.isPlaying()) sound.pause();

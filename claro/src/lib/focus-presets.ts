@@ -71,6 +71,9 @@ export const DEFAULT_FOCUS_PREFS: FocusPrefs = {
   plannedMs: FOCUS_BLOCK_MS,
   breakMs: minutes(5),
   presetId: "pomodoro",
+  // Off until asked for: it navigates away from the page, and it needs two
+  // shortcuts that do not exist on anybody's phone by default.
+  blockAppsOnIphone: false,
 };
 
 export function msToMinutes(ms: number): number {
@@ -167,5 +170,8 @@ export function readFocusPrefs(raw: unknown): FocusPrefs {
       typeof prefs.presetId === "string" && prefs.presetId.trim() !== ""
         ? prefs.presetId
         : (matchPreset(plannedMs, breakMs)?.id ?? CUSTOM_PRESET_ID),
+    // Read through rather than migrated: anything but an explicit `true` is
+    // off, so a store saved before the bridge existed arrives with it off.
+    blockAppsOnIphone: prefs.blockAppsOnIphone === true,
   };
 }

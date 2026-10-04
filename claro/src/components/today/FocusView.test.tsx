@@ -1,5 +1,16 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+
+// The block picker links to the iPhone setup guide, and this view is rendered
+// without a router. Same stand-in the other component tests use.
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ to, children, ...rest }: { to: string; children: ReactNode }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 import { FocusView } from "./FocusView";
 import {

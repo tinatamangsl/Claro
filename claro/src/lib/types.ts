@@ -416,6 +416,13 @@ export type FocusPrefs = {
   breakMs: number;
   /** Which preset the pair came from, or "custom". Presentation only. */
   presetId: string;
+  /**
+   * Hand a block over to the Shortcuts app on iPhone, so the user's own
+   * automation can turn a Focus mode on. Additive and off by default: Claro
+   * cannot block anything itself, and this does nothing at all until somebody
+   * has built the two shortcuts the guide describes.
+   */
+  blockAppsOnIphone?: boolean;
 };
 
 /**

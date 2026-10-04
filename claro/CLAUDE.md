@@ -747,6 +747,41 @@ without it `useNow` returns null through the whole break and the number sits fro
 length while the break quietly passes. The header and the Today strip read the break's remaining
 time too, rather than reporting a block that already finished.
 
+## The iPhone bridge: handing a block to Shortcuts
+
+**Claro blocks nothing, and cannot.** A page in a browser has no access to which apps are open on
+a phone and no browser will ever give it any. What iOS offers is a URL scheme, so `lib/ios-shortcuts.ts`
+hands over instead: starting a block opens `shortcuts://run-shortcut?name=ClaroStart&input=text&text={minutes}`
+and ending one opens `ClaroEnd`. What happens next is the user's own automation, which Claro never
+sees and never hears back from. `/focus-shortcuts` is the setup guide, and it says all of that in
+the first paragraph rather than implying Claro is doing the blocking.
+
+**`FocusPrefs.blockAppsOnIphone` is additive and off.** `readFocusPrefs` treats anything but an
+explicit `true` as off, so a store saved before this existed cannot start navigating away from the
+page because a field was missing.
+
+**Detection needs the touch-point count, not just the user agent.** iPadOS 13 and later send a
+desktop string saying "Macintosh"; going by the string alone leaves the feature silently missing
+on every iPad. A real Mac reports 0 touch points and must never match: `shortcuts://` does resolve
+on macOS, and running somebody's phone automation from their laptop is not what the setting
+offered to do.
+
+**The handover is wired in `useFocusSession`, not at the three buttons.** "Start focus", "Focus on
+this" and "Focus on the project" all go through one `start`, so a bridge wired per button would be
+three places to forget. It fires *after* the session is written, because opening the URL switches
+apps and anything left until afterwards might never run.
+
+**An end can be reached three ways and must hand over once.** The timer running out and "End
+block" both land on the `ended` phase, and closing the session is a third path through, with
+`useFocusSession` instantiated by the header *and* the page at the same time. `bridgedEnds` is a
+module-level set keyed by session id, the same shape and for the same reason as `endedSessions`
+above it. It is cleared when a session is resolved, or the second block of the day would never
+unblock the phone.
+
+**The bridge is an extra, never a gate.** `openShortcut` swallows its own failure, because a
+scheme nothing handles throws in some browsers and a focus block must still start when the
+handover does not.
+
 ## Ambient sound
 
 `lib/sound.ts` synthesises every soundscape through the Web Audio API: white, pink and brown

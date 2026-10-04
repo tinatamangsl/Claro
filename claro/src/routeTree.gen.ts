@@ -14,6 +14,7 @@ import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as CycleRouteImport } from './routes/cycle'
 import { Route as CycleDayRouteImport } from './routes/cycle-day'
 import { Route as CycleGuideRouteImport } from './routes/cycle-guide'
+import { Route as FocusShortcutsRouteImport } from './routes/focus-shortcuts'
 import { Route as QuarterRouteImport } from './routes/quarter'
 import { Route as QuarterPlanRouteImport } from './routes/quarter-plan'
 import { Route as TodayRouteImport } from './routes/today'
@@ -44,6 +45,11 @@ const CycleGuideRoute = CycleGuideRouteImport.update({
   path: '/cycle-guide',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FocusShortcutsRoute = FocusShortcutsRouteImport.update({
+  id: '/focus-shortcuts',
+  path: '/focus-shortcuts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const QuarterRoute = QuarterRouteImport.update({
   id: '/quarter',
   path: '/quarter',
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/cycle': typeof CycleRoute
   '/cycle-day': typeof CycleDayRoute
   '/cycle-guide': typeof CycleGuideRoute
+  '/focus-shortcuts': typeof FocusShortcutsRoute
   '/quarter': typeof QuarterRoute
   '/quarter-plan': typeof QuarterPlanRoute
   '/today': typeof TodayRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/cycle': typeof CycleRoute
   '/cycle-day': typeof CycleDayRoute
   '/cycle-guide': typeof CycleGuideRoute
+  '/focus-shortcuts': typeof FocusShortcutsRoute
   '/quarter': typeof QuarterRoute
   '/quarter-plan': typeof QuarterPlanRoute
   '/today': typeof TodayRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/cycle': typeof CycleRoute
   '/cycle-day': typeof CycleDayRoute
   '/cycle-guide': typeof CycleGuideRoute
+  '/focus-shortcuts': typeof FocusShortcutsRoute
   '/quarter': typeof QuarterRoute
   '/quarter-plan': typeof QuarterPlanRoute
   '/today': typeof TodayRoute
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/cycle'
     | '/cycle-day'
     | '/cycle-guide'
+    | '/focus-shortcuts'
     | '/quarter'
     | '/quarter-plan'
     | '/today'
@@ -118,6 +128,7 @@ export interface FileRouteTypes {
     | '/cycle'
     | '/cycle-day'
     | '/cycle-guide'
+    | '/focus-shortcuts'
     | '/quarter'
     | '/quarter-plan'
     | '/today'
@@ -129,6 +140,7 @@ export interface FileRouteTypes {
     | '/cycle'
     | '/cycle-day'
     | '/cycle-guide'
+    | '/focus-shortcuts'
     | '/quarter'
     | '/quarter-plan'
     | '/today'
@@ -141,6 +153,7 @@ export interface RootRouteChildren {
   CycleRoute: typeof CycleRoute
   CycleDayRoute: typeof CycleDayRoute
   CycleGuideRoute: typeof CycleGuideRoute
+  FocusShortcutsRoute: typeof FocusShortcutsRoute
   QuarterRoute: typeof QuarterRoute
   QuarterPlanRoute: typeof QuarterPlanRoute
   TodayRoute: typeof TodayRoute
@@ -184,6 +197,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CycleGuideRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/focus-shortcuts': {
+      id: '/focus-shortcuts'
+      path: '/focus-shortcuts'
+      fullPath: '/focus-shortcuts'
+      preLoaderRoute: typeof FocusShortcutsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/quarter': {
       id: '/quarter'
       path: '/quarter'
@@ -221,6 +241,7 @@ const rootRouteChildren: RootRouteChildren = {
   CycleRoute: CycleRoute,
   CycleDayRoute: CycleDayRoute,
   CycleGuideRoute: CycleGuideRoute,
+  FocusShortcutsRoute: FocusShortcutsRoute,
   QuarterRoute: QuarterRoute,
   QuarterPlanRoute: QuarterPlanRoute,
   TodayRoute: TodayRoute,
