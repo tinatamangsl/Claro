@@ -408,6 +408,9 @@ constant, moving is frequent when a day slips, and everything else is rare.
 - **The tick is on the chip itself**, one tap, no navigation. On the week grid it is a
   `CheckToggle` at 15px on the left; on the month the **whole row** is the target, because a 72px
   cell has no room for a checkbox worth tapping and the strikethrough is the feedback either way.
+  An unticked box waits for the pointer (`.reveal-on-hover`); a ticked one stays, because a mark
+  is information rather than an affordance. See the note below: this is the one shape of
+  hover-hiding that is allowed here.
 - **The words carry the drag and open a menu.** A block cannot contain a button, so a chip is now
   a container holding the tick and the words as two separate controls.
 - **The menu is `ItemMenu`**: mark done, move to tomorrow, move to next week, open on Daily, and
@@ -428,6 +431,15 @@ outside-press listener a tick late because the press that opened it is still tra
 store's `toggleHabitDone`, because a habit completion is one row per habit per day and lives
 outside the `Day` entirely. Ticking is deliberately not undoable anywhere in Claro: tapping again
 is the way back. Letting something go is, and records itself.
+
+**`.reveal-on-hover` is gated on the device, not the width.** Claro has hidden a control behind
+hover twice before and reversed it both times, because on a touch screen there is no hover and an
+`opacity-0` affordance is then unreachable by any means. The rule is
+`@media (hover: hover) and (pointer: fine)`, not `sm:`: a tablet in landscape is a wide screen
+with no pointer. It changes **opacity only, never `display`**, so the control keeps its place in
+the layout, keeps its tab stop, is still announced, and reappears on `:focus-visible`. Nothing
+shifts when it fades in. Before hiding any other control behind hover, it has to clear all four of
+those, and the thing being hidden must be an affordance rather than a reading.
 
 `removeAction` takes the booking with it, or the schedule keeps a row pointing at a record that is
 gone. `removeBlock` does **not** touch the record a linked row points at: "not at four o'clock

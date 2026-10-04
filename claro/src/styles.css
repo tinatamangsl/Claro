@@ -1407,4 +1407,34 @@
     background: color-mix(in srgb, var(--primary) 12%, transparent);
     box-shadow: inset 2px 0 0 var(--primary);
   }
+
+  /*
+   * A control that waits until the row is pointed at.
+   *
+   * Gated on the device actually having a hover, not on screen width. Claro
+   * has hidden a control behind hover twice before and reversed it both times
+   * for the same reason: on a touch screen there is no hover, so an
+   * opacity-0 affordance is unreachable by any means. A tablet in landscape is
+   * a wide screen with no pointer, which is why this is `(hover: hover)` and
+   * not `sm:`.
+   *
+   * It stays in the layout and in the accessibility tree either way: this only
+   * ever changes opacity, never `display`, so the control keeps its place,
+   * keeps its tab stop and is still announced.
+   */
+  .reveal-on-hover {
+    transition: opacity 120ms ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .reveal-on-hover {
+      opacity: 0;
+    }
+
+    .group:hover .reveal-on-hover,
+    .reveal-on-hover:focus-visible,
+    .reveal-on-hover:focus-within {
+      opacity: 1;
+    }
+  }
 }

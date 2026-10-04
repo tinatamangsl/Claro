@@ -526,14 +526,14 @@ function PlannedRow({
             return (
               <div
                 key={action.id}
-                className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-[10px] leading-tight ring-1 ring-gold/60 transition-colors hover:bg-gold/15"
+                className="group flex w-full items-center gap-1 rounded px-1 py-0.5 text-[10px] leading-tight ring-1 ring-gold/60 transition-colors hover:bg-gold/15"
               >
                 <CheckToggle
                   checked={action.done}
                   onChange={() => onTick(item)}
                   label={`${action.text} on ${formatDayLong(dayId)}`}
                   size="sm"
-                  className="rounded-[3px]"
+                  className={cn("rounded-[3px]", !action.done && "reveal-on-hover")}
                 />
                 <button
                   type="button"
@@ -626,7 +626,7 @@ function Row({
                 <div
                   key={row.item.id}
                   className={cn(
-                    "flex w-full items-center gap-1 rounded px-1 py-0.5 text-[11px] leading-tight transition-colors",
+                    "group flex w-full items-center gap-1 rounded px-1 py-0.5 text-[11px] leading-tight transition-colors",
                     /*
                      * A linked row borrows its words from a priority, an
                      * action or a habit, so it is tinted to say it belongs to
@@ -639,12 +639,17 @@ function Row({
                     heldId === row.item.id && "opacity-40",
                   )}
                 >
+                  {/*
+                    Hidden until the row is pointed at, and only where there is
+                    a pointer to point with: a ticked row keeps its mark, since
+                    that one is information rather than an affordance.
+                  */}
                   <CheckToggle
                     checked={row.done}
                     onChange={() => onTick(item)}
                     label={`${row.title || "Untitled"} at ${formatTimeLabel(row.item.time)} on ${formatDayLong(dayId)}`}
                     size="sm"
-                    className="rounded-[3px]"
+                    className={cn("rounded-[3px]", !row.done && "reveal-on-hover")}
                   />
                   <button
                     type="button"

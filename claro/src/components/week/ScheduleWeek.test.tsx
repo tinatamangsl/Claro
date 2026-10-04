@@ -843,6 +843,46 @@ describe("ticking and moving from the calendar", () => {
     expect(api.store!.day(week[0]).scheduleItems[0].done).toBe(false);
   });
 
+  it("waits for the pointer, but keeps the mark once there is one", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+    book(api, week[1], "09:00", "standup");
+
+    /*
+     * Hidden at rest only while there is nothing to show. A tick is an
+     * affordance until it is used and information afterwards, so a crossed-off
+     * row keeps its mark whether or not anybody is pointing at it.
+     *
+     * jsdom has no `(hover: hover)` to evaluate, so what is asserted here is
+     * which rule the control opts into. The behaviour itself was checked in a
+     * real browser with a mouse and with touch.
+     */
+    await waitFor(() => expect(tickOf("standup")).toBeTruthy());
+    expect(tickOf("standup").className).toContain("reveal-on-hover");
+
+    fireEvent.click(tickOf("standup"));
+    await waitFor(() => expect(api.store!.day(week[1]).scheduleItems[0].done).toBe(true));
+    expect(tickOf("standup").className).not.toContain("reveal-on-hover");
+  });
+
+  it("is still reachable without a pointer at all", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+    book(api, week[1], "09:00", "standup");
+
+    // Claro has hidden a control behind hover twice and reversed it both
+    // times: an opacity-0 control must stay in the tree, keep its tab stop and
+    // still work when it is reached by keyboard.
+    await waitFor(() => expect(tickOf("standup")).toBeTruthy());
+    tickOf("standup").focus();
+    expect(document.activeElement).toBe(tickOf("standup"));
+
+    fireEvent.click(document.activeElement!);
+    await waitFor(() => expect(api.store!.day(week[1]).scheduleItems[0].done).toBe(true));
+  });
+
   it("moves a block to tomorrow, keeping its time", async () => {
     const { api } = harness();
     await ready(api);
