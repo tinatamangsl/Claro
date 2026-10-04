@@ -60,6 +60,20 @@ const days = (api: Api) => weekDayIds(weekOfDay(api.store!.today));
 /** jsdom has no layout, so it does not implement hit testing at all. */
 type Hit = { elementFromPoint?: (x: number, y: number) => Element | null };
 
+/**
+ * The words of a chip.
+ *
+ * By role, because the tick beside it carries the same accessible name on
+ * purpose: they are two controls for one thing, and a screen reader should
+ * hear what that thing is from either.
+ */
+const wordsOf = (title: string) =>
+  screen.getByRole("textbox", { name: new RegExp(`^${title}`) });
+
+/** The control that opens a chip's menu. */
+const moreOf = (title: string) =>
+  screen.getByRole("button", { name: new RegExp(`^${title}.*\\. More$`) });
+
 /** The empty part of a cell, which is also the cell's drop target. */
 const adder = (dayId: ISODate, label: string) =>
   screen.getByLabelText(`Add at ${label} on ${formatDayLong(dayId)}`);
@@ -83,7 +97,7 @@ describe("the week, as what is booked in it", () => {
     await ready(api);
     book(api, days(api)[2], "13:00", "lunch with Ren");
 
-    await waitFor(() => expect(screen.getByTitle(/lunch with Ren/)).toBeTruthy());
+    await waitFor(() => expect(wordsOf("lunch with Ren")).toBeTruthy());
     expect(screen.getByText("1 PM")).toBeTruthy();
   });
 
@@ -169,7 +183,7 @@ describe("the week, as what is booked in it", () => {
     expect(openDay).toHaveBeenCalledWith(week[3]);
   });
 
-  it("opens the item's menu from the block itself, and Daily from there", async () => {
+  it("opens the item's menu from its own control, and Daily from there", async () => {
     const { api, openDay } = harness();
     await ready(api);
     const week = days(api);
@@ -180,8 +194,8 @@ describe("the week, as what is booked in it", () => {
      * "open the day" is one of five things somebody wants from a block and no
      * longer the most common: ticking it is, and that is on the chip itself.
      */
-    await waitFor(() => expect(screen.getByTitle(/standup/)).toBeTruthy());
-    fireEvent.click(screen.getByTitle(/standup/));
+    await waitFor(() => expect(wordsOf("standup")).toBeTruthy());
+    fireEvent.click(moreOf("standup"));
 
     fireEvent.click(await screen.findByRole("menuitem", { name: "Open on Daily" }));
     expect(openDay).toHaveBeenCalledWith(week[1]);
@@ -214,8 +228,8 @@ describe("moving a block around the week", () => {
     // A second block so the grid draws 10 AM as well as 9.
     book(api, week[0], "10:00", "anchor");
 
-    await waitFor(() => expect(screen.getByTitle(/deep work/)).toBeTruthy());
-    dragTo(screen.getByTitle(/deep work/), adder(week[2], "10 AM").parentElement!);
+    await waitFor(() => expect(wordsOf("deep work")).toBeTruthy());
+    dragTo(wordsOf("deep work"), adder(week[2], "10 AM").parentElement!);
 
     await waitFor(() =>
       expect(api.store!.day(week[2]).scheduleItems.map((i) => i.time)).toEqual(["10:40"]),
@@ -231,8 +245,8 @@ describe("moving a block around the week", () => {
     book(api, week[0], "09:00", "deep work");
     book(api, week[0], "10:00", "anchor");
 
-    await waitFor(() => expect(screen.getByTitle(/deep work/)).toBeTruthy());
-    const block = screen.getByTitle(/deep work/);
+    await waitFor(() => expect(wordsOf("deep work")).toBeTruthy());
+    const block = wordsOf("deep work");
     dragTo(block, adder(week[2], "10 AM").parentElement!);
     // A drag that ends on a block still reads as a click to the browser.
     fireEvent.click(block);
@@ -247,8 +261,8 @@ describe("moving a block around the week", () => {
     book(api, week[0], "09:00", "deep work");
     book(api, week[0], "10:00", "anchor");
 
-    await waitFor(() => expect(screen.getByTitle(/deep work/)).toBeTruthy());
-    const block = screen.getByTitle(/deep work/);
+    await waitFor(() => expect(wordsOf("deep work")).toBeTruthy());
+    const block = wordsOf("deep work");
 
     // Released over the page, not over a cell: no click follows, so the guard
     // that suppresses the click after a drag has nothing to clear it.
@@ -261,7 +275,7 @@ describe("moving a block around the week", () => {
 
     fireEvent.pointerDown(block, { button: 0, clientX: 0, clientY: 0 });
     fireEvent.pointerUp(window, { clientX: 0, clientY: 0 });
-    fireEvent.click(block);
+    fireEvent.click(moreOf("deep work"));
 
     expect(screen.getByRole("menu")).toBeTruthy();
   });
@@ -289,8 +303,8 @@ describe("moving a block around the week", () => {
       })),
     );
 
-    await waitFor(() => expect(screen.getByTitle(/draft the note/)).toBeTruthy());
-    dragTo(screen.getByTitle(/draft the note/), adder(week[2], "10 AM").parentElement!);
+    await waitFor(() => expect(wordsOf("draft the note")).toBeTruthy());
+    dragTo(wordsOf("draft the note"), adder(week[2], "10 AM").parentElement!);
 
     // Moving it would move the booking and leave the action behind.
     expect(api.store!.day(week[0]).scheduleItems[0].time).toBe("09:00");
@@ -581,7 +595,9 @@ describe("the month, as what is booked in it", () => {
      * The month on /calendar answers "how did my month go" with counts. This
      * one answers "what is on my month", and a count of three cannot.
      */
-    await waitFor(() => expect(screen.getByTitle(/standup/)).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole("checkbox", { name: /standup on / })).toBeTruthy(),
+    );
   });
 
   it("stops listing past three and says how many are left", async () => {
@@ -647,7 +663,9 @@ describe("the month, as what is booked in it", () => {
     const today = api.store!.today;
     book(api, today, "09:00", "standup");
 
-    await waitFor(() => expect(screen.getByTitle(/standup/)).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole("checkbox", { name: /standup on / })).toBeTruthy(),
+    );
     fireEvent.click(screen.getByLabelText(`Open ${formatDayLong(today)} on Daily`));
     expect(openDay).toHaveBeenCalledWith(today);
   });
@@ -745,7 +763,7 @@ describe("an initiative's untimed work, on the week", () => {
     const week = days(api);
     withInitiative(api, week[0], week[6]);
     label(api, week[4], "Content day");
-    await waitFor(() => expect(screen.getByTitle(/^Content day · /)).toBeTruthy());
+    await waitFor(() => expect(wordsOf("Content day")).toBeTruthy());
 
     act(() => {
       api.store!.updateDay(week[4], (day) => ({
@@ -764,8 +782,8 @@ describe("an initiative's untimed work, on the week", () => {
 
     // Otherwise the same content day is drawn twice in one column, which
     // reads as two content days.
-    await waitFor(() => expect(screen.queryByTitle(/^Content day · /)).toBeNull());
-    expect(screen.getByTitle(/10 AM · Content day/)).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: /^Content day on / })).toBeNull());
+    expect(wordsOf("Content day")).toBeTruthy();
   });
 
   it("draws no band at all when the week has no untimed work", async () => {
@@ -782,7 +800,7 @@ describe("an initiative's untimed work, on the week", () => {
 describe("ticking and moving from the calendar", () => {
   const tickOf = (title: string) => screen.getByRole("checkbox", { name: new RegExp(`^${title} at`) });
   const menuOf = async (title: string) => {
-    fireEvent.click(screen.getByTitle(new RegExp(title)));
+    fireEvent.click(moreOf(title));
     return screen.findByRole("menu");
   };
 
@@ -890,7 +908,9 @@ describe("ticking and moving from the calendar", () => {
     book(api, week[1], "09:00", "standup");
 
     await menuOf("standup");
-    fireEvent.click(screen.getByRole("menuitem", { name: "Move to tomorrow" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move to" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^Tomorrow/ }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^Keep 9 AM$/ }));
 
     await waitFor(() =>
       expect(api.store!.day(week[2]).scheduleItems.map((i) => [i.text, i.time])).toEqual([
@@ -907,14 +927,18 @@ describe("ticking and moving from the calendar", () => {
     book(api, week[1], "09:00", "standup");
 
     await menuOf("standup");
-    fireEvent.click(screen.getByRole("menuitem", { name: "Move to next week" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move to" }));
+    const nextWeekDay = shiftDayId(week[1], 7);
+    fireEvent.click(
+      await screen.findByRole("button", { name: `Move to ${formatDayLong(nextWeekDay)}` }),
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^Keep 9 AM$/ }));
 
     /*
      * The move dragging cannot reach: the day being moved to is not drawn on
      * this week at all, which is exactly why the menu carries it.
      */
-    const nextWeek = shiftDayId(week[1], 7);
-    await waitFor(() => expect(api.store!.day(nextWeek).scheduleItems).toHaveLength(1));
+    await waitFor(() => expect(api.store!.day(nextWeekDay).scheduleItems).toHaveLength(1));
     expect(api.store!.day(week[1]).scheduleItems).toEqual([]);
   });
 
@@ -942,5 +966,248 @@ describe("ticking and moving from the calendar", () => {
 
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
     expect(api.store!.day(week[1]).scheduleItems[0].done).toBe(false);
+  });
+});
+
+describe("editing the words on the week", () => {
+  const retype = (field: HTMLElement, text: string) => {
+    fireEvent.change(field, { target: { value: text } });
+    fireEvent.blur(field);
+  };
+
+  it("renames a block in place", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+    book(api, week[1], "09:00", "standup");
+
+    await waitFor(() => expect(wordsOf("standup")).toBeTruthy());
+    retype(wordsOf("standup"), "standup with Ren");
+
+    await waitFor(() =>
+      expect(api.store!.day(week[1]).scheduleItems[0].text).toBe("standup with Ren"),
+    );
+  });
+
+  it("renames the record a tinted row points at, not the row", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+
+    act(() =>
+      api.store!.updateDay(week[0], (day) => ({
+        ...day,
+        actions: [{ id: "a1", text: "draft the note", bucket: "task", done: false, createdAt: "x" }],
+        scheduleItems: [
+          {
+            id: "s1",
+            time: "09:00",
+            text: "draft the note",
+            link: { kind: "action", actionId: "a1" },
+            done: false,
+          },
+        ],
+      })),
+    );
+
+    await waitFor(() => expect(wordsOf("draft the note")).toBeTruthy());
+    retype(wordsOf("draft the note"), "draft the release note");
+
+    /*
+     * One record, so Daily and the month show the new words without being
+     * told. The row's own snapshot is deliberately left alone: writing to that
+     * is what would fork a second version of the same task.
+     */
+    await waitFor(() =>
+      expect(api.store!.day(week[0]).actions[0].text).toBe("draft the release note"),
+    );
+    expect(api.store!.day(week[0]).scheduleItems[0].text).toBe("draft the note");
+  });
+
+  it("renames the habit a row points at, which lives outside the day", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+
+    act(() => api.store!.addHabit({ id: "h1", name: "ten pages", createdAt: "x", archivedAt: null }));
+    act(() =>
+      api.store!.updateDay(week[0], (day) => ({
+        ...day,
+        scheduleItems: [
+          {
+            id: "s1",
+            time: "07:00",
+            text: "ten pages",
+            link: { kind: "habit", habitId: "h1" },
+            done: false,
+          },
+        ],
+      })),
+    );
+
+    await waitFor(() => expect(wordsOf("ten pages")).toBeTruthy());
+    retype(wordsOf("ten pages"), "twenty pages");
+
+    await waitFor(() => expect(api.store!.state.habits.h1.name).toBe("twenty pages"));
+  });
+
+  it("renames an untimed planned action", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+
+    act(() =>
+      api.store!.applyInitiativeSeed(
+        { name: "Lock In", identity: "", from: week[0], to: week[6], habits: [], days: [], outcomes: [] },
+        new Date("2026-09-30T09:00:00.000Z"),
+      ),
+    );
+    const initiativeId = Object.keys(api.store!.state.initiatives)[0];
+    act(() =>
+      api.store!.updateDay(week[4], (day) => ({
+        ...day,
+        actions: [
+          { id: "a1", text: "Content day", bucket: "project", done: false, createdAt: "x", initiativeId },
+        ],
+      })),
+    );
+
+    await waitFor(() => expect(wordsOf("Content day")).toBeTruthy());
+    retype(wordsOf("Content day"), "Content day: reels");
+
+    await waitFor(() =>
+      expect(api.store!.day(week[4]).actions[0].text).toBe("Content day: reels"),
+    );
+  });
+
+  it("refuses an empty name rather than leaving a nameless row", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+    book(api, week[1], "09:00", "standup");
+
+    await waitFor(() => expect(wordsOf("standup")).toBeTruthy());
+    retype(wordsOf("standup"), "   ");
+
+    // A row with no words is unreadable everywhere it appears, and deleting is
+    // its own deliberate action in the menu.
+    await waitFor(() => expect(api.store!.day(week[1]).scheduleItems[0].text).toBe("standup"));
+  });
+
+  it("does not start a drag from the field being typed into", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+    book(api, week[1], "09:00", "standup");
+    book(api, week[1], "10:00", "anchor");
+
+    await waitFor(() => expect(wordsOf("standup")).toBeTruthy());
+    const field = wordsOf("standup");
+    field.focus();
+
+    const hit = document as unknown as Hit;
+    hit.elementFromPoint = () => adder(week[3], "10 AM").parentElement!;
+    fireEvent.pointerDown(field, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(window, { clientX: 240, clientY: 0 });
+    fireEvent.pointerUp(window, { clientX: 240, clientY: 0 });
+    delete hit.elementFromPoint;
+
+    // A focused field owns its press, or selecting a word would fling the
+    // block across the week.
+    expect(api.store!.day(week[1]).scheduleItems.map((i) => i.text).sort()).toEqual([
+      "anchor",
+      "standup",
+    ]);
+  });
+});
+
+describe("choosing where something moves to", () => {
+  it("offers the next few days, then a calendar for anything further out", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+    book(api, week[1], "09:00", "standup");
+
+    await waitFor(() => expect(wordsOf("standup")).toBeTruthy());
+    fireEvent.click(moreOf("standup"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Move to" }));
+
+    /*
+     * Two scales, because "move this" has two very different answers. Almost
+     * always it is tomorrow; occasionally it is the 3rd of next month, which a
+     * list of the next few days can never reach.
+     */
+    expect(await screen.findByRole("menuitem", { name: /^Tomorrow/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next month" })).toBeTruthy();
+    // A whole month of days under the near list, so a date the quick list can
+    // never reach is still two taps away.
+    expect(screen.getAllByRole("button", { name: /^Move to \w+day / })).toHaveLength(42);
+  });
+
+  it("asks for a time, opening on the one it already has", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+    book(api, week[1], "09:00", "standup");
+
+    await waitFor(() => expect(wordsOf("standup")).toBeTruthy());
+    fireEvent.click(moreOf("standup"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Move to" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^Tomorrow/ }));
+
+    // "Same time, other day" is the common answer, so it is already in view.
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Keep 9 AM" }));
+    await waitFor(() =>
+      expect(api.store!.day(week[2]).scheduleItems.map((i) => i.time)).toEqual(["09:00"]),
+    );
+  });
+
+  it("moves it to the time that was chosen, not the one it had", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+    book(api, week[1], "09:00", "standup");
+
+    await waitFor(() => expect(wordsOf("standup")).toBeTruthy());
+    fireEvent.click(moreOf("standup"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Move to" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^Tomorrow/ }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "2:30 PM" }));
+
+    await waitFor(() =>
+      expect(api.store!.day(week[2]).scheduleItems.map((i) => i.time)).toEqual(["14:30"]),
+    );
+    expect(api.store!.day(week[1]).scheduleItems).toEqual([]);
+  });
+
+  it("asks an untimed action for a day and nothing else", async () => {
+    const { api } = harness();
+    await ready(api);
+    const week = days(api);
+
+    act(() =>
+      api.store!.applyInitiativeSeed(
+        { name: "Lock In", identity: "", from: week[0], to: week[6], habits: [], days: [], outcomes: [] },
+        new Date("2026-09-30T09:00:00.000Z"),
+      ),
+    );
+    const initiativeId = Object.keys(api.store!.state.initiatives)[0];
+    act(() =>
+      api.store!.updateDay(week[4], (day) => ({
+        ...day,
+        actions: [
+          { id: "a1", text: "Content day", bucket: "project", done: false, createdAt: "x", initiativeId },
+        ],
+      })),
+    );
+
+    await waitFor(() => expect(wordsOf("Content day")).toBeTruthy());
+    fireEvent.click(moreOf("Content day"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Move to" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^Tomorrow/ }));
+
+    // Asking it for a time would be inventing a fact the record does not hold.
+    await waitFor(() => expect(api.store!.day(week[5]).actions).toHaveLength(1));
+    expect(screen.queryByRole("menuitem", { name: /^Keep / })).toBeNull();
   });
 });

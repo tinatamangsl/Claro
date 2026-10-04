@@ -211,3 +211,50 @@ export function toggleAction(day: Day, actionId: string): Day {
     actions: day.actions.map((a) => (a.id === actionId ? { ...a, done: !a.done } : a)),
   };
 }
+
+/** Renaming an action from the calendar. Blank is refused, never stored. */
+export function renameAction(day: Day, actionId: string, text: string): Day {
+  const trimmed = text.trim();
+  if (!trimmed) return day;
+  return {
+    ...day,
+    actions: day.actions.map((a) => (a.id === actionId ? { ...a, text: trimmed } : a)),
+  };
+}
+
+/**
+ * Moving a block to a day *and* a time that were both chosen.
+ *
+ * `moveBlockToDay` keeps the time the block already had, which is right when
+ * the answer is only "not today". Once somebody has opened a time list and
+ * picked one, that is the answer, and it gives way only if that exact minute
+ * is taken on the day being moved to.
+ */
+export function moveBlockTo(
+  from: Day,
+  to: Day,
+  itemId: string,
+  time: string,
+): { from: Day; to: Day } | null {
+  const item = from.scheduleItems.find((i) => i.id === itemId);
+  if (!item) return null;
+
+  const sameDay = from.id === to.id;
+  const without: Day = sameDay
+    ? from
+    : { ...from, scheduleItems: from.scheduleItems.filter((i) => i.id !== itemId) };
+  const target = sameDay ? without : to;
+
+  const taken = target.scheduleItems.some((i) => i.id !== itemId && i.time === time);
+  const landed = taken ? (freeSlotAfterLast(target, hourOf(time)) ?? time) : time;
+
+  if (sameDay) {
+    const next = from.scheduleItems.map((i) => (i.id === itemId ? { ...i, time: landed } : i));
+    return { from: { ...from, scheduleItems: next }, to: from };
+  }
+
+  return {
+    from: without,
+    to: { ...to, scheduleItems: [...to.scheduleItems, { ...item, time: landed }] },
+  };
+}

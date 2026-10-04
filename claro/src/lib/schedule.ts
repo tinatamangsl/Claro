@@ -255,10 +255,67 @@ export function toggleScheduleItem(day: Day, itemId: string): Day {
   return day;
 }
 
-/** The habit a row points at, when ticking it means toggling a habit. */
-export function scheduleHabitToggle(day: Day, itemId: string): string | null {
+/** The habit a row points at, or null. Habits live outside the `Day`. */
+export function scheduleHabitId(day: Day, itemId: string): string | null {
   const item = day.scheduleItems.find((i) => i.id === itemId);
   return item?.link?.kind === "habit" ? item.link.habitId : null;
+}
+
+/** The habit a row points at, when ticking it means toggling a habit. */
+export function scheduleHabitToggle(day: Day, itemId: string): string | null {
+  return scheduleHabitId(day, itemId);
+}
+
+/**
+ * Renaming a row, through to whatever actually owns the words.
+ *
+ * **This is the opposite of what `canEditText` refuses, not a loophole in it.**
+ * That rule stops a linked row's *own* `text` being edited, because the row
+ * holds a snapshot and editing the snapshot forks a second version of the same
+ * task. Renaming the priority, action or habit the row points at is the other
+ * thing: there is still one record, and every surface showing it changes
+ * together. Shaped exactly like `toggleScheduleItem` above, which solved the
+ * same problem for completion.
+ *
+ * Blank is refused rather than stored. A row with no words is unreadable
+ * everywhere it appears, and deleting is its own deliberate action.
+ */
+export function renameScheduleItem(day: Day, itemId: string, text: string): Day {
+  const item = day.scheduleItems.find((i) => i.id === itemId);
+  const trimmed = text.trim();
+  if (!item || !trimmed) return day;
+
+  if (!item.link) {
+    return {
+      ...day,
+      scheduleItems: day.scheduleItems.map((i) =>
+        i.id === itemId ? { ...i, text: trimmed } : i,
+      ),
+    };
+  }
+
+  if (item.link.kind === "priority") {
+    const id = item.link.priorityId;
+    for (const key of PRIORITY_KEYS) {
+      const priority = day[key];
+      if (priority.id === id && isPrioritySet(priority)) {
+        return { ...day, [key]: { ...priority, text: trimmed } };
+      }
+    }
+    return day;
+  }
+
+  if (item.link.kind === "action") {
+    const actionId = item.link.actionId;
+    if (!day.actions.some((a) => a.id === actionId)) return day;
+    return {
+      ...day,
+      actions: day.actions.map((a) => (a.id === actionId ? { ...a, text: trimmed } : a)),
+    };
+  }
+
+  // Habit: handled by the caller, see `scheduleHabitId`.
+  return day;
 }
 
 /**

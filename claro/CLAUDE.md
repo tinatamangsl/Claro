@@ -411,11 +411,37 @@ constant, moving is frequent when a day slips, and everything else is rare.
   An unticked box waits for the pointer (`.reveal-on-hover`); a ticked one stays, because a mark
   is information rather than an affordance. See the note below: this is the one shape of
   hover-hiding that is allowed here.
-- **The words carry the drag and open a menu.** A block cannot contain a button, so a chip is now
-  a container holding the tick and the words as two separate controls.
-- **The menu is `ItemMenu`**: mark done, move to tomorrow, move to next week, open on Daily, and
-  let it go set apart at the foot. Those two moves are the ones dragging cannot reach, because the
-  day being moved to is usually not drawn on this grid at all.
+- **The words are the field you edit**, and they still carry the drag. A chip is a container
+  holding three controls: the tick, an `EditableText`, and a `MoreButton` that opens the menu.
+  Renaming is done far more often than moving, so the words went to renaming and the menu got its
+  own control; it waits for the pointer, like the tick.
+- **The menu is `ItemMenu`**: mark done, Move to, open on Daily, and let it go set apart at the
+  foot.
+
+**Renaming goes through to whatever owns the words.** `renameScheduleItem` is shaped exactly like
+`toggleScheduleItem`: a standalone block's own `text`, or the priority or action a linked row
+points at, with a habit handed back through `scheduleHabitId` because habit names live in
+`state.habits`. **This is the opposite of what `canEditText` refuses, not a loophole in it.** That
+rule stops a linked row's own snapshot being edited, because editing a snapshot forks a second
+version of the same task; renaming the record itself leaves one record, and every surface showing
+it changes together. Blank is refused rather than stored: a nameless row is unreadable everywhere
+it appears, and deleting is its own action in the menu.
+
+**A focused field owns its press.** The chip's `onPointerDown` skips the drag when the target is a
+focused textarea, or when it is inside a button. Same rule as `ownsItsPress` on Daily: pointing at
+text nobody is editing means "I am pointing at this", and selecting a word must not fling the
+block across the week.
+
+**`MovePanel` offers two scales, because "move this" has two very different answers.** Almost
+always it is tomorrow or one of the next few days, which is a list you can read; occasionally it
+is the 3rd of next month, which a list of seven days can never reach. So the near list sits above
+a month grid rather than instead of it. Offering only the calendar makes the common answer cost a
+scan of a grid; offering only the list makes the rare one impossible.
+
+**The time step comes second, and only for something that has a time.** It is a scrolling list of
+every quarter of the schedule, opened on the time the block already has with "Keep 4 PM" pinned
+above it, so "same time, other day" is one tap and in view. An untimed action is moved by naming a
+day and nothing else: asking it for a time would invent a fact the record does not hold.
 
 **A month cell is no longer one big button.** It was, which is what made everything inside it
 decoration. The day number opens Daily now and each row answers for itself.

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import { CheckToggle } from "@/components/CheckToggle";
+import { EditableText } from "@/components/EditableText";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, MoreHorizontal, Plus } from "lucide-react";
 
 import { AllDayRow } from "./AllDayRow";
 import { ItemMenu, type ItemAction } from "./ItemMenu";
@@ -27,13 +28,17 @@ import { readDay } from "@/lib/storage";
 import {
   moveActionToDay,
   moveBlock,
+  moveBlockTo,
   moveBlockToDay,
   removeAction,
   removeBlock,
+  renameAction,
   toggleAction,
 } from "@/lib/week-plan";
 import {
+  renameScheduleItem,
   resolveSchedule,
+  scheduleHabitId,
   scheduleHabitToggle,
   toggleScheduleItem,
   type ResolvedSchedule,
@@ -72,6 +77,8 @@ type CalItem = {
   id: string;
   title: string;
   done: boolean;
+  /** The time it sits on, or null for a record that has none. */
+  time: string | null;
 };
 
 /**
@@ -103,7 +110,7 @@ export function ScheduleWeek({
   /** Opening a day on Daily, so the grid never has to know about routing. */
   onOpenDay: (dayId: ISODate) => void;
 }) {
-  const { state, updateDay, toggleHabitDone, recordUndo } = useClaro();
+  const { state, updateDay, toggleHabitDone, patchHabit, recordUndo } = useClaro();
   /** Opened out to the full 5 AM to 10 PM, once somebody asks for it. */
   const [expanded, setExpanded] = useState(false);
   /** The cell being written into, as `dayId|hour`. */
@@ -147,6 +154,33 @@ export function ScheduleWeek({
     updateDay(toDayId, () => moved.to);
   };
 
+  /*
+   * Renaming, through to whatever actually owns the words. A standalone block
+   * owns its own; a linked row hands off to the priority, action or habit it
+   * points at, so one record changes and every surface showing it follows.
+   */
+  const rename = (item: CalItem, text: string) => {
+    if (item.kind === "action") {
+      updateDay(item.dayId, (d) => renameAction(d, item.id, text));
+      return;
+    }
+    const habitId = scheduleHabitId(readDay(state, item.dayId), item.id);
+    if (habitId) patchHabit(habitId, { name: text.trim() });
+    else updateDay(item.dayId, (d) => renameScheduleItem(d, item.id, text));
+  };
+
+  const moveToSlot = (item: CalItem, toDayId: ISODate, time: string | null) => {
+    if (item.kind === "action" || time === null) {
+      moveTo(item, toDayId);
+      return;
+    }
+    const moved = moveBlockTo(readDay(state, item.dayId), readDay(state, toDayId), item.id, time);
+    if (!moved) return;
+
+    updateDay(item.dayId, () => moved.from);
+    if (toDayId !== item.dayId) updateDay(toDayId, () => moved.to);
+  };
+
   const letGo = (item: CalItem) => {
     recordUndo(item.kind === "action" ? "Action deleted" : "Block deleted");
     updateDay(item.dayId, (d) =>
@@ -168,16 +202,6 @@ export function ScheduleWeek({
       id: "done",
       label: item.done ? "Mark as not done" : "Mark as done",
       run: () => tick(item),
-    },
-    {
-      id: "tomorrow",
-      label: "Move to tomorrow",
-      run: () => moveTo(item, shiftDayId(item.dayId, 1)),
-    },
-    {
-      id: "next-week",
-      label: "Move to next week",
-      run: () => moveTo(item, shiftDayId(item.dayId, 7)),
     },
     { id: "open", label: "Open on Daily", run: () => onOpenDay(item.dayId) },
     { id: "remove", label: "Let it go", destructive: true, run: () => letGo(item) },
@@ -359,6 +383,7 @@ export function ScheduleWeek({
             days={days}
             todayId={todayId}
             onTick={tick}
+            onRename={rename}
             onMenu={(rect, item) => setMenu({ rect, item })}
           />
 
@@ -399,6 +424,7 @@ export function ScheduleWeek({
                 setMenu({ rect, item });
               }}
               onTick={tick}
+              onRename={rename}
               onCompose={setComposing}
             />
           ))}
@@ -423,6 +449,11 @@ export function ScheduleWeek({
           anchor={menu.rect}
           title={menu.item.title || "Untitled"}
           actions={actionsFor(menu.item)}
+          move={{
+            fromDayId: menu.item.dayId,
+            currentTime: menu.item.time,
+            onPick: (dayId, time) => moveToSlot(menu.item, dayId, time),
+          }}
           onClose={() => setMenu(null)}
         />
       )}
@@ -489,11 +520,13 @@ function PlannedRow({
   days,
   todayId,
   onTick,
+  onRename,
   onMenu,
 }: {
   days: ISODate[];
   todayId: ISODate;
   onTick: (item: CalItem) => void;
+  onRename: (item: CalItem, text: string) => void;
   onMenu: (rect: DOMRect, item: CalItem) => void;
 }) {
   const { state } = useClaro();
@@ -521,6 +554,7 @@ function PlannedRow({
               id: action.id,
               title: action.text,
               done: action.done,
+              time: null,
             };
 
             return (
@@ -535,27 +569,55 @@ function PlannedRow({
                   size="sm"
                   className={cn("rounded-[3px]", !action.done && "reveal-on-hover")}
                 />
-                <button
-                  type="button"
-                  onClick={(event) =>
-                    onMenu(event.currentTarget.getBoundingClientRect(), item)
-                  }
-                  title={`${action.text} · ${formatDayLong(dayId)}`}
-                  aria-label={`${action.text} on ${formatDayLong(dayId)}. More`}
+                <EditableText
+                  value={action.text}
+                  onCommit={(text) => onRename(item, text)}
+                  wrap
+                  ariaLabel={`${action.text} on ${formatDayLong(dayId)}`}
+                  placeholder="Untitled"
                   className={cn(
-                    "min-w-0 flex-1 truncate text-left",
+                    "-mx-1 min-w-0 flex-1 py-0 text-[10px] leading-tight",
                     action.done &&
                       "text-muted-foreground line-through decoration-muted-foreground/60",
                   )}
-                >
-                  {action.text}
-                </button>
+                />
+                <MoreButton
+                  label={`${action.text} on ${formatDayLong(dayId)}`}
+                  onOpen={(rect) => onMenu(rect, item)}
+                />
               </div>
             );
           })}
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * The way into an item's menu.
+ *
+ * Its own control rather than the words, because the words are now the field
+ * you edit: one of them had to give, and renaming is the thing somebody does
+ * far more often than moving. It waits for the pointer, like the tick does.
+ */
+function MoreButton({
+  label,
+  onOpen,
+}: {
+  label: string;
+  onOpen: (rect: DOMRect) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => onOpen(event.currentTarget.getBoundingClientRect())}
+      aria-label={`${label}. More`}
+      aria-haspopup="menu"
+      className="reveal-on-hover -mr-0.5 grid h-4 w-4 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
+    >
+      <MoreHorizontal aria-hidden className="h-3 w-3" />
+    </button>
   );
 }
 
@@ -570,6 +632,7 @@ function Row({
   onPress,
   onClickBlock,
   onTick,
+  onRename,
   onCompose,
 }: {
   hour: string;
@@ -582,6 +645,7 @@ function Row({
   onPress: (press: Press | null) => void;
   onClickBlock: (rect: DOMRect, item: CalItem) => void;
   onTick: (item: CalItem) => void;
+  onRename: (item: CalItem, text: string) => void;
   onCompose: (cell: string | null) => void;
 }) {
   return (
@@ -614,17 +678,42 @@ function Row({
                 id: row.item.id,
                 title: row.title,
                 done: row.done,
+                time: row.item.time,
               };
 
               return (
                 /*
-                  A row, not a single button. The tick and the words are two
-                  different jobs on one line and a button cannot contain
-                  another, so the chip is a container holding both: one tap to
-                  tick, and the words still carry the drag and open the menu.
+                  A row, not a single button. The tick, the words and the menu
+                  are three different jobs on one line and a button cannot
+                  contain another, so the chip is a container holding all three.
                 */
                 <div
                   key={row.item.id}
+                  onPointerDown={(event) => {
+                    /*
+                     * A press on the words starts a drag, unless somebody is
+                     * already editing them. The same rule `ownsItsPress` keeps
+                     * on Daily: pointing at text nobody is editing means "I am
+                     * pointing at this", and the moment the field is being
+                     * edited it owns its own press and selecting a word works.
+                     */
+                    const target = event.target as HTMLElement;
+                    const editing =
+                      target instanceof HTMLTextAreaElement && document.activeElement === target;
+                    const onControl = target.closest("button") !== null;
+
+                    onPress(
+                      row.kind === "block" && event.button === 0 && !editing && !onControl
+                        ? {
+                            id: row.item.id,
+                            from: dayId,
+                            title: row.title,
+                            x: event.clientX,
+                            y: event.clientY,
+                          }
+                        : null,
+                    );
+                  }}
                   className={cn(
                     "group flex w-full items-center gap-1 rounded px-1 py-0.5 text-[11px] leading-tight transition-colors",
                     /*
@@ -636,14 +725,10 @@ function Row({
                     row.kind === "block"
                       ? "bg-muted hover:bg-muted/70"
                       : "bg-gold/20 hover:bg-gold/30",
+                    row.kind === "block" && "cursor-grab touch-none",
                     heldId === row.item.id && "opacity-40",
                   )}
                 >
-                  {/*
-                    Hidden until the row is pointed at, and only where there is
-                    a pointer to point with: a ticked row keeps its mark, since
-                    that one is information rather than an affordance.
-                  */}
                   <CheckToggle
                     checked={row.done}
                     onChange={() => onTick(item)}
@@ -651,40 +736,34 @@ function Row({
                     size="sm"
                     className={cn("rounded-[3px]", !row.done && "reveal-on-hover")}
                   />
-                  <button
-                    type="button"
-                    onPointerDown={(event) =>
-                      onPress(
-                        row.kind === "block" && event.button === 0
-                          ? {
-                              id: row.item.id,
-                              from: dayId,
-                              title: row.title,
-                              x: event.clientX,
-                              y: event.clientY,
-                            }
-                          : null,
-                      )
-                    }
-                    onClick={(event) =>
-                      onClickBlock(event.currentTarget.getBoundingClientRect(), item)
-                    }
-                    aria-label={`${row.title || "Untitled"} at ${formatTimeLabel(row.item.time)} on ${formatDayLong(dayId)}. More`}
-                    title={`${formatTimeLabel(row.item.time)} · ${row.title}`}
+
+                  <span className="tnum shrink-0 text-muted-foreground">
+                    {minutesOf(row.item.time) === 0 ? "" : formatTimeLabel(row.item.time)}
+                  </span>
+
+                  {/*
+                    Editable in place, and the edit goes to whatever owns the
+                    words: a block's own text, or the priority, action or habit
+                    a tinted row points at. One record, so Daily and the month
+                    show the new words without being told.
+                  */}
+                  <EditableText
+                    value={row.title}
+                    onCommit={(text) => onRename(item, text)}
+                    wrap
+                    ariaLabel={`${row.title || "Untitled"} at ${formatTimeLabel(row.item.time)} on ${formatDayLong(dayId)}`}
+                    placeholder="Untitled"
                     className={cn(
-                      "min-w-0 flex-1 truncate text-left",
-                      row.kind === "block" && "cursor-grab touch-none select-none active:cursor-grabbing",
+                      "-mx-1 min-w-0 flex-1 py-0 text-[11px] leading-tight",
                       row.done &&
                         "text-muted-foreground line-through decoration-muted-foreground/60",
                     )}
-                  >
-                    <span className="tnum text-muted-foreground">
-                      {minutesOf(row.item.time) === 0
-                        ? ""
-                        : `${formatTimeLabel(row.item.time)} `}
-                    </span>
-                    {row.title || "Untitled"}
-                  </button>
+                  />
+
+                  <MoreButton
+                    label={`${row.title || "Untitled"} at ${formatTimeLabel(row.item.time)} on ${formatDayLong(dayId)}`}
+                    onOpen={(rect) => onClickBlock(rect, item)}
+                  />
                 </div>
               );
             })}

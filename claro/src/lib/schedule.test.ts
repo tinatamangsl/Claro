@@ -4,7 +4,9 @@ import {
   blockItem,
   canEditText,
   linkedItem,
+  renameScheduleItem,
   resolveScheduleItem,
+  scheduleHabitId,
   scheduleHabitToggle,
   settleHours,
   toggleScheduleItem,
@@ -360,5 +362,79 @@ describe("toggling something that is not there", () => {
 
     expect(toggleScheduleItem(day, "nope")).toBe(day);
     expect(scheduleHabitToggle(day, "nope")).toBeNull();
+  });
+});
+
+describe("renaming a row from the calendar", () => {
+  it("renames a standalone block, which owns its own words", () => {
+    const day = dayWith({ scheduleItems: [{ ...blockItem("09:00", "Deep work"), id: "s1" }] });
+
+    expect(renameScheduleItem(day, "s1", "Deep work on the brief").scheduleItems[0].text).toBe(
+      "Deep work on the brief",
+    );
+  });
+
+  it("renames the priority a row points at, not the row", () => {
+    const day = dayWith({
+      priority1: priority("p1", "Ship the store"),
+      scheduleItems: [
+        { ...linkedItem("09:00", { kind: "priority", priorityId: "p1" }, "Ship the store"), id: "s1" },
+      ],
+    });
+
+    /*
+     * `canEditText` refuses the row's own `text` because that is a snapshot and
+     * editing it forks a second version of the same task. Renaming the record
+     * the row points at is the other thing entirely: one record, and every
+     * surface showing it changes together.
+     */
+    const next = renameScheduleItem(day, "s1", "Ship the store, properly");
+    expect(next.priority1.text).toBe("Ship the store, properly");
+    expect(next.scheduleItems[0].text).toBe("Ship the store");
+  });
+
+  it("renames the action a row points at", () => {
+    const day = dayWith({
+      actions: [action("a1", "Draft the note")],
+      scheduleItems: [
+        { ...linkedItem("11:00", { kind: "action", actionId: "a1" }, "Draft the note"), id: "s1" },
+      ],
+    });
+
+    expect(renameScheduleItem(day, "s1", "Draft the release note").actions[0].text).toBe(
+      "Draft the release note",
+    );
+  });
+
+  it("hands a habit row back to the caller rather than writing one here", () => {
+    const day = dayWith({
+      scheduleItems: [
+        { ...linkedItem("07:00", { kind: "habit", habitId: "h1" }, "Ten pages"), id: "s1" },
+      ],
+    });
+
+    // Habit names live in `state.habits`, outside the day entirely.
+    expect(scheduleHabitId(day, "s1")).toBe("h1");
+    expect(renameScheduleItem(day, "s1", "Twenty pages")).toEqual(day);
+  });
+
+  it("refuses a blank name rather than storing one", () => {
+    const day = dayWith({ scheduleItems: [{ ...blockItem("09:00", "Deep work"), id: "s1" }] });
+
+    // A row with no words is unreadable everywhere it appears, and deleting is
+    // its own deliberate action.
+    expect(renameScheduleItem(day, "s1", "   ")).toBe(day);
+  });
+
+  it("does nothing for a row that is not there, or a record that has gone", () => {
+    const day = dayWith({
+      priority1: blankPriority(),
+      scheduleItems: [
+        { ...linkedItem("09:00", { kind: "priority", priorityId: "gone" }, "Ship it"), id: "s1" },
+      ],
+    });
+
+    expect(renameScheduleItem(day, "nope", "Anything")).toBe(day);
+    expect(renameScheduleItem(day, "s1", "Anything")).toEqual(day);
   });
 });
