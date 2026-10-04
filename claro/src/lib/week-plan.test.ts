@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { addBlock, addEntry, moveBlock, slotFor } from "./week-plan";
+import {
+  addBlock,
+  addEntry,
+  moveActionToDay,
+  moveBlock,
+  moveBlockToDay,
+  removeAction,
+  removeBlock,
+  slotFor,
+  toggleAction,
+} from "./week-plan";
 import { blankDay } from "./storage";
 import type { Day, ScheduleItem } from "./types";
 
@@ -129,5 +139,98 @@ describe("writing into a cell of the week", () => {
     const start = day("2026-09-23");
 
     expect(addEntry(start, "09:00", "   ", "task", now)).toBe(start);
+  });
+});
+
+describe("moving something off the day it is on", () => {
+  it("takes a block to another day at the time it already had", () => {
+    const from = day("2026-10-05", at("a", "18:00"), at("b", "09:00"));
+    const moved = moveBlockToDay(from, day("2026-10-06"), "a")!;
+
+    expect(moved.to.scheduleItems.map((i) => [i.id, i.time])).toEqual([["a", "18:00"]]);
+    expect(moved.from.scheduleItems.map((i) => i.id)).toEqual(["b"]);
+  });
+
+  it("steps aside when that time is already taken on the new day", () => {
+    const from = day("2026-10-05", at("a", "18:00"));
+    const to = day("2026-10-06", at("x", "18:00"));
+
+    expect(moveBlockToDay(from, to, "a")!.to.scheduleItems.map((i) => i.time).sort()).toEqual([
+      "18:00",
+      "18:15",
+    ]);
+  });
+
+  it("refuses a move to the day it is already on", () => {
+    const from = day("2026-10-05", at("a", "18:00"));
+
+    // Nothing to write, and writing it would mean removing and re-adding the
+    // same record on the same day.
+    expect(moveBlockToDay(from, from, "a")).toBeNull();
+  });
+
+  it("carries an action across, keeping where it was first written down", () => {
+    const from: Day = {
+      ...day("2026-10-05"),
+      actions: [
+        { id: "a1", text: "Content day", bucket: "project", done: false, createdAt: "x", originDayId: "2026-10-05" },
+      ],
+    };
+
+    const moved = moveActionToDay(from, day("2026-10-06"), "a1")!;
+    expect(moved.from.actions).toEqual([]);
+    // originDayId is a fact about its history, not about where it sits now.
+    expect(moved.to.actions[0].originDayId).toBe("2026-10-05");
+  });
+});
+
+describe("letting something go from the calendar", () => {
+  it("removes a booking and nothing else", () => {
+    const start = day("2026-10-05", at("a", "09:00"), at("b", "10:00"));
+
+    expect(removeBlock(start, "a").scheduleItems.map((i) => i.id)).toEqual(["b"]);
+    expect(removeBlock(start, "nope")).toBe(start);
+  });
+
+  it("takes the booking with the action it pointed at", () => {
+    const start: Day = {
+      ...day("2026-10-05"),
+      actions: [{ id: "a1", text: "Content day", bucket: "project", done: false, createdAt: "x" }],
+      scheduleItems: [
+        { id: "s1", time: "10:00", text: "Content day", link: { kind: "action", actionId: "a1" }, done: false },
+        at("other", "11:00"),
+      ],
+    };
+
+    // Otherwise the schedule keeps a row pointing at a record that is gone.
+    const next = removeAction(start, "a1");
+    expect(next.actions).toEqual([]);
+    expect(next.scheduleItems.map((i) => i.id)).toEqual(["other"]);
+  });
+
+  it("leaves the record alone when only the booking is removed", () => {
+    const start: Day = {
+      ...day("2026-10-05"),
+      actions: [{ id: "a1", text: "Content day", bucket: "project", done: false, createdAt: "x" }],
+      scheduleItems: [
+        { id: "s1", time: "10:00", text: "Content day", link: { kind: "action", actionId: "a1" }, done: false },
+      ],
+    };
+
+    // "Not at ten o'clock after all" is not "not at all".
+    expect(removeBlock(start, "s1").actions).toHaveLength(1);
+  });
+});
+
+describe("ticking from the calendar", () => {
+  it("turns an action over and back", () => {
+    const start: Day = {
+      ...day("2026-10-05"),
+      actions: [{ id: "a1", text: "Content day", bucket: "project", done: false, createdAt: "x" }],
+    };
+
+    const ticked = toggleAction(start, "a1");
+    expect(ticked.actions[0].done).toBe(true);
+    expect(toggleAction(ticked, "a1").actions[0].done).toBe(false);
   });
 });

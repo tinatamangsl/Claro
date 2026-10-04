@@ -127,3 +127,87 @@ export function addEntry(
     ],
   };
 }
+
+// ------------------------------------------------- moving and letting go
+
+/**
+ * The same thing, on another day, at the time it already had.
+ *
+ * Dragging answers "somewhere else on this week". This answers "not today",
+ * which is the other half of what happens to a plan, and it is the one a menu
+ * has to carry because the day being moved to is usually off the grid.
+ *
+ * Returned as a pair for the same reason `moveBlock` is: a move across days is
+ * the record leaving one `Day` and joining another, and both have to be
+ * written or it exists twice or not at all.
+ */
+export function moveBlockToDay(
+  from: Day,
+  to: Day,
+  itemId: string,
+): { from: Day; to: Day } | null {
+  const item = from.scheduleItems.find((i) => i.id === itemId);
+  if (!item || from.id === to.id) return null;
+
+  const landed: ScheduleItem = { ...item, time: freeAt(to, item.time) };
+  return {
+    from: { ...from, scheduleItems: from.scheduleItems.filter((i) => i.id !== itemId) },
+    to: { ...to, scheduleItems: [...to.scheduleItems, landed] },
+  };
+}
+
+/**
+ * An action, on another day.
+ *
+ * `originDayId` is deliberately left alone. It records where the work was
+ * first written down, which is a fact about its history, not about where it
+ * currently sits, and the carry forward reads it.
+ */
+export function moveActionToDay(
+  from: Day,
+  to: Day,
+  actionId: string,
+): { from: Day; to: Day } | null {
+  const action = from.actions.find((a) => a.id === actionId);
+  if (!action || from.id === to.id) return null;
+
+  return {
+    from: { ...from, actions: from.actions.filter((a) => a.id !== actionId) },
+    to: { ...to, actions: [...to.actions, action] },
+  };
+}
+
+/**
+ * Letting a booking go.
+ *
+ * A linked row is only the booking: removing it leaves the priority, action or
+ * habit it points at exactly where it was, which is the difference between
+ * "not at four o'clock after all" and "not at all".
+ */
+export function removeBlock(day: Day, itemId: string): Day {
+  const kept = day.scheduleItems.filter((i) => i.id !== itemId);
+  return kept.length === day.scheduleItems.length ? day : { ...day, scheduleItems: kept };
+}
+
+/** Letting an action go, and any booking that pointed at it. */
+export function removeAction(day: Day, actionId: string): Day {
+  const kept = day.actions.filter((a) => a.id !== actionId);
+  if (kept.length === day.actions.length) return day;
+
+  return {
+    ...day,
+    actions: kept,
+    // Otherwise the schedule keeps a row pointing at a record that is gone.
+    scheduleItems: day.scheduleItems.filter(
+      (i) => !(i.link?.kind === "action" && i.link.actionId === actionId),
+    ),
+  };
+}
+
+/** Ticking an action from the calendar, without opening the day it sits on. */
+export function toggleAction(day: Day, actionId: string): Day {
+  return {
+    ...day,
+    actions: day.actions.map((a) => (a.id === actionId ? { ...a, done: !a.done } : a)),
+  };
+}

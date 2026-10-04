@@ -11,7 +11,8 @@ import {
   weekOfDay,
 } from "@/lib/dates";
 import { readDay } from "@/lib/storage";
-import { resolveSchedule } from "@/lib/schedule";
+import { resolveSchedule, scheduleHabitToggle, toggleScheduleItem } from "@/lib/schedule";
+import { toggleAction } from "@/lib/week-plan";
 import { cn } from "@/lib/utils";
 import type { ClaroState, ISODate, WeekId } from "@/lib/types";
 
@@ -45,7 +46,23 @@ export function ScheduleMonth({
   onOpenWeek: (weekId: WeekId) => void;
   onOpenDay: (dayId: ISODate) => void;
 }) {
-  const { state } = useClaro();
+  const { state, updateDay, toggleHabitDone } = useClaro();
+
+  /*
+   * Ticking from the month, in place. The same branch the week grid makes: a
+   * habit's completion is one row per habit per day and lives outside the
+   * `Day`, so it goes to the store's own toggle rather than being written
+   * here.
+   */
+  const onTick = (item: { kind: "block" | "action"; dayId: ISODate; id: string }) => {
+    if (item.kind === "action") {
+      updateDay(item.dayId, (d) => toggleAction(d, item.id));
+      return;
+    }
+    const habitId = scheduleHabitToggle(readDay(state, item.dayId), item.id);
+    if (habitId) toggleHabitDone(habitId, item.dayId, new Date());
+    else updateDay(item.dayId, (d) => toggleScheduleItem(d, item.id));
+  };
   const monthId = monthOfDay(anchor);
   const cells = monthGrid(monthId);
 
@@ -78,6 +95,7 @@ export function ScheduleMonth({
                 todayId={todayId}
                 onOpenWeek={onOpenWeek}
                 onOpenDay={onOpenDay}
+                onTick={onTick}
                 state={state}
               />
             );
@@ -95,6 +113,7 @@ function WeekRow({
   todayId,
   onOpenWeek,
   onOpenDay,
+  onTick,
   state,
 }: {
   weekId: WeekId;
@@ -103,6 +122,7 @@ function WeekRow({
   todayId: ISODate;
   onOpenWeek: (weekId: WeekId) => void;
   onOpenDay: (dayId: ISODate) => void;
+  onTick: (item: { kind: "block" | "action"; dayId: ISODate; id: string }) => void;
   state: ClaroState;
 }) {
   return (
@@ -151,36 +171,44 @@ function WeekRow({
             title: action.text,
             done: action.done,
             kind: "milestone" as const,
+            tick: () => onTick({ kind: "action", dayId: cell.dayId, id: action.id }),
           })),
           ...rows.map((item) => ({
             id: item.item.id,
             title: `${formatTimeLabel(item.item.time)} · ${item.title}`,
             done: item.done,
             kind: item.kind === "block" ? ("block" as const) : ("linked" as const),
+            tick: () => onTick({ kind: "block", dayId: cell.dayId, id: item.item.id }),
           })),
         ];
 
         return (
-          <button
+          /*
+            A container, not one big button. The cell used to be a single
+            button that opened the day, which made everything inside it
+            decoration: there was no way to tick a thing from the month at all.
+            The day number opens the day now, and each row answers for itself.
+          */
+          <div
             key={cell.dayId}
-            type="button"
-            onClick={() => onOpenDay(cell.dayId)}
-            aria-label={`Open ${formatDayLong(cell.dayId)} on Daily`}
             className={cn(
-              "min-h-[4.5rem] rounded-md border border-transparent p-1 text-left transition-colors hover:border-border hover:bg-muted/50",
+              "min-h-[4.5rem] rounded-md border border-transparent p-1 text-left transition-colors hover:border-border",
               // A day from a neighbouring month is context, not content.
               !cell.inMonth && "opacity-40",
               cell.dayId === todayId && "bg-gold/10",
             )}
           >
-            <span
+            <button
+              type="button"
+              onClick={() => onOpenDay(cell.dayId)}
+              aria-label={`Open ${formatDayLong(cell.dayId)} on Daily`}
               className={cn(
-                "tnum block px-0.5 text-[11px] leading-none",
+                "tnum block rounded px-0.5 text-[11px] leading-none transition-colors hover:bg-muted",
                 cell.dayId === todayId ? "font-medium text-foreground" : "text-muted-foreground",
               )}
             >
               {Number(cell.dayId.slice(-2))}
-            </span>
+            </button>
 
             {/*
               What the day is, above what is in it, the same order the week
@@ -197,22 +225,34 @@ function WeekRow({
             ))}
 
             <span className="mt-1 block space-y-0.5">
+              {/*
+                The whole row is the tick target rather than a circle beside
+                it. A 72px cell has no room for a checkbox worth tapping, and
+                the strikethrough is the feedback; tapping again is the way
+                back, which is how every other tick in Claro behaves.
+              */}
               {entries.slice(0, SHOWN).map((entry) => (
-                <span
+                <button
                   key={entry.id}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={entry.done}
+                  onClick={entry.tick}
                   title={entry.title}
+                  aria-label={`${entry.title || "Untitled"} on ${formatDayLong(cell.dayId)}`}
                   className={cn(
-                    "block truncate rounded px-1 py-0.5 text-[10px] leading-tight",
-                    entry.kind === "block" && "bg-muted",
-                    entry.kind === "linked" && "bg-gold/20",
+                    "block w-full truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight transition-colors",
+                    entry.kind === "block" && "bg-muted hover:bg-muted/70",
+                    entry.kind === "linked" && "bg-gold/20 hover:bg-gold/30",
                     // A milestone is outlined rather than filled, so it reads
                     // as a marker on the month rather than another booking.
-                    entry.kind === "milestone" && "bg-transparent ring-1 ring-gold/60",
+                    entry.kind === "milestone" &&
+                      "bg-transparent ring-1 ring-gold/60 hover:bg-gold/15",
                     entry.done && "text-muted-foreground line-through",
                   )}
                 >
                   {entry.title || "Untitled"}
-                </span>
+                </button>
               ))}
               {/*
                 Past three the cell stops listing and says how many are left.
@@ -225,7 +265,7 @@ function WeekRow({
                 </span>
               )}
             </span>
-          </button>
+          </div>
         );
       })}
     </>

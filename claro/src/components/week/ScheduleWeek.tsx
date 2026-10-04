@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+
+import { CheckToggle } from "@/components/CheckToggle";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 
 import { AllDayRow } from "./AllDayRow";
+import { ItemMenu, type ItemAction } from "./ItemMenu";
 import { WeekCellComposer } from "./WeekCellComposer";
 
 import { useClaro } from "@/lib/claro-store";
@@ -15,13 +18,26 @@ import {
   formatWeekdayShort,
   hourOf,
   minutesOf,
+  shiftDayId,
   weekDayIds,
 } from "@/lib/dates";
 import { labelsOf } from "@/lib/day-labels";
 import { initiativeOn, unscheduledActions } from "@/lib/initiatives";
 import { readDay } from "@/lib/storage";
-import { moveBlock } from "@/lib/week-plan";
-import { resolveSchedule, type ResolvedSchedule } from "@/lib/schedule";
+import {
+  moveActionToDay,
+  moveBlock,
+  moveBlockToDay,
+  removeAction,
+  removeBlock,
+  toggleAction,
+} from "@/lib/week-plan";
+import {
+  resolveSchedule,
+  scheduleHabitToggle,
+  toggleScheduleItem,
+  type ResolvedSchedule,
+} from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import type { ISODate, WeekId } from "@/lib/types";
 
@@ -41,6 +57,22 @@ const DRAG_THRESHOLD = 5;
 
 /** A block being pressed, which may or may not turn into a drag. */
 type Press = { id: string; from: ISODate; title: string; x: number; y: number };
+
+/**
+ * One thing on the calendar, whichever band it is drawn in.
+ *
+ * A booking and an untimed action behave the same way to the person looking at
+ * them: both get ticked, moved and let go. They are different records
+ * underneath, so the kind travels with the item and the writers branch once,
+ * here, rather than in every handler.
+ */
+type CalItem = {
+  kind: "block" | "action";
+  dayId: ISODate;
+  id: string;
+  title: string;
+  done: boolean;
+};
 
 /**
  * The week as a time grid: seven columns of hours, with what is booked in them.
@@ -71,7 +103,7 @@ export function ScheduleWeek({
   /** Opening a day on Daily, so the grid never has to know about routing. */
   onOpenDay: (dayId: ISODate) => void;
 }) {
-  const { state, updateDay } = useClaro();
+  const { state, updateDay, toggleHabitDone, recordUndo } = useClaro();
   /** Opened out to the full 5 AM to 10 PM, once somebody asks for it. */
   const [expanded, setExpanded] = useState(false);
   /** The cell being written into, as `dayId|hour`. */
@@ -82,6 +114,74 @@ export function ScheduleWeek({
   const [chip, setChip] = useState<{ title: string; x: number; y: number } | null>(null);
 
   const days = weekDayIds(weekId);
+
+  /** The menu's anchor and contents, or null when nothing is open. */
+  const [menu, setMenu] = useState<{ rect: DOMRect; item: CalItem } | null>(null);
+
+  /*
+   * Ticking, from the calendar, without opening the day it sits on. A habit
+   * row is handed to the store's own toggle rather than written here, because
+   * a habit's completion is one row per habit per day and lives outside the
+   * `Day` entirely.
+   */
+  const tick = (item: CalItem) => {
+    if (item.kind === "action") {
+      updateDay(item.dayId, (d) => toggleAction(d, item.id));
+      return;
+    }
+    const habitId = scheduleHabitToggle(readDay(state, item.dayId), item.id);
+    if (habitId) toggleHabitDone(habitId, item.dayId, new Date());
+    else updateDay(item.dayId, (d) => toggleScheduleItem(d, item.id));
+  };
+
+  const moveTo = (item: CalItem, toDayId: ISODate) => {
+    const from = readDay(state, item.dayId);
+    const to = readDay(state, toDayId);
+    const moved =
+      item.kind === "action"
+        ? moveActionToDay(from, to, item.id)
+        : moveBlockToDay(from, to, item.id);
+    if (!moved) return;
+
+    updateDay(item.dayId, () => moved.from);
+    updateDay(toDayId, () => moved.to);
+  };
+
+  const letGo = (item: CalItem) => {
+    recordUndo(item.kind === "action" ? "Action deleted" : "Block deleted");
+    updateDay(item.dayId, (d) =>
+      item.kind === "action" ? removeAction(d, item.id) : removeBlock(d, item.id),
+    );
+  };
+
+  /**
+   * What a calendar item offers, in the order the decisions actually come up.
+   *
+   * Done first because it is the one asked constantly. Then the two moves
+   * somebody reaches for when a day slips, which is the other half of what
+   * happens to a plan and the half dragging cannot reach, since the day being
+   * moved to is usually off this grid. Letting go sits apart at the foot: it
+   * is not a move, and it should take a deliberate look.
+   */
+  const actionsFor = (item: CalItem): ItemAction[] => [
+    {
+      id: "done",
+      label: item.done ? "Mark as not done" : "Mark as done",
+      run: () => tick(item),
+    },
+    {
+      id: "tomorrow",
+      label: "Move to tomorrow",
+      run: () => moveTo(item, shiftDayId(item.dayId, 1)),
+    },
+    {
+      id: "next-week",
+      label: "Move to next week",
+      run: () => moveTo(item, shiftDayId(item.dayId, 7)),
+    },
+    { id: "open", label: "Open on Daily", run: () => onOpenDay(item.dayId) },
+    { id: "remove", label: "Let it go", destructive: true, run: () => letGo(item) },
+  ];
 
   const drop = (press: Press, toDay: ISODate, hour: string) => {
     const moved = moveBlock(readDay(state, press.from), readDay(state, toDay), press.id, hour);
@@ -255,7 +355,12 @@ export function ScheduleWeek({
             like a week with one run club in it. The month grid already showed
             them; this is the same answer on the view you plan the week from.
           */}
-          <PlannedRow days={days} todayId={todayId} onOpenDay={onOpenDay} />
+          <PlannedRow
+            days={days}
+            todayId={todayId}
+            onTick={tick}
+            onMenu={(rect, item) => setMenu({ rect, item })}
+          />
 
           {from > 0 && (
             <MoreHours
@@ -285,14 +390,15 @@ export function ScheduleWeek({
                 dragged.current = false;
                 press.current = next;
               }}
-              onClickBlock={(dayId) => {
+              onClickBlock={(rect, item) => {
                 // The tail of a drag, not a click on the block it landed on.
                 if (dragged.current) {
                   dragged.current = false;
                   return;
                 }
-                onOpenDay(dayId);
+                setMenu({ rect, item });
               }}
+              onTick={tick}
               onCompose={setComposing}
             />
           ))}
@@ -312,6 +418,15 @@ export function ScheduleWeek({
         scrolls inside `overflow-x-auto` and anything positioned within it is
         clipped at the edge of the panel no matter what its z-index says.
       */}
+      {menu && (
+        <ItemMenu
+          anchor={menu.rect}
+          title={menu.item.title || "Untitled"}
+          actions={actionsFor(menu.item)}
+          onClose={() => setMenu(null)}
+        />
+      )}
+
       {chip &&
         typeof document !== "undefined" &&
         createPortal(
@@ -366,18 +481,20 @@ function MoreHours({
 /**
  * The initiative's untimed work for each day, under the all-day band.
  *
- * Read-only on purpose. These are actions, and Daily is where an action is
- * ticked, renamed or given an hour; a second editor for the same record on a
- * grid this dense is how the two start disagreeing.
+ * Ticked and moved in place, like anything else on the calendar. An action
+ * with no hour yet is still the thing that either happened or did not, and
+ * sending somebody to Daily to say so was the long way round.
  */
 function PlannedRow({
   days,
   todayId,
-  onOpenDay,
+  onTick,
+  onMenu,
 }: {
   days: ISODate[];
   todayId: ISODate;
-  onOpenDay: (dayId: ISODate) => void;
+  onTick: (item: CalItem) => void;
+  onMenu: (rect: DOMRect, item: CalItem) => void;
 }) {
   const { state } = useClaro();
 
@@ -397,22 +514,45 @@ function PlannedRow({
           key={dayId}
           className={cn("space-y-0.5 py-0.5", dayId === todayId && "bg-gold/[0.06]")}
         >
-          {byDay[index].map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              onClick={() => onOpenDay(dayId)}
-              title={`${action.text} · ${formatDayLong(dayId)}`}
-              aria-label={`${action.text} on ${formatDayLong(dayId)}. Open on Daily`}
-              className={cn(
-                "block w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] leading-tight ring-1 ring-gold/60 transition-colors hover:bg-gold/15",
-                action.done &&
-                  "text-muted-foreground line-through decoration-muted-foreground/60",
-              )}
-            >
-              {action.text}
-            </button>
-          ))}
+          {byDay[index].map((action) => {
+            const item: CalItem = {
+              kind: "action",
+              dayId,
+              id: action.id,
+              title: action.text,
+              done: action.done,
+            };
+
+            return (
+              <div
+                key={action.id}
+                className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-[10px] leading-tight ring-1 ring-gold/60 transition-colors hover:bg-gold/15"
+              >
+                <CheckToggle
+                  checked={action.done}
+                  onChange={() => onTick(item)}
+                  label={`${action.text} on ${formatDayLong(dayId)}`}
+                  size="sm"
+                  className="rounded-[3px]"
+                />
+                <button
+                  type="button"
+                  onClick={(event) =>
+                    onMenu(event.currentTarget.getBoundingClientRect(), item)
+                  }
+                  title={`${action.text} · ${formatDayLong(dayId)}`}
+                  aria-label={`${action.text} on ${formatDayLong(dayId)}. More`}
+                  className={cn(
+                    "min-w-0 flex-1 truncate text-left",
+                    action.done &&
+                      "text-muted-foreground line-through decoration-muted-foreground/60",
+                  )}
+                >
+                  {action.text}
+                </button>
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>
@@ -429,6 +569,7 @@ function Row({
   composing,
   onPress,
   onClickBlock,
+  onTick,
   onCompose,
 }: {
   hour: string;
@@ -439,7 +580,8 @@ function Row({
   over: string | null;
   composing: string | null;
   onPress: (press: Press | null) => void;
-  onClickBlock: (dayId: ISODate) => void;
+  onClickBlock: (rect: DOMRect, item: CalItem) => void;
+  onTick: (item: CalItem) => void;
   onCompose: (cell: string | null) => void;
 }) {
   return (
@@ -465,47 +607,82 @@ function Row({
               over === cell && "bg-primary/15 ring-1 ring-primary/40",
             )}
           >
-            {rows.map((row) => (
-              <button
-                key={row.item.id}
-                type="button"
-                onPointerDown={(event) =>
-                  onPress(
-                    row.kind === "block" && event.button === 0
-                      ? {
-                          id: row.item.id,
-                          from: dayId,
-                          title: row.title,
-                          x: event.clientX,
-                          y: event.clientY,
-                        }
-                      : null,
-                  )
-                }
-                onClick={() => onClickBlock(dayId)}
-                aria-label={`${row.title || "Untitled"} at ${formatTimeLabel(row.item.time)} on ${formatDayLong(dayId)}`}
-                title={`${formatTimeLabel(row.item.time)} · ${row.title}`}
-                className={cn(
-                  "block w-full truncate rounded px-1.5 py-1 text-left text-[11px] leading-tight transition-colors",
-                  /*
-                   * A linked row borrows its words from a priority, an action
-                   * or a habit, so it is tinted to say it belongs to something
-                   * else, and it does not drag: moving it would move the
-                   * booking and leave the record it points at behind.
-                   */
-                  row.kind === "block"
-                    ? "cursor-grab touch-none select-none bg-muted text-foreground hover:bg-muted/70 active:cursor-grabbing"
-                    : "bg-gold/20 text-foreground hover:bg-gold/30",
-                  heldId === row.item.id && "opacity-40",
-                  row.done && "text-muted-foreground line-through decoration-muted-foreground/60",
-                )}
-              >
-                <span className="tnum text-muted-foreground">
-                  {minutesOf(row.item.time) === 0 ? "" : `${formatTimeLabel(row.item.time)} `}
-                </span>
-                {row.title || "Untitled"}
-              </button>
-            ))}
+            {rows.map((row) => {
+              const item: CalItem = {
+                kind: "block",
+                dayId,
+                id: row.item.id,
+                title: row.title,
+                done: row.done,
+              };
+
+              return (
+                /*
+                  A row, not a single button. The tick and the words are two
+                  different jobs on one line and a button cannot contain
+                  another, so the chip is a container holding both: one tap to
+                  tick, and the words still carry the drag and open the menu.
+                */
+                <div
+                  key={row.item.id}
+                  className={cn(
+                    "flex w-full items-center gap-1 rounded px-1 py-0.5 text-[11px] leading-tight transition-colors",
+                    /*
+                     * A linked row borrows its words from a priority, an
+                     * action or a habit, so it is tinted to say it belongs to
+                     * something else, and it does not drag: moving it would
+                     * move the booking and leave the record behind.
+                     */
+                    row.kind === "block"
+                      ? "bg-muted hover:bg-muted/70"
+                      : "bg-gold/20 hover:bg-gold/30",
+                    heldId === row.item.id && "opacity-40",
+                  )}
+                >
+                  <CheckToggle
+                    checked={row.done}
+                    onChange={() => onTick(item)}
+                    label={`${row.title || "Untitled"} at ${formatTimeLabel(row.item.time)} on ${formatDayLong(dayId)}`}
+                    size="sm"
+                    className="rounded-[3px]"
+                  />
+                  <button
+                    type="button"
+                    onPointerDown={(event) =>
+                      onPress(
+                        row.kind === "block" && event.button === 0
+                          ? {
+                              id: row.item.id,
+                              from: dayId,
+                              title: row.title,
+                              x: event.clientX,
+                              y: event.clientY,
+                            }
+                          : null,
+                      )
+                    }
+                    onClick={(event) =>
+                      onClickBlock(event.currentTarget.getBoundingClientRect(), item)
+                    }
+                    aria-label={`${row.title || "Untitled"} at ${formatTimeLabel(row.item.time)} on ${formatDayLong(dayId)}. More`}
+                    title={`${formatTimeLabel(row.item.time)} · ${row.title}`}
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-left",
+                      row.kind === "block" && "cursor-grab touch-none select-none active:cursor-grabbing",
+                      row.done &&
+                        "text-muted-foreground line-through decoration-muted-foreground/60",
+                    )}
+                  >
+                    <span className="tnum text-muted-foreground">
+                      {minutesOf(row.item.time) === 0
+                        ? ""
+                        : `${formatTimeLabel(row.item.time)} `}
+                    </span>
+                    {row.title || "Untitled"}
+                  </button>
+                </div>
+              );
+            })}
 
             {composing === cell ? (
               <WeekCellComposer dayId={dayId} hour={hour} onClose={() => onCompose(null)} />

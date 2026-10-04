@@ -396,6 +396,44 @@ being touched; it resets after each write, because the minute belonged to the li
 `addEntry` and `addBlock` take a **time**, not an hour, and `freeAt` gives way to the hour's own
 rules only when that exact minute is taken.
 
+## The calendar is where things get crossed off, not only looked at
+
+Every item on the week and month grids was a read-only chip that navigated to Daily. You could
+see that Tuesday had a run club in it and could do nothing about it from there, which made the
+calendar a report rather than a place to work.
+
+**Three jobs, at very different frequencies, so three different affordances.** Ticking is
+constant, moving is frequent when a day slips, and everything else is rare.
+
+- **The tick is on the chip itself**, one tap, no navigation. On the week grid it is a
+  `CheckToggle` at 15px on the left; on the month the **whole row** is the target, because a 72px
+  cell has no room for a checkbox worth tapping and the strikethrough is the feedback either way.
+- **The words carry the drag and open a menu.** A block cannot contain a button, so a chip is now
+  a container holding the tick and the words as two separate controls.
+- **The menu is `ItemMenu`**: mark done, move to tomorrow, move to next week, open on Daily, and
+  let it go set apart at the foot. Those two moves are the ones dragging cannot reach, because the
+  day being moved to is usually not drawn on this grid at all.
+
+**A month cell is no longer one big button.** It was, which is what made everything inside it
+decoration. The day number opens Daily now and each row answers for itself.
+
+`ItemMenu` is **portalled and fixed**, for the reason `Picker` is: the grid scrolls inside
+`overflow-x-auto` and an absolutely positioned panel is clipped by it whatever its z-index says.
+It re-places on scroll with `capture`, opens upward near the bottom of the viewport, and arms its
+outside-press listener a tick late because the press that opened it is still travelling. It is a
+`menu` of commands rather than a `Picker`: a listbox says "choose a value" and these do things.
+
+**A tick goes to the record, not to the row drawing it.** A linked row hands off to
+`toggleScheduleItem`, which completes the priority or action it points at; a habit row goes to the
+store's `toggleHabitDone`, because a habit completion is one row per habit per day and lives
+outside the `Day` entirely. Ticking is deliberately not undoable anywhere in Claro: tapping again
+is the way back. Letting something go is, and records itself.
+
+`removeAction` takes the booking with it, or the schedule keeps a row pointing at a record that is
+gone. `removeBlock` does **not** touch the record a linked row points at: "not at four o'clock
+after all" is not "not at all". `moveActionToDay` leaves `originDayId` alone, because that records
+where the work was first written down rather than where it currently sits.
+
 ## What a day *is*, not what is in it
 
 Office day, annual leave, in Berlin, somebody's birthday. Half of what a calendar tells you at a
